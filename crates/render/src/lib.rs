@@ -3,4 +3,6 @@
 //! `cargo test`.
 
 pub mod color;
+pub mod draw;
+pub mod frame;
 pub mod layout;

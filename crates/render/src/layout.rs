@@ -19,12 +19,13 @@ impl Rect {
         Rect { x, y, w, h }
     }
 
+    /// Saturates rather than overflow, so that no rectangle panics.
     pub const fn right(&self) -> u32 {
-        self.x + self.w
+        self.x.saturating_add(self.w)
     }
 
     pub const fn bottom(&self) -> u32 {
-        self.y + self.h
+        self.y.saturating_add(self.h)
     }
 
     /// Whether `other` lies entirely within this rectangle.
