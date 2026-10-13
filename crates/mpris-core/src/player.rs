@@ -17,9 +17,15 @@ pub const MPRIS_PREFIX: &str = "org.mpris.MediaPlayer2.";
 /// MPRIS player name. Only the first segment counts: the spec reserves the
 /// next ones for instances, which change on every launch (B-04).
 pub fn player_key(bus_name: &str) -> Option<PlayerKey> {
+    key_str(bus_name).map(|key| PlayerKey(key.to_owned()))
+}
+
+/// [`player_key`] borrowed from `bus_name`, for comparisons that run on
+/// every frame and should not allocate.
+pub(crate) fn key_str(bus_name: &str) -> Option<&str> {
     let rest = bus_name.strip_prefix(MPRIS_PREFIX)?;
     let key = rest.split('.').next()?;
-    (!key.is_empty()).then(|| PlayerKey(key.to_owned()))
+    (!key.is_empty()).then_some(key)
 }
 
 /// `PlaybackStatus`, limited to the three values of the spec.

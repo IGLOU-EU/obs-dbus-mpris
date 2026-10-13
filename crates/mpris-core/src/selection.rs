@@ -1,7 +1,9 @@
 //! Which player a source follows (B-05, B-06, B-07) and the selector entries (B-02, B-03).
 
+use std::cmp::Ordering;
+
 use crate::model::{PlaybackStatus, Player, PlayerKey};
-use crate::player::player_key;
+use crate::player::{key_str, player_key};
 
 /// Player a source follows right now (B-05), given the bus name of the
 /// remembered instance. Never stored: callers re-evaluate it on every frame,
@@ -25,17 +27,38 @@ fn instance_of<'a>(players: &'a [Player], key: &PlayerKey) -> Option<&'a Player>
 
 /// The first playing player, or the first player when none plays (B-05).
 fn preferred<'a>(players: impl Iterator<Item = &'a Player>) -> Option<&'a Player> {
-    players.min_by_key(|&p| (!is_playing(p), rank(&p.bus_name)))
+    players.min_by(|a, b| {
+        (!is_playing(a))
+            .cmp(&!is_playing(b))
+            .then_with(|| by_rank(&a.bus_name, &b.bus_name))
+    })
 }
 
 /// What "first" means in B-05, for the selection and the selector alike.
 /// Keys come first so the order stays the same from one session to the
 /// next, and the bus name settles the rest so the order players appeared in
-/// never matters. Both are read from the bus name alone, so a remembered
-/// instance gone from the bus still ranks among the others, and a remembered
-/// text that is not an MPRIS name, having no key, ranks first.
-fn rank(bus_name: &str) -> (Option<PlayerKey>, &str) {
-    (player_key(bus_name), bus_name)
+/// never matters. Case is ignored because players capitalize their names
+/// at will, and a capital must not move a player ahead of the others. The
+/// exact bytes only break the tie between names that differ by case alone,
+/// so the order stays fixed.
+///
+/// Both are read from the bus name alone, so a remembered instance gone
+/// from the bus still ranks among the others, and a remembered text that is
+/// not an MPRIS name, having no key, ranks first.
+fn by_rank(a: &str, b: &str) -> Ordering {
+    let (key_a, key_b) = (key_str(a), key_str(b));
+    key_a
+        .is_some()
+        .cmp(&key_b.is_some())
+        .then_with(|| ignoring_case(key_a.unwrap_or_default(), key_b.unwrap_or_default()))
+        .then_with(|| ignoring_case(a, b))
+        .then_with(|| a.cmp(b))
+}
+
+fn ignoring_case(a: &str, b: &str) -> Ordering {
+    a.chars()
+        .flat_map(char::to_lowercase)
+        .cmp(b.chars().flat_map(char::to_lowercase))
 }
 
 fn is_playing(player: &Player) -> bool {
@@ -71,7 +94,7 @@ pub fn player_choices(players: &[Player], remembered: Option<&str>) -> Vec<Choic
             available: false,
         });
     let mut choices: Vec<Choice> = present.chain(gone).collect();
-    choices.sort_by(|a, b| rank(&a.bus_name).cmp(&rank(&b.bus_name)));
+    choices.sort_by(|a, b| by_rank(&a.bus_name, &b.bus_name));
     choices
 }
 
@@ -412,6 +435,66 @@ mod tests {
         }
     }
 
+    #[test]
+    fn first_playing_ignores_case() {
+        // By bytes `VLC` would come first, capitals sorting before lowercase.
+        let players = [
+            player("VLC", Playing),
+            player("mpv", Playing),
+            player("audacious", Paused),
+        ];
+        for order in orders(&players) {
+            assert_eq!(
+                selected(&order, None),
+                Some("org.mpris.MediaPlayer2.mpv"),
+                "{order:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn first_idle_player_ignores_case() {
+        let players = [player("Strawberry", Paused), player("audacious", Stopped)];
+        for order in orders(&players) {
+            assert_eq!(
+                selected(&order, None),
+                Some("org.mpris.MediaPlayer2.audacious"),
+                "{order:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn first_instance_ignores_case() {
+        let players = [
+            instance("mpv", "instance-B", Playing),
+            instance("mpv", "instance-a", Playing),
+        ];
+        for order in orders(&players) {
+            assert_eq!(
+                selected(&order, None),
+                Some("org.mpris.MediaPlayer2.mpv.instance-a"),
+                "{order:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn keys_differing_only_by_case_keep_a_fixed_order() {
+        let players = [
+            player("mpv", Playing),
+            player("MPV", Playing),
+            player("Mpv", Playing),
+        ];
+        for order in orders(&players) {
+            assert_eq!(
+                selected(&order, None),
+                Some("org.mpris.MediaPlayer2.MPV"),
+                "{order:?}"
+            );
+        }
+    }
+
     // player_choices
 
     fn titled(mut player: Player, title: &str) -> Player {
@@ -491,6 +574,63 @@ mod tests {
                 ],
                 "{order:?}"
             );
+        }
+    }
+
+    #[test]
+    fn entries_ignore_case() {
+        let players = [
+            player("VLC", Paused),
+            instance("mpv", "instance-B", Paused),
+            instance("mpv", "instance-a", Paused),
+            player("AudioTube", Paused),
+            player("chromium", Paused),
+        ];
+        let expected = [
+            choice(
+                "org.mpris.MediaPlayer2.AudioTube",
+                "AudioTube identity",
+                true,
+            ),
+            choice("org.mpris.MediaPlayer2.chromium", "chromium identity", true),
+            choice("org.mpris.MediaPlayer2.Kodi", "Kodi", false),
+            choice(
+                "org.mpris.MediaPlayer2.mpv.instance-a",
+                "mpv identity",
+                true,
+            ),
+            choice(
+                "org.mpris.MediaPlayer2.mpv.instance-B",
+                "mpv identity",
+                true,
+            ),
+            choice("org.mpris.MediaPlayer2.VLC", "VLC identity", true),
+        ];
+        for order in orders(&players) {
+            assert_eq!(
+                player_choices(&order, Some("org.mpris.MediaPlayer2.Kodi")),
+                expected,
+                "{order:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn entries_whose_keys_differ_only_by_case_keep_a_fixed_order() {
+        let players = [
+            player("mpv", Paused),
+            player("vlc", Paused),
+            player("MPV", Paused),
+            player("Mpv", Paused),
+        ];
+        let expected = [
+            choice("org.mpris.MediaPlayer2.MPV", "MPV identity", true),
+            choice("org.mpris.MediaPlayer2.Mpv", "Mpv identity", true),
+            choice("org.mpris.MediaPlayer2.mpv", "mpv identity", true),
+            choice("org.mpris.MediaPlayer2.vlc", "vlc identity", true),
+        ];
+        for order in orders(&players) {
+            assert_eq!(player_choices(&order, None), expected, "{order:?}");
         }
     }
 
