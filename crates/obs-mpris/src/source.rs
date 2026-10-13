@@ -14,8 +14,8 @@ use libobs_sys::{
     gs_technique_end, gs_technique_end_pass, obs_data_t, obs_get_base_effect, obs_properties_t,
     obs_register_source_s, obs_source_info, obs_source_t, vec4, vec4__bindgen_ty_1,
 };
-use mpris_core::color::solid_fill;
 use mpris_core::model::{Rgba, Settings};
+use render::color::solid_fill;
 use render::layout::layout;
 
 use crate::locale::obs_module_text;

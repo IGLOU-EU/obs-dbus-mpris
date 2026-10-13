@@ -2,7 +2,7 @@
 //! color source and of `graphics/srgb.h`, so a color looks the same in this
 //! source as in an OBS color source set to the same value.
 
-use crate::model::Rgba;
+use mpris_core::model::Rgba;
 
 /// A solid color ready for OBS's solid effect.
 #[derive(Debug, Clone, Copy, PartialEq)]
