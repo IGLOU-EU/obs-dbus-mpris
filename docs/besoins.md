@@ -36,7 +36,7 @@ Données lues : dans `Metadata`, les clés `xesam:title`, `xesam:artist`, `xesam
 
 Chaque élément s'affiche ou se masque par une case à cocher indépendante.
 
-**B-10 Miniature.** Image tirée de `mpris:artUrl`. Formats pris en charge : `data:` encodé en base64 (cas réel de mpv, qui fournit `data:image/jpeg;base64,…`) et `file://`. Les URL `http(s)://` sont hors du but actuel, aucun lecteur utilisé ne les impose. Une miniature absente, illisible, dans un format non pris en charge ou qui met plus de deux secondes à charger laisse l'emplacement vide, sans erreur visible.
+**B-10 Miniature.** Image tirée de `mpris:artUrl`. Formats pris en charge : `data:` encodé en base64 (cas réel de mpv, qui fournit `data:image/jpeg;base64,…`) et `file://`. Les URL `http(s)://` sont hors du but actuel, aucun lecteur utilisé ne les impose. Une miniature absente, illisible, dans un format non pris en charge ou qui met plus de deux secondes à charger laisse l'emplacement vide, à la couleur du fond, sans erreur visible.
 
 **B-11 Titre.** `xesam:title`.
 
@@ -44,7 +44,7 @@ Chaque élément s'affiche ou se masque par une case à cocher indépendante.
 
 **B-13 Album.** `xesam:album`.
 
-Artiste et album forment le **sous-titre**. Leur disposition (une ligne ou deux, séparateur) relève de l'organisation visuelle, traitée plus tard.
+Artiste et album forment le **sous-titre**, sur une ligne, dans la forme que fixe B-37.
 
 **B-14 Barre de progression.** Proportion position sur durée.
 
@@ -69,7 +69,7 @@ Le service se choisit par un essai sur des pistes réelles, japonaises comprises
 
 **B-20 Lecture.** Affichage complet selon les cases cochées.
 
-**B-21 Pause.** Affichage complet, temps et barre figés, et un indicateur de pause. L'indicateur est un pictogramme pause (deux barres verticales) à la couleur du texte, au bout de la ligne de titre.
+**B-21 Pause.** Affichage complet, temps et barre figés, et un indicateur de pause. L'indicateur est un pictogramme pause (deux barres verticales) à la couleur du texte, au bout de la ligne de titre. Titre masqué, il n'y a pas d'indicateur de pause.
 
 **B-22 Arrêt ou absence.** Lecteur effectif arrêté (`Stopped`), aucun lecteur, ou bus de session injoignable : la source affiche le message de repli seul.
 
@@ -132,7 +132,7 @@ Le service se choisit par un essai sur des pistes réelles, japonaises comprises
 
 **B-34 Tailles de police.** Trois tailles en pixels : titre, sous-titre, temps.
 
-**B-35 Police.** Police sans empattement par défaut du système, sans choix de police dans les propriétés. Le rendu doit se replier sur une police capable d'afficher les écritures non latines : le cas est réel, mpv expose aujourd'hui un album au titre japonais.
+**B-35 Police.** Police sans empattement par défaut de `cosmic-text` : Open Sans, à défaut Noto Sans, puis DejaVu Sans, puis FreeSans, selon ce qui est installé (D-04). Aucun choix de police dans les propriétés. Un caractère absent de cette police est pris dans une police installée qui l'a, ce qui couvre les écritures non latines : le cas est réel, mpv expose aujourd'hui un album au titre japonais.
 
 **B-36 Débordement.** Aucun élément ne déborde du cadre de la source, quelle que soit la longueur des textes. Un texte trop long est tronqué par des points de suspension. Le défilement reste une option pour plus tard.
 
@@ -158,10 +158,10 @@ Récapitulatif des réglages d'une source. Les valeurs par défaut des couleurs 
 | `color_bar_fill` | couleur RGBA | `#FFFFFF`, alpha 100 % | B-31 |
 | `color_bar_track` | couleur RGBA | `#FFFFFF`, alpha 25 % | B-31 |
 | `width` | entier (px) | 600 | B-33 |
-| `corner_radius` | entier (px) | 12 | B-38 |
 | `font_size_title` | entier (px) | 32 | B-34 |
 | `font_size_subtitle` | entier (px) | 24 | B-34 |
 | `font_size_time` | entier (px) | 20 | B-34 |
+| `corner_radius` | entier (px) | 12 | B-38 |
 | `fallback_text` | texte | traduit | B-23 |
 
 ## 6. Exigences non fonctionnelles
@@ -172,7 +172,7 @@ Récapitulatif des réglages d'une source. Les valeurs par défaut des couleurs 
 
 **B-42 Robustesse.** Un lecteur qui disparaît, un bus absent, des métadonnées manquantes ou mal formées, une miniature illisible ne font jamais planter OBS et ne figent jamais le rendu. Aucune panique Rust ne traverse la frontière FFI.
 
-**B-43 Sobriété.** Rien n'est régénéré quand rien ne change. Le texte des temps n'est redessiné qu'au changement de seconde, les autres textes et la miniature qu'au changement de piste ou de réglage.
+**B-43 Sobriété.** Rien n'est régénéré quand rien ne change. L'image de la source n'est redessinée que quand ce qu'elle montre change : une nouvelle seconde, un pixel de plus sur la barre, une autre piste, un autre état de lecture ou un autre réglage. La miniature n'est remise à l'échelle qu'au changement d'image, de taille ou de rayon des coins.
 
 **B-44 Deux builds.** Un `.so` natif x86_64 et l'extension Flatpak `com.obsproject.Studio.Plugin.DbusMpris` pour la branche stable d'OBS (runtime `org.freedesktop.Platform` 25.08).
 
@@ -197,7 +197,7 @@ La version 1.0 est acceptée quand ces scénarios passent dans OBS Flatpak. Le b
 3. Avance rapide dans mpv : la position affichée suit en moins d'une seconde.
 4. Fermeture de mpv : message de repli. Relance de mpv (nouveau suffixe d'instance) : la source revient sur mpv sans intervention.
 5. Lecteur mémorisé absent, deux autres lecteurs présents dont un en lecture : la source affiche celui qui joue.
-6. Chaque case masque son élément. Le flip déplace la miniature. Des couleurs à alpha nul rendent les zones concernées transparentes. Largeur, hauteur et tailles de police sont respectées.
+6. Chaque case masque son élément. Le flip déplace la miniature. Des couleurs à alpha nul rendent les zones concernées transparentes. La largeur totale, miniature comprise, et les tailles de police sont respectées. La hauteur suit les tailles de police et les éléments cochés (B-33).
 7. Un titre très long, ou en japonais, s'affiche lisiblement et ne déborde pas du cadre.
 8. Deux sources réglées sur deux lecteurs différents vivent côte à côte sans interférer.
 10. Trois instances de mpv jouent : le sélecteur propose trois entrées, chacune libellée par son titre, et la source affiche exactement l'instance choisie.
@@ -208,7 +208,7 @@ La version 1.0 est acceptée quand ces scénarios passent dans OBS Flatpak. Le b
 
 À trancher au moment où elles deviennent utiles, pas avant.
 
-- **Organisation visuelle** : placement et alignement des éléments, marges, disposition du sous-titre, forme de l'indicateur de pause, rendu sans miniature, miniatures non carrées (VLC fournit une vignette YouTube en 16:9 alors que l'emplacement est carré), traitement des textes trop longs. Phase dédiée dans la feuille de route.
+- **Organisation visuelle** : la disposition est fixée par B-37. Restent à régler sur une vraie scène les proportions des marges et des écarts, et le défilement des textes trop longs si les points de suspension gênent. Phase dédiée dans la feuille de route.
 - **Service de pochettes en ligne** : choisi par essai au moment d'implémenter B-18.
 - **Forge de publication** (GitLab ou GitHub) : reportée à la phase de distribution.
 - **Validation dans un OBS natif** : reportée. Aucun OBS natif n'est installé sur le poste de développement, le build natif est produit sans y être testé.

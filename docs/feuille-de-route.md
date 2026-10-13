@@ -13,7 +13,7 @@ Les validations se font dans OBS Flatpak. Le build natif est produit à chaque p
 | 0 | Cadrage | fait |
 | 1 | Squelette marchant, natif et Flatpak | fait, essai dans OBS en attente |
 | 2 | Cœur MPRIS, hors OBS | fait, lecteur local (Strawberry ou Elisa) à vérifier à l'occasion |
-| 3 | Rendu et disposition | en cours |
+| 3 | Rendu et disposition | fait, essai dans OBS en attente |
 | 4 | Source complète | à faire |
 | 5 | Pochette en ligne, en option | à faire |
 | 6 | Organisation visuelle | à faire |
@@ -37,7 +37,7 @@ Lever le risque principal, construire et charger une cdylib Rust dans OBS, avant
 
 **Fini quand** la source, installée par le script de développement, apparaît dans OBS Flatpak 32.2, se règle, dessine son fond et liste les lecteurs présents.
 
-Besoins couverts : B-31 (fond), B-33, B-40, B-42 (frontière FFI), B-44, B-47.
+Besoins couverts : B-02, B-03 (sélecteur), B-31 (fond), B-33, B-40, B-42 (frontière FFI), B-44, B-46, B-47.
 
 ## Phase 2. Cœur MPRIS
 
@@ -65,22 +65,25 @@ Dessiner les quatre blocs selon la maquette de B-37, à partir du contenu réel 
 - Essai du rendu de texte dans le bac à sable d'OBS Flatpak, avec repli sur les caractères japonais, et décision consignée (D-04).
 - Calcul pur de la disposition à partir des réglages, puis dessin de la source entière en une image, testés hors d'OBS.
 - Miniature recadrée au carré, barre, temps, pictogramme pause, message de repli, coins arrondis, flip.
+- Les sept cases d'affichage et les états lecture, pause et arrêt, à partir du lecteur que la source suit.
+- Dessin sur un fil dédié, qui charge aussi les polices, et image montrée par la source comme une texture.
 - Image régénérée seulement quand ce qu'elle montre change (B-43).
 
 **Fini quand** la source affiche dans OBS la piste suivie selon la maquette, japonais compris, sans débordement, et suit chaque réglage.
 
-Besoins couverts : B-10, B-20 à B-23, B-30 à B-38, B-43.
+Rendu vérifié hors d'OBS le 2026-10-14 par l'exemple `render_png`, sur l'hôte et dans le bac à sable d'OBS Flatpak (D-04). L'essai dans OBS reste à faire.
+
+Besoins couverts : B-10, B-14 à B-16, B-20 à B-23, B-30 à B-38, B-43.
 
 ## Phase 4. Source complète
 
-Brancher le cœur sur la source et livrer tous les besoins fonctionnels de base, sur une mise en page provisoire et simple.
+Ce que cette phase devait livrer l'a été plus tôt : le sélecteur et les traductions fr-FR et en-US en phase 1, le branchement du cœur sur la source, les cases d'affichage, le flip, les états lecture, pause et arrêt et le message de repli en phase 3. Reste à vérifier dans OBS Flatpak le comportement de la source dans la durée, sur des lecteurs réels.
 
-- Les sept cases d'affichage, le flip, les états lecture, pause et arrêt, le message de repli.
-- Traductions fr-FR et en-US.
+- Scénarios d'acceptation 1 à 6 et 8 joués dans OBS Flatpak, et correction de ce qu'ils révèlent.
 
 **Fini quand** les scénarios d'acceptation 1 à 6 et 8 de [besoins.md](besoins.md) passent.
 
-Besoins couverts : B-02, B-03, B-14 à B-16, B-20, B-21, B-23, B-30, B-46.
+Besoins couverts : aucun nouveau, la phase valide dans OBS ceux des phases 1 à 3.
 
 ## Phase 5. Pochette en ligne, en option
 
@@ -105,7 +108,7 @@ Retouches de la disposition livrée en phase 3, une fois vue sur une vraie scèn
 - Manifeste de l'extension Flatpak et build hors ligne (pendant le développement, le `.so` natif suffit).
 - Choix de la forge, intégration continue : tests, build natif, build Flatpak.
 - Release : archive du `.so` avec ses traductions, bundle `.flatpak`.
-- Documentation d'installation, override Flatpak compris (B-45).
+- Documentation d'installation, override Flatpak (B-45) et police CJK sur l'hôte compris, puisque le runtime n'en fournit aucune (D-04).
 - Versionnement sémantique et journal des changements.
 
 **Fini quand** la version 1.0 est publiée et que tous les scénarios d'acceptation passent dans OBS Flatpak à partir des artefacts de la release.
