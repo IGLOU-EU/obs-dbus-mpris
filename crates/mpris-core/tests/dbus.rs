@@ -81,10 +81,12 @@ fn discovers_a_player_present_before_start() {
 #[test]
 fn discovers_a_player_appearing_after_start() {
     let bus = PrivateBus::start();
+    let early_name = "org.mpris.MediaPlayer2.early";
+    let _early = FakePlayer::start(&bus, early_name, paused(secs(0)));
     let core = Core::start_at(&bus.address);
-    // Lets the core finish its first scan, so the player comes by signal.
-    thread::sleep(Duration::from_millis(200));
-    assert!(core.snapshot().players.is_empty());
+    // The first scan publishes only once it has read every name, so the
+    // late player can only come by NameOwnerChanged.
+    discovered(&core, early_name);
 
     let fake = FakePlayer::start(&bus, FAKE, paused(secs(12)));
     let snapshot = wait_for(&core, "the late player", |s| find(s, FAKE).is_some());
@@ -229,21 +231,25 @@ fn pause_and_resume_update_status_and_anchor() {
     let core = Core::start_at(&bus.address);
     discovered(&core, FAKE);
 
+    // The status and the position re-read on it are published together, so
+    // the position is checked on the first snapshot with the new status: a
+    // later periodic read cannot stand in for the re-read.
     fake.set_position(secs(42));
     fake.set_status("Paused");
-    wait_for(&core, "the pause at the player's position", |s| {
-        find(s, FAKE)
-            .is_some_and(|p| p.status == PlaybackStatus::Paused && p.anchor.position == secs(42))
+    let snapshot = wait_for(&core, "the pause", |s| {
+        find(s, FAKE).is_some_and(|p| p.status == PlaybackStatus::Paused)
     });
+    assert_eq!(find(&snapshot, FAKE).unwrap().anchor.position, secs(42));
 
     fake.set_position(secs(50));
     let resumed_at = Instant::now();
     fake.set_status("Playing");
-    let snapshot = wait_for(&core, "the resume at the player's position", |s| {
-        find(s, FAKE)
-            .is_some_and(|p| p.status == PlaybackStatus::Playing && p.anchor.position == secs(50))
+    let snapshot = wait_for(&core, "the resume", |s| {
+        find(s, FAKE).is_some_and(|p| p.status == PlaybackStatus::Playing)
     });
-    assert!(find(&snapshot, FAKE).unwrap().anchor.at >= resumed_at);
+    let player = find(&snapshot, FAKE).unwrap();
+    assert_eq!(player.anchor.position, secs(50));
+    assert!(player.anchor.at >= resumed_at);
 }
 
 #[test]
