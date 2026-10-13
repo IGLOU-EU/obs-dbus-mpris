@@ -40,6 +40,19 @@ impl Frame {
         &self.pixels
     }
 
+    /// The pixels with straight alpha in sRGB, as PNG files and image
+    /// viewers expect them.
+    pub fn straight(&self) -> Vec<u8> {
+        self.pixels
+            .chunks_exact(4)
+            .flat_map(|p| {
+                let a = f32::from(p[3]) / 255.0;
+                let channel = |c: u8| if a > 0.0 { encode(decode(c) / a) } else { 0 };
+                [channel(p[0]), channel(p[1]), channel(p[2]), p[3]]
+            })
+            .collect()
+    }
+
     /// The pixel at `(x, y)`, `None` outside the frame.
     pub fn pixel(&self, x: u32, y: u32) -> Option<[u8; 4]> {
         if x >= self.width || y >= self.height {
@@ -273,6 +286,24 @@ mod tests {
         assert_eq!(frame.pixel(2, 1), Some([0; 4]));
         assert_eq!(frame.pixel(3, 0), None);
         assert_eq!(frame.pixel(0, 2), None);
+    }
+
+    #[test]
+    fn straight_pixels_undo_the_premultiplication() {
+        let mut frame = Frame::transparent(4, 1);
+        frame.fill(Rect::new(0, 0, 1, 1), 0, solid(Rgba::new(10, 200, 30, 255)));
+        frame.fill(
+            Rect::new(1, 0, 1, 1),
+            0,
+            solid(Rgba::new(255, 255, 255, 128)),
+        );
+        frame.fill(Rect::new(2, 0, 1, 1), 0, solid(Rgba::new(255, 0, 128, 64)));
+        assert_eq!(
+            frame.straight(),
+            [
+                10, 200, 30, 255, 255, 255, 255, 128, 255, 0, 128, 64, 0, 0, 0, 0
+            ]
+        );
     }
 
     #[test]

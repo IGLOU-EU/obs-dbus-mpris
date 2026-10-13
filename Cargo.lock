@@ -807,6 +807,8 @@ name = "render"
 version = "0.1.0"
 dependencies = [
  "cosmic-text",
+ "image",
+ "libm",
  "mpris-core",
 ]
 

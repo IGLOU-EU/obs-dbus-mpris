@@ -9,3 +9,7 @@ publish = false
 [dependencies]
 cosmic-text = "0.17"
 mpris-core = { path = "../mpris-core" }
+
+[dev-dependencies]
+image = { version = "0.25", default-features = false, features = ["png"] }
+libm = "0.2"
