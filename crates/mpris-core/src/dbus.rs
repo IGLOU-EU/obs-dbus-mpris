@@ -282,7 +282,7 @@ impl<'a> Watcher<'a> {
                 changed |= self.appear(name, &owner).await;
             }
         }
-        self.commit(changed);
+        self.commit(changed).await;
     }
 
     async fn on_owner_changed(&mut self, msg: &Message) {
@@ -299,7 +299,7 @@ impl<'a> Watcher<'a> {
                 self.vanish(&name) | self.appear(&name, &owner).await
             }
         };
-        self.commit(changed);
+        self.commit(changed).await;
     }
 
     /// Ignores the signals of interfaces the store does not follow, which
@@ -312,7 +312,7 @@ impl<'a> Watcher<'a> {
             (Some(PROPERTIES_IFACE), Some("PropertiesChanged")) => {
                 self.on_properties_changed(msg).await
             }
-            (Some(PLAYER_IFACE), Some("Seeked")) => self.on_seeked(msg),
+            (Some(PLAYER_IFACE), Some("Seeked")) => self.on_seeked(msg).await,
             _ => {}
         }
     }
@@ -347,10 +347,10 @@ impl<'a> Watcher<'a> {
         if reread {
             changed |= self.read_position(&owner).await;
         }
-        self.commit(changed);
+        self.commit(changed).await;
     }
 
-    fn on_seeked(&mut self, msg: &Message) {
+    async fn on_seeked(&mut self, msg: &Message) {
         let Some(owner) = sender(msg) else { return };
         let Ok(micros) = msg.body().deserialize::<i64>() else {
             return;
@@ -361,7 +361,7 @@ impl<'a> Watcher<'a> {
             at: Instant::now(),
         };
         let changed = self.store.apply(event);
-        self.commit(changed);
+        self.commit(changed).await;
     }
 
     /// Re-reads the position of playing players, for those that omit
@@ -378,7 +378,7 @@ impl<'a> Watcher<'a> {
         for owner in playing {
             changed |= self.read_position(&owner).await;
         }
-        self.commit(changed);
+        self.commit(changed).await;
     }
 
     async fn appear(&mut self, bus_name: &str, owner: &str) -> bool {
@@ -431,13 +431,18 @@ impl<'a> Watcher<'a> {
     }
 
     /// Loads the art the store waits for, then publishes, if anything
-    /// changed. Decoding happens here, never on a render thread (B-41).
-    fn commit(&mut self, changed: bool) {
+    /// changed. Loading never runs on a render thread (B-41). It runs on
+    /// the `blocking` pool, awaited within the loop that races the stop
+    /// signal, because a cover on a hung network mount can block its reader
+    /// for good: a stop abandons such a load instead of waiting for it.
+    async fn commit(&mut self, changed: bool) {
         if !changed {
             return;
         }
         for (owner, url) in self.store.pending_art() {
-            let image = load_art(&url)
+            let loading = url.clone();
+            let image = blocking::unblock(move || load_art(&loading))
+                .await
                 .inspect_err(|error| log::debug!("MPRIS: no art for {owner}: {error}"))
                 .ok()
                 .map(Arc::new);

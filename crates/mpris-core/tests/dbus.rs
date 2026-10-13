@@ -2,11 +2,13 @@
 
 mod common;
 
+use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
 
 use common::{
-    Fake, FakePlayer, PrivateBus, find, metadata, own_name, png_data_url, secs, track, wait_for,
+    Fake, FakePlayer, HungFile, PrivateBus, find, metadata, own_name, png_data_url, secs, track,
+    wait_for, wait_until,
 };
 use mpris_core::dbus::Core;
 use mpris_core::model::{Art, PlaybackStatus, PlayerKey};
@@ -483,6 +485,34 @@ fn drop_returns_quickly_while_a_call_hangs() {
         elapsed < Duration::from_millis(300),
         "drop took {elapsed:?}"
     );
+}
+
+#[test]
+fn drop_returns_quickly_while_an_art_load_hangs() {
+    let bus = PrivateBus::start();
+    let mut cover = HungFile::new();
+    let _fake = FakePlayer::start(
+        &bus,
+        FAKE,
+        Fake::new(
+            "Fake Player",
+            "Paused",
+            track("/fake/1", "Title one", Some(&cover.url())),
+        ),
+    );
+    let core = Core::start_at(&bus.address);
+    wait_until("the core to open the cover", || cover.has_waiting_open());
+
+    let (done, dropped) = mpsc::channel();
+    let dropper = thread::spawn(move || {
+        drop(core);
+        let _ = done.send(());
+    });
+    let outcome = dropped.recv_timeout(Duration::from_millis(300));
+    // Lets a core still stuck in the load go on, so the test ends either way.
+    cover.release();
+    dropper.join().expect("drop does not panic");
+    assert!(outcome.is_ok(), "drop waited for the art load");
 }
 
 #[test]
