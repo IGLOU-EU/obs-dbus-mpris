@@ -2,7 +2,7 @@
 //! icon, at the places the layout gives (B-37).
 
 use mpris_core::content::{Content, TrackContent};
-use mpris_core::model::Settings;
+use mpris_core::model::{Rgba, Settings};
 
 use mpris_core::time::format_time;
 
@@ -55,6 +55,47 @@ pub fn draw(
 pub fn bar_fill(width: u32, progress: f32) -> u32 {
     // A NaN casts to 0.
     (f64::from(progress.clamp(0.0, 1.0)) * f64::from(width)).round() as u32
+}
+
+/// What a frame shows, so that a source draws again only when it changes
+/// (B-43). Two equal keys always give the same frame.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RedrawKey {
+    layout: Layout,
+    colors: [Rgba; 4],
+    /// With its exact progress left out, which `bar_fill` stands for.
+    content: Content,
+    bar_fill: Option<u32>,
+}
+
+/// The key of the frame [`draw`] would give for the same arguments.
+/// Cheap: no shaping, no drawing, and the cover compared by address.
+pub fn redraw_key(layout: &Layout, content: &Content, settings: &Settings) -> RedrawKey {
+    let (content, bar_fill) = match content {
+        Content::Track(track) => {
+            let fill = layout
+                .bar
+                .zip(track.progress)
+                .map(|(bar, p)| bar_fill(bar.w, p));
+            let track = TrackContent {
+                progress: None,
+                ..track.clone()
+            };
+            (Content::Track(track), fill)
+        }
+        other => (other.clone(), None),
+    };
+    RedrawKey {
+        layout: layout.clone(),
+        colors: [
+            settings.color_background,
+            settings.color_text,
+            settings.color_bar_fill,
+            settings.color_bar_track,
+        ],
+        content,
+        bar_fill,
+    }
 }
 
 /// "Album - Artist", or whichever of the two is known (B-37).
@@ -139,7 +180,7 @@ mod tests {
     use std::sync::Arc;
     use std::time::Duration;
 
-    use mpris_core::model::{ArtImage, Rgba};
+    use mpris_core::model::ArtImage;
 
     use super::*;
     use crate::layout::layout;
@@ -653,5 +694,111 @@ mod tests {
         };
         let (layout, frame) = render_with(&mut fonts, &settings(), &Content::Nothing);
         assert_eq!(frame, Frame::transparent(layout.width, layout.height));
+    }
+
+    // Redraw key (B-43)
+
+    fn key(settings: &Settings, content: &Content) -> RedrawKey {
+        redraw_key(&layout(settings), content, settings)
+    }
+
+    fn playing(position: u64, progress: f32) -> Content {
+        Content::Track(TrackContent {
+            position: Some(Duration::from_secs(position)),
+            ..match texts("Title", false) {
+                Content::Track(track) => TrackContent {
+                    progress: Some(progress),
+                    ..track
+                },
+                _ => unreachable!(),
+            }
+        })
+    }
+
+    #[test]
+    fn same_inputs_give_the_same_key() {
+        let s = settings();
+        assert_eq!(key(&s, &playing(10, 0.25)), key(&s, &playing(10, 0.25)));
+        assert_eq!(key(&s, &Content::Nothing), key(&s, &Content::Nothing));
+    }
+
+    #[test]
+    fn progress_within_one_bar_pixel_keeps_the_key() {
+        let s = settings();
+        let bar = some(layout(&s).bar);
+        let pixel = 1.0 / bar.w as f32;
+        let base = 50.0 * pixel;
+        assert_eq!(
+            key(&s, &playing(10, base)),
+            key(&s, &playing(10, base + pixel * 0.4))
+        );
+        assert_ne!(
+            key(&s, &playing(10, base)),
+            key(&s, &playing(10, base + pixel))
+        );
+    }
+
+    #[test]
+    fn equal_keys_draw_equal_frames() {
+        let s = settings();
+        let bar = some(layout(&s).bar);
+        let pixel = 1.0 / bar.w as f32;
+        let (a, b) = (playing(10, 50.0 * pixel), playing(10, 50.4 * pixel));
+        assert_eq!(key(&s, &a), key(&s, &b));
+        assert_eq!(render(&s, &a).1, render(&s, &b).1);
+    }
+
+    #[test]
+    fn hidden_bar_ignores_the_progress() {
+        let s = no_bar();
+        assert_eq!(key(&s, &playing(10, 0.1)), key(&s, &playing(10, 0.9)));
+    }
+
+    #[test]
+    fn each_visible_change_changes_the_key() {
+        let s = settings();
+        let base = key(&s, &playing(10, 0.5));
+        assert_ne!(key(&s, &playing(11, 0.5)), base, "position");
+        assert_ne!(key(&s, &texts("Title", false)), base, "no progress");
+        let changes: [fn(&mut Settings); 7] = [
+            |s| s.color_background.a = 1,
+            |s| s.color_text.r = 1,
+            |s| s.color_bar_fill.g = 1,
+            |s| s.color_bar_track.b = 1,
+            |s| s.width += 1,
+            |s| s.corner_radius += 1,
+            |s| s.art_right = true,
+        ];
+        for (i, change) in changes.iter().enumerate() {
+            assert_ne!(key(&with(change), &playing(10, 0.5)), base, "change {i}");
+        }
+    }
+
+    #[test]
+    fn settings_that_show_nothing_keep_the_key() {
+        let base = key(&settings(), &playing(10, 0.5));
+        let unseen = with(|s| {
+            s.player = Some("org.mpris.MediaPlayer2.vlc".into());
+            s.auto_select = false;
+            s.fetch_art_online = true;
+            s.fallback_text = "Other".into();
+        });
+        assert_eq!(key(&unseen, &playing(10, 0.5)), base);
+    }
+
+    #[test]
+    fn messages_and_nothing_have_their_own_keys() {
+        let s = settings();
+        let keys = [
+            key(&s, &Content::Nothing),
+            key(&s, &Content::Message("A".into())),
+            key(&s, &Content::Message("B".into())),
+            key(&s, &track(None, false)),
+        ];
+        for (i, a) in keys.iter().enumerate() {
+            for (j, b) in keys.iter().enumerate() {
+                assert_eq!(a == b, i == j, "{i} {j}");
+            }
+        }
     }
 }
