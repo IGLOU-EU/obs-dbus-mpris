@@ -123,7 +123,9 @@ Critères de choix : couverture sur des pistes réelles (japonaises comprises), 
   data/locale/fr-FR.ini, en-US.ini
 ```
 
-Reste à établir en phase 1 : lier explicitement `libobs.so` ou laisser les symboles se résoudre au chargement par OBS.
+Le plugin ne lie pas `libobs` à l'édition de liens : ses symboles se résolvent au chargement, dans le processus d'OBS qui a déjà chargé `libobs`. Le build n'a ainsi besoin ni de `libobs` ni de ses en-têtes, seulement des bindings commités (D-01).
+
+**Développement avec OBS Flatpak.** Le même `.so` natif est copié dans `~/.var/app/com.obsproject.Studio/config/obs-studio/plugins/obs-dbus-mpris/` (mêmes sous-dossiers `bin/64bit` et `data/locale`), qu'OBS Flatpak charge directement. Il tourne alors avec la glibc du runtime (2.42), plus ancienne que celle de l'hôte : le script d'installation vérifie qu'aucun symbole plus récent n'est requis, et que chaque symbole `libobs` attendu existe dans la `libobs` d'OBS Flatpak.
 
 **Flatpak.** Un manifeste `com.obsproject.Studio.Plugin.DbusMpris` construit une extension de l'application OBS. Disposition relevée sur l'extension Tuna installée et dans les métadonnées d'OBS (`directory=plugins`, `merge-dirs=lib/obs-plugins;share/obs/obs-plugins`) :
 

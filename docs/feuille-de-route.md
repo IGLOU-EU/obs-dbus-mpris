@@ -29,14 +29,13 @@ Ce dossier : vision, besoins, architecture, feuille de route.
 
 Lever le risque principal, construire et charger une cdylib Rust dans OBS, avant d'écrire la moindre fonctionnalité.
 
-- Workspace Cargo et ses trois crates (vides sauf le nécessaire).
 - `libobs-sys` : génération par bindgen sur la liste blanche minimale, script de régénération, résultat commité (D-01).
 - `obs-mpris` : déclaration de la source `mpris_now_playing`, qui dessine un rectangle de la couleur de fond, à la largeur et à la hauteur réglées.
+- Propriétés déclarées à partir de la table unique des réglages, avec leurs traductions fr-FR et en-US, et sélecteur de lecteur alimenté par le cœur, démarré au chargement du module.
 - Frontière FFI étanche et journalisation via `blog` (D-07).
-- Build natif et script d'installation dans `~/.config/obs-studio/plugins`, décision sur l'édition de liens avec `libobs.so`.
-- Manifeste Flatpak, build hors ligne, installation locale de l'extension.
+- Build natif et script d'installation de développement. OBS Flatpak charge les plugins du dossier utilisateur `~/.var/app/com.obsproject.Studio/config/obs-studio/plugins/`, ce qui évite de construire l'extension Flatpak à chaque essai. Le script refuse un `.so` qui exigerait une glibc plus récente que celle du runtime (2.42 pour la branche 25.08) ou un symbole absent de la `libobs` d'OBS.
 
-**Fini quand** la source apparaît et se règle dans OBS Flatpak 32.2, et que le build natif compile et s'installe.
+**Fini quand** la source, installée par le script de développement, apparaît dans OBS Flatpak 32.2, se règle, dessine son fond et liste les lecteurs présents.
 
 Besoins couverts : B-31 (fond), B-33, B-40, B-42 (frontière FFI), B-44, B-47.
 
@@ -77,8 +76,6 @@ Besoins couverts : B-31, B-32, B-34, B-35, B-36, B-43.
 
 Brancher le cœur sur la source et livrer tous les besoins fonctionnels de base, sur une mise en page provisoire et simple.
 
-- Table unique des réglages (clés, types, valeurs par défaut) et propriétés OBS qui en découlent.
-- Sélecteur de lecteur, entrée « (indisponible) », mémorisation et retour automatique.
 - Les sept cases d'affichage, le flip, les états lecture, pause et arrêt, le message de repli.
 - Traductions fr-FR et en-US.
 
@@ -111,6 +108,7 @@ La disposition laissée de côté au cadrage. Elle se définit ensemble avant d'
 
 ## Phase 7. Distribution
 
+- Manifeste de l'extension Flatpak et build hors ligne (pendant le développement, le `.so` natif suffit).
 - Choix de la forge, intégration continue : tests, build natif, build Flatpak.
 - Release : archive du `.so` avec ses traductions, bundle `.flatpak`.
 - Documentation d'installation, override Flatpak compris (B-45).
