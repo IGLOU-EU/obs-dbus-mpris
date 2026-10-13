@@ -48,11 +48,47 @@ unsafe extern "C" {
         out: *mut *const ::std::os::raw::c_char,
     ) -> bool;
 }
+pub const GS_UNKNOWN: gs_color_format = 0;
+pub const GS_A8: gs_color_format = 1;
+pub const GS_R8: gs_color_format = 2;
+pub const GS_RGBA: gs_color_format = 3;
+pub const GS_BGRX: gs_color_format = 4;
+pub const GS_BGRA: gs_color_format = 5;
+pub const GS_R10G10B10A2: gs_color_format = 6;
+pub const GS_RGBA16: gs_color_format = 7;
+pub const GS_R16: gs_color_format = 8;
+pub const GS_RGBA16F: gs_color_format = 9;
+pub const GS_RGBA32F: gs_color_format = 10;
+pub const GS_RG16F: gs_color_format = 11;
+pub const GS_RG32F: gs_color_format = 12;
+pub const GS_R16F: gs_color_format = 13;
+pub const GS_R32F: gs_color_format = 14;
+pub const GS_DXT1: gs_color_format = 15;
+pub const GS_DXT3: gs_color_format = 16;
+pub const GS_DXT5: gs_color_format = 17;
+pub const GS_R8G8: gs_color_format = 18;
+pub const GS_RGBA_UNORM: gs_color_format = 19;
+pub const GS_BGRX_UNORM: gs_color_format = 20;
+pub const GS_BGRA_UNORM: gs_color_format = 21;
+pub const GS_RG16: gs_color_format = 22;
+pub type gs_color_format = ::std::os::raw::c_uint;
 pub const GS_CS_SRGB: gs_color_space = 0;
 pub const GS_CS_SRGB_16F: gs_color_space = 1;
 pub const GS_CS_709_EXTENDED: gs_color_space = 2;
 pub const GS_CS_709_SCRGB: gs_color_space = 3;
 pub type gs_color_space = ::std::os::raw::c_uint;
+pub const GS_BLEND_ZERO: gs_blend_type = 0;
+pub const GS_BLEND_ONE: gs_blend_type = 1;
+pub const GS_BLEND_SRCCOLOR: gs_blend_type = 2;
+pub const GS_BLEND_INVSRCCOLOR: gs_blend_type = 3;
+pub const GS_BLEND_SRCALPHA: gs_blend_type = 4;
+pub const GS_BLEND_INVSRCALPHA: gs_blend_type = 5;
+pub const GS_BLEND_DSTCOLOR: gs_blend_type = 6;
+pub const GS_BLEND_INVDSTCOLOR: gs_blend_type = 7;
+pub const GS_BLEND_DSTALPHA: gs_blend_type = 8;
+pub const GS_BLEND_INVDSTALPHA: gs_blend_type = 9;
+pub const GS_BLEND_SRCALPHASAT: gs_blend_type = 10;
+pub type gs_blend_type = ::std::os::raw::c_uint;
 #[repr(C)]
 #[derive(Debug)]
 pub struct gs_texture {
@@ -105,8 +141,27 @@ unsafe extern "C" {
     pub fn gs_effect_set_vec4(param: *mut gs_eparam_t, val: *const vec4);
 }
 unsafe extern "C" {
+    pub fn gs_effect_set_texture_srgb(param: *mut gs_eparam_t, val: *mut gs_texture_t);
+}
+unsafe extern "C" {
     #[doc = " Draws a 2D sprite\n\n   If width or height is 0, the width or height of the texture will be used.\n The flip value specifies whether the texture should be flipped on the U or V\n axis with GS_FLIP_U and GS_FLIP_V."]
     pub fn gs_draw_sprite(tex: *mut gs_texture_t, flip: u32, width: u32, height: u32);
+}
+unsafe extern "C" {
+    pub fn gs_blend_state_push();
+}
+unsafe extern "C" {
+    pub fn gs_blend_state_pop();
+}
+unsafe extern "C" {
+    pub fn gs_texture_create(
+        width: u32,
+        height: u32,
+        color_format: gs_color_format,
+        levels: u32,
+        data: *mut *const u8,
+        flags: u32,
+    ) -> *mut gs_texture_t;
 }
 unsafe extern "C" {
     pub fn gs_enable_framebuffer_srgb(enable: bool);
@@ -116,6 +171,12 @@ unsafe extern "C" {
 }
 unsafe extern "C" {
     pub fn gs_get_linear_srgb() -> bool;
+}
+unsafe extern "C" {
+    pub fn gs_blend_function(src: gs_blend_type, dest: gs_blend_type);
+}
+unsafe extern "C" {
+    pub fn gs_texture_destroy(tex: *mut gs_texture_t);
 }
 pub type __m128 = [f32; 4usize];
 #[repr(C)]
@@ -790,6 +851,14 @@ unsafe extern "C" {
         default_locale: *const ::std::os::raw::c_char,
         locale: *const ::std::os::raw::c_char,
     ) -> *mut lookup_t;
+}
+unsafe extern "C" {
+    #[doc = " Helper function for entering the OBS graphics context"]
+    pub fn obs_enter_graphics();
+}
+unsafe extern "C" {
+    #[doc = " Helper function for leaving the OBS graphics context"]
+    pub fn obs_leave_graphics();
 }
 #[doc = "< RGB/YUV"]
 pub const OBS_EFFECT_DEFAULT: obs_base_effect = 0;
