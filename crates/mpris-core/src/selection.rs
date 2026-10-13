@@ -2,20 +2,25 @@
 
 use std::cmp::Ordering;
 
-use crate::model::{PlaybackStatus, Player, PlayerKey};
+use crate::model::{PlaybackStatus, Player, PlayerKey, Settings};
 use crate::player::{key_str, player_key};
 
-/// Player a source follows right now (B-05), given the bus name of the
-/// remembered instance. Never stored: callers re-evaluate it on every frame,
-/// which is what lets a source follow its player again once it comes back
-/// under a new instance name (B-06).
+/// Player a source follows right now (B-05), given the remembered instance
+/// and the automatic selection switch of its settings. Never stored: callers
+/// re-evaluate it on every frame, which is what lets a source follow its
+/// player again once it comes back under a new instance name (B-06).
 ///
 /// The remembered instance wins whatever its status, even stopped while
 /// another plays, because an explicit choice outranks the activity of other
-/// players.
-pub fn select_player<'a>(players: &'a [Player], remembered: Option<&str>) -> Option<&'a Player> {
-    remembered
-        .and_then(|name| players.iter().find(|p| p.bus_name == name))
+/// players. With automatic selection off it is the only candidate, so a
+/// source dedicated to one player never shows another (B-05, B-07).
+pub fn select_player<'a>(players: &'a [Player], settings: &Settings) -> Option<&'a Player> {
+    let remembered = settings.player.as_deref();
+    let exact = remembered.and_then(|name| players.iter().find(|p| p.bus_name == name));
+    if !settings.auto_select {
+        return exact;
+    }
+    exact
         .or_else(|| instance_of(players, &player_key(remembered?)?))
         .or_else(|| preferred(players.iter()))
 }
@@ -137,8 +142,26 @@ mod tests {
         instance(k, "", status)
     }
 
+    fn selected_with<'a>(
+        players: &'a [Player],
+        remembered: Option<&str>,
+        auto_select: bool,
+    ) -> Option<&'a str> {
+        let settings = Settings {
+            player: remembered.map(str::to_owned),
+            auto_select,
+            ..Settings::default()
+        };
+        select_player(players, &settings).map(|p| p.bus_name.as_str())
+    }
+
     fn selected<'a>(players: &'a [Player], remembered: Option<&str>) -> Option<&'a str> {
-        select_player(players, remembered).map(|p| p.bus_name.as_str())
+        selected_with(players, remembered, true)
+    }
+
+    /// Selection with automatic selection off.
+    fn selected_strictly<'a>(players: &'a [Player], remembered: Option<&str>) -> Option<&'a str> {
+        selected_with(players, remembered, false)
     }
 
     /// Every rotation of `players` and of its reverse, so a result that
@@ -493,6 +516,77 @@ mod tests {
                 "{order:?}"
             );
         }
+    }
+
+    // select_player, automatic selection off: step 1 alone
+
+    #[test]
+    fn strict_follows_the_remembered_instance_whatever_its_status() {
+        for status in [Playing, Paused, Stopped] {
+            let players = [
+                player("chromium", Playing),
+                instance("mpv", "instance-a", Playing),
+                instance("mpv", "instance-b", status),
+            ];
+            for order in orders(&players) {
+                assert_eq!(
+                    selected_strictly(&order, Some("org.mpris.MediaPlayer2.mpv.instance-b")),
+                    Some("org.mpris.MediaPlayer2.mpv.instance-b"),
+                    "{status:?} {order:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn strict_does_not_follow_another_instance_of_the_remembered_key() {
+        let players = [
+            instance("mpv", "instance-a", Playing),
+            instance("mpv", "instance-b", Paused),
+        ];
+        for remembered in [
+            "org.mpris.MediaPlayer2.mpv.instance-gone",
+            "org.mpris.MediaPlayer2.mpv",
+        ] {
+            for order in orders(&players) {
+                assert_eq!(
+                    selected_strictly(&order, Some(remembered)),
+                    None,
+                    "{remembered} {order:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn strict_does_not_follow_other_players() {
+        let players = [player("chromium", Playing), player("vlc", Paused)];
+        for order in orders(&players) {
+            assert_eq!(
+                selected_strictly(&order, Some("org.mpris.MediaPlayer2.mpv.instance-a")),
+                None,
+                "{order:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn strict_without_a_remembered_instance_selects_nothing() {
+        let players = [player("chromium", Playing), player("vlc", Paused)];
+        assert_eq!(selected_strictly(&players, None), None);
+        assert_eq!(selected_strictly(&[], None), None);
+        for text in ["mpv", "", ":1.42", "org.mpris.MediaPlayer2."] {
+            assert_eq!(selected_strictly(&players, Some(text)), None, "{text:?}");
+        }
+    }
+
+    #[test]
+    fn strict_matches_the_bus_name_with_its_case() {
+        let players = [player("mpv", Playing)];
+        assert_eq!(
+            selected_strictly(&players, Some("org.mpris.MediaPlayer2.MPV")),
+            None
+        );
     }
 
     // player_choices

@@ -45,7 +45,7 @@ fn main() {
     loop {
         thread::sleep(Duration::from_secs(1));
         let snapshot = core.snapshot();
-        let player = select_player(&snapshot.players, settings.player.as_deref());
+        let player = select_player(&snapshot.players, &settings);
         match player {
             Some(p) => println!(
                 "{} ({}) {:?}, {} player(s) on the bus",
