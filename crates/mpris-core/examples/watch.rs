@@ -1,5 +1,6 @@
 //! Prints, once per second, what a source would show for the players of
-//! the session bus, to check the core against real players without OBS.
+//! the session bus and the entries of its player selector, to check the
+//! core against real players without OBS.
 //!
 //! `cargo run --example watch [bus-name]`, the bus name standing for the
 //! instance remembered in the source settings (B-03). The
@@ -13,7 +14,7 @@ use mpris_core::content::{Content, content};
 use mpris_core::dbus::Core;
 use mpris_core::model::Settings;
 use mpris_core::player::MPRIS_PREFIX;
-use mpris_core::selection::select_player;
+use mpris_core::selection::{player_choices, select_player};
 use mpris_core::time::format_time;
 
 /// Shows the core's own logs, so a missing bus is not mistaken for an
@@ -56,6 +57,17 @@ fn main() {
             None => println!("no player"),
         }
         print_content(&content(player, &settings, Instant::now()));
+        for choice in player_choices(&snapshot.players, settings.player.as_deref()) {
+            let unavailable = if choice.available {
+                ""
+            } else {
+                " (unavailable)"
+            };
+            println!(
+                "  choice  {} [{}]{unavailable}",
+                choice.label, choice.bus_name
+            );
+        }
     }
 }
 
