@@ -1,0 +1,11 @@
+[package]
+name = "libobs-sys"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+# No build script and no link directive on purpose: the plugin leaves these
+# symbols undefined, and they resolve when OBS loads it, from the libobs the
+# OBS process already holds (architecture.md, Builds).
