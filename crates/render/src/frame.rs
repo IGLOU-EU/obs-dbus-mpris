@@ -1,6 +1,8 @@
 //! The image of the source and the few ways it is painted: rounded shapes,
 //! glyph masks and copied images, each clipped to the frame.
 
+use mpris_core::model::Rgba;
+
 use crate::color::{Linear, decode, encode};
 use crate::layout::Rect;
 
@@ -64,6 +66,62 @@ impl Frame {
             }
         }
     }
+    /// Blends `color` through an 8-bit coverage `mask` of `width` columns
+    /// whose top left corner lands on `(x, y)`, only within `clip`.
+    pub(crate) fn blend_mask(
+        &mut self,
+        (x, y): (i32, i32),
+        width: u32,
+        mask: &[u8],
+        color: Linear,
+        clip: Rect,
+    ) {
+        let Some(area) = intersection(clip, self.bounds()) else {
+            return;
+        };
+        if width == 0 {
+            return;
+        }
+        let rows = mask.chunks(width as usize).zip(i64::from(y)..);
+        for (line, py) in rows.filter(|(_, py)| area.holds_row(*py)) {
+            let columns = line.iter().zip(i64::from(x)..);
+            for (&m, px) in columns.filter(|(m, px)| **m > 0 && area.holds_column(*px)) {
+                // Both fit in u32: they lie within the area.
+                let i = self.index(px as u32, py as u32);
+                self.blend(i, color.scaled(f32::from(m) / 255.0));
+            }
+        }
+    }
+
+    /// Blends straight-alpha sRGB `rgba` pixels, color glyphs such as
+    /// emoji, of `width` columns whose top left corner lands on `(x, y)`,
+    /// at `opacity`, only within `clip`.
+    pub(crate) fn blend_image(
+        &mut self,
+        (x, y): (i32, i32),
+        width: u32,
+        rgba: &[u8],
+        opacity: f32,
+        clip: Rect,
+    ) {
+        let Some(area) = intersection(clip, self.bounds()) else {
+            return;
+        };
+        if width == 0 {
+            return;
+        }
+        let rows = rgba.chunks(width as usize * 4).zip(i64::from(y)..);
+        for (line, py) in rows.filter(|(_, py)| area.holds_row(*py)) {
+            let columns = line.chunks_exact(4).zip(i64::from(x)..);
+            for (p, px) in columns.filter(|(p, px)| p[3] > 0 && area.holds_column(*px)) {
+                // Both fit in u32: they lie within the area.
+                let i = self.index(px as u32, py as u32);
+                let color = Linear::from(Rgba::new(p[0], p[1], p[2], p[3]));
+                self.blend(i, color.scaled(opacity));
+            }
+        }
+    }
+
     /// Replaces the pixels under `image`, its top left corner on `(x, y)`.
     pub(crate) fn put(&mut self, (x, y): (u32, u32), image: &Frame) {
         let target = Rect::new(x, y, image.width, image.height);
@@ -106,6 +164,16 @@ impl Frame {
     }
 }
 
+impl Rect {
+    fn holds_row(&self, y: i64) -> bool {
+        (i64::from(self.y)..i64::from(self.bottom())).contains(&y)
+    }
+
+    fn holds_column(&self, x: i64) -> bool {
+        (i64::from(self.x)..i64::from(self.right())).contains(&x)
+    }
+}
+
 /// The part of `a` inside `b`, `None` when they do not overlap.
 fn intersection(a: Rect, b: Rect) -> Option<Rect> {
     let (x, y) = (a.x.max(b.x), a.y.max(b.y));
@@ -136,8 +204,6 @@ fn coverage(dx: f64, dy: f64, radius: f64) -> f32 {
 
 #[cfg(test)]
 mod tests {
-    use mpris_core::model::Rgba;
-
     use super::*;
 
     const RED: Rgba = Rgba::new(255, 0, 0, 255);
@@ -295,6 +361,85 @@ mod tests {
     fn empty_shape_paints_nothing() {
         let frame = filled(4, 4, Rect::new(1, 1, 0, 3), 2, WHITE);
         assert_eq!(frame, Frame::transparent(4, 4));
+    }
+
+    #[test]
+    fn mask_scales_the_color_by_its_coverage() {
+        let mut frame = Frame::transparent(3, 2);
+        let clip = Rect::new(0, 0, 3, 2);
+        frame.blend_mask((1, 0), 2, &[255, 0, 128, 64], Linear::from(WHITE), clip);
+        assert_eq!(at(&frame, 0, 0), [0; 4]);
+        assert_eq!(at(&frame, 1, 0), [255, 255, 255, 255]);
+        assert_eq!(at(&frame, 2, 0), [0; 4]);
+        assert_eq!(at(&frame, 1, 1), [188, 188, 188, 128]);
+        assert_eq!(at(&frame, 2, 1)[3], 64);
+    }
+
+    #[test]
+    fn mask_stays_within_its_clip_and_the_frame() {
+        let mut frame = Frame::transparent(4, 4);
+        let mask = [255; 16];
+        let white = Linear::from(WHITE);
+        frame.blend_mask((-2, -2), 4, &mask, white, Rect::new(0, 0, 4, 4));
+        assert_eq!(alpha(&frame, 1, 1), 255);
+        assert_eq!(alpha(&frame, 2, 2), 0);
+        let mut frame = Frame::transparent(4, 4);
+        frame.blend_mask((0, 0), 4, &mask, white, Rect::new(1, 1, 2, 2));
+        for y in 0..4 {
+            for x in 0..4 {
+                let inside = (1..3).contains(&x) && (1..3).contains(&y);
+                assert_eq!(alpha(&frame, x, y) == 255, inside, "({x}, {y})");
+            }
+        }
+        let mut frame = Frame::transparent(4, 4);
+        frame.blend_mask((3, 3), 4, &mask, white, Rect::new(0, 0, 100, 100));
+        assert_eq!(alpha(&frame, 3, 3), 255);
+        frame.blend_mask((i32::MAX, i32::MIN), 4, &mask, white, Rect::new(0, 0, 4, 4));
+    }
+
+    #[test]
+    fn mask_shorter_than_its_rows_is_read_as_far_as_it_goes() {
+        let mut frame = Frame::transparent(4, 4);
+        frame.blend_mask(
+            (0, 0),
+            4,
+            &[255; 6],
+            Linear::from(WHITE),
+            Rect::new(0, 0, 4, 4),
+        );
+        assert_eq!(alpha(&frame, 3, 0), 255);
+        assert_eq!(alpha(&frame, 1, 1), 255);
+        assert_eq!(alpha(&frame, 2, 1), 0);
+        frame.blend_mask(
+            (0, 0),
+            0,
+            &[255; 6],
+            Linear::from(WHITE),
+            Rect::new(0, 0, 4, 4),
+        );
+    }
+
+    #[test]
+    fn image_blends_its_straight_alpha_pixels() {
+        let mut frame = Frame::transparent(3, 1);
+        let rgba = [255, 0, 0, 255, 255, 255, 255, 128, 9, 9, 9, 0];
+        frame.blend_image((0, 0), 3, &rgba, 1.0, Rect::new(0, 0, 3, 1));
+        assert_eq!(at(&frame, 0, 0), [255, 0, 0, 255]);
+        assert_eq!(at(&frame, 1, 0), [188, 188, 188, 128]);
+        assert_eq!(at(&frame, 2, 0), [0; 4]);
+    }
+
+    #[test]
+    fn image_follows_the_opacity_and_the_clip() {
+        let mut frame = Frame::transparent(3, 1);
+        let rgba = [255; 12];
+        frame.blend_image((0, 0), 3, &rgba, 0.5, Rect::new(1, 0, 1, 1));
+        assert_eq!(at(&frame, 0, 0), [0; 4]);
+        assert_eq!(at(&frame, 1, 0), [188, 188, 188, 128]);
+        assert_eq!(at(&frame, 2, 0), [0; 4]);
+        frame.blend_image((-5, i32::MAX), 3, &rgba, 1.0, Rect::new(0, 0, 3, 1));
+        frame.blend_image((0, 0), 0, &rgba, 1.0, Rect::new(0, 0, 3, 1));
+        frame.blend_image((0, 0), 2, &rgba[..5], 1.0, Rect::new(0, 0, 3, 1));
     }
 
     #[test]

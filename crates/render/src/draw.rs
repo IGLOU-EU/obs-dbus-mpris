@@ -4,23 +4,47 @@
 use mpris_core::content::{Content, TrackContent};
 use mpris_core::model::Settings;
 
+use mpris_core::time::format_time;
+
 use crate::art::ArtCache;
 use crate::color::Linear;
 use crate::frame::Frame;
-use crate::layout::Layout;
+use crate::layout::{Layout, Rect};
+use crate::text::{Align, Fonts};
 
 /// Draws `content` at the size of `layout`. Nothing lands outside the
 /// frame, and nothing is drawn for [`Content::Nothing`] (B-23). `art` keeps
 /// the scaled cover of one source between frames.
-pub fn draw(layout: &Layout, content: &Content, settings: &Settings, art: &mut ArtCache) -> Frame {
+pub fn draw(
+    layout: &Layout,
+    content: &Content,
+    settings: &Settings,
+    fonts: &mut Fonts,
+    art: &mut ArtCache,
+) -> Frame {
     let mut frame = Frame::transparent(layout.width, layout.height);
     let background = Linear::from(settings.color_background);
+    let text = Linear::from(settings.color_text);
     match content {
         Content::Nothing => {}
-        Content::Message(_) => frame.fill(layout.panel, layout.corner_radius, |_, _| background),
+        Content::Message(message) => {
+            frame.fill(layout.panel, layout.corner_radius, |_, _| background);
+            let size = layout.sizes.title;
+            let line = layout.message;
+            fonts.draw(
+                &mut frame,
+                message,
+                size,
+                line,
+                Align::Left,
+                text,
+                layout.panel,
+            );
+        }
         Content::Track(track) => {
             frame.fill(layout.panel, layout.corner_radius, |_, _| background);
             draw_track(&mut frame, layout, track, settings, art);
+            draw_texts(&mut frame, layout, track, text, fonts);
         }
     }
     frame
@@ -31,6 +55,14 @@ pub fn draw(layout: &Layout, content: &Content, settings: &Settings, art: &mut A
 pub fn bar_fill(width: u32, progress: f32) -> u32 {
     // A NaN casts to 0.
     (f64::from(progress.clamp(0.0, 1.0)) * f64::from(width)).round() as u32
+}
+
+/// "Album - Artist", or whichever of the two is known (B-37).
+pub(crate) fn subtitle(album: Option<&str>, artist: Option<&str>) -> Option<String> {
+    match (album, artist) {
+        (Some(album), Some(artist)) => Some(format!("{album} - {artist}")),
+        (one, other) => one.or(other).map(str::to_owned),
+    }
 }
 
 fn draw_track(
@@ -66,14 +98,52 @@ fn draw_track(
     }
 }
 
+fn draw_texts(
+    frame: &mut Frame,
+    layout: &Layout,
+    track: &TrackContent,
+    color: Linear,
+    fonts: &mut Fonts,
+) {
+    let sizes = layout.sizes;
+    let clip = layout.panel;
+    let mut text =
+        |text: &str, size, line, align| fonts.draw(frame, text, size, line, align, color, clip);
+    let title_line = match (track.paused, layout.pause) {
+        (true, Some(pause)) => Some(pause.title),
+        _ => layout.title,
+    };
+    if let (Some(line), Some(title)) = (title_line, &track.title) {
+        text(title, sizes.title, line, Align::Left);
+    }
+    let subtitle = subtitle(track.album.as_deref(), track.artist.as_deref());
+    if let (Some(line), Some(subtitle)) = (layout.subtitle, subtitle) {
+        text(&subtitle, sizes.subtitle, line, Align::Left);
+    }
+    if let Some(row) = layout.times {
+        // Each time keeps to its half, so that neither covers the other.
+        let half = row.w / 2;
+        if let Some(position) = track.position {
+            let left = Rect { w: half, ..row };
+            text(&format_time(position), sizes.time, left, Align::Left);
+        }
+        if let Some(duration) = track.duration {
+            let right = Rect::new(row.x + half, row.y, row.w - half, row.h);
+            text(&format_time(duration), sizes.time, right, Align::Right);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
+    use std::time::Duration;
 
     use mpris_core::model::{ArtImage, Rgba};
 
     use super::*;
-    use crate::layout::{Rect, layout};
+    use crate::layout::layout;
+    use crate::text::tests::test_fonts;
 
     const BACKGROUND: Rgba = Rgba::new(0, 0, 0, 255);
     const TEXT: Rgba = Rgba::new(255, 255, 255, 255);
@@ -111,10 +181,61 @@ mod tests {
         })
     }
 
+    /// Without fonts, so that only shapes are drawn.
     fn render(settings: &Settings, content: &Content) -> (Layout, Frame) {
+        render_with(&mut Fonts::none(), settings, content)
+    }
+
+    fn render_with(fonts: &mut Fonts, settings: &Settings, content: &Content) -> (Layout, Frame) {
         let layout = layout(settings);
-        let frame = draw(&layout, content, settings, &mut ArtCache::new());
+        let frame = draw(&layout, content, settings, fonts, &mut ArtCache::new());
         (layout, frame)
+    }
+
+    /// A track with every text, the progress bar hidden so that any
+    /// colored pixel of the panel is text.
+    fn texts(title: &str, paused: bool) -> Content {
+        Content::Track(TrackContent {
+            paused,
+            title: Some(title.into()),
+            artist: Some("Artist".into()),
+            album: Some("Album".into()),
+            position: Some(Duration::from_secs(81)),
+            duration: Some(Duration::from_secs(116)),
+            progress: None,
+            art: None,
+        })
+    }
+
+    /// Pixels inked over the background within `area`.
+    fn ink(frame: &Frame, area: Rect) -> Vec<(u32, u32)> {
+        (area.y..area.bottom())
+            .flat_map(|y| (area.x..area.right()).map(move |x| (x, y)))
+            .filter(|&(x, y)| {
+                // The smoothed corners of the panel are not opaque.
+                frame
+                    .pixel(x, y)
+                    .is_some_and(|p| p[3] == 255 && p != rgba(BACKGROUND))
+            })
+            .collect()
+    }
+
+    /// Smoothing may spill a glyph one pixel past its advance.
+    const SPILL: u32 = 1;
+
+    fn span(points: &[(u32, u32)]) -> (u32, u32, u32, u32) {
+        let xs = points.iter().map(|p| p.0);
+        let ys = points.iter().map(|p| p.1);
+        (
+            xs.clone().min().expect("ink"),
+            xs.max().expect("ink"),
+            ys.clone().min().expect("ink"),
+            ys.max().expect("ink"),
+        )
+    }
+
+    fn no_bar() -> Settings {
+        with(|s| s.show_progress = false)
     }
 
     fn with_art(content: Content, image: ArtImage) -> Content {
@@ -393,5 +514,144 @@ mod tests {
         let (layout, frame) = render(&s, &track(Some(0.5), true));
         let (x, y) = center(layout.panel);
         assert_eq!(at(&frame, x, y), rgba(BACKGROUND));
+    }
+
+    // Text
+
+    #[test]
+    fn subtitle_joins_album_and_artist() {
+        let both = subtitle(Some("Album"), Some("Artist"));
+        assert_eq!(both.as_deref(), Some("Album - Artist"));
+        assert_eq!(subtitle(Some("Album"), None).as_deref(), Some("Album"));
+        assert_eq!(subtitle(None, Some("Artist")).as_deref(), Some("Artist"));
+        assert_eq!(subtitle(None, None), None);
+    }
+
+    #[test]
+    fn each_text_lands_in_its_row() {
+        let Some(mut fonts) = test_fonts() else {
+            return;
+        };
+        let (layout, frame) = render_with(&mut fonts, &no_bar(), &texts("Title", false));
+        let all = ink(&frame, layout.panel);
+        let rows = [layout.title, layout.subtitle, layout.times].map(some);
+        for row in rows {
+            let inside: Vec<_> = all
+                .iter()
+                .copied()
+                .filter(|&(_, y)| (row.y..row.bottom()).contains(&y))
+                .collect();
+            assert!(!inside.is_empty(), "{row:?}");
+            let (left, right, ..) = span(&inside);
+            assert!(
+                left + SPILL >= row.x && right < row.right() + SPILL,
+                "{row:?} {left} {right}"
+            );
+        }
+    }
+
+    #[test]
+    fn times_sit_left_and_right_under_the_bar() {
+        let Some(mut fonts) = test_fonts() else {
+            return;
+        };
+        let (layout, frame) = render_with(&mut fonts, &no_bar(), &texts("Title", false));
+        let times = some(layout.times);
+        let (left, right, ..) = span(&ink(&frame, times));
+        assert!(
+            left < times.x + 4,
+            "position starts at the left edge: {left}"
+        );
+        assert!(
+            right + 4 >= times.right(),
+            "duration ends at the right edge: {right}"
+        );
+        let middle = Rect::new(times.x + times.w / 3, times.y, times.w / 3, times.h);
+        assert!(
+            ink(&frame, middle).is_empty(),
+            "nothing between the two times"
+        );
+    }
+
+    #[test]
+    fn a_long_title_stays_in_its_row() {
+        let Some(mut fonts) = test_fonts() else {
+            return;
+        };
+        let long = "An extremely long title that goes on and on, far beyond the width of any panel";
+        let (layout, frame) = render_with(&mut fonts, &no_bar(), &texts(long, false));
+        let title = some(layout.title);
+        let row = Rect::new(layout.panel.x, title.y, layout.panel.w, title.h);
+        let (left, right, ..) = span(&ink(&frame, row));
+        assert!(
+            left + SPILL >= title.x && right < title.right() + SPILL,
+            "{left} {right} {title:?}"
+        );
+        assert!(
+            right + layout.sizes.title > title.right(),
+            "the ellipsis reaches the end"
+        );
+    }
+
+    #[test]
+    fn a_paused_title_stops_before_the_pause_icon() {
+        let Some(mut fonts) = test_fonts() else {
+            return;
+        };
+        let long = "An extremely long title that goes on and on, far beyond the width of any panel";
+        let (layout, frame) = render_with(&mut fonts, &no_bar(), &texts(long, true));
+        let pause = layout.pause.expect("pause");
+        let before = Rect::new(
+            layout.panel.x,
+            pause.title.y,
+            pause.bars[0].x - layout.panel.x,
+            pause.title.h,
+        );
+        let (_, right, ..) = span(&ink(&frame, before));
+        assert!(right < pause.title.right() + SPILL, "{right} {pause:?}");
+    }
+
+    #[test]
+    fn message_is_drawn_centered_in_the_title_font() {
+        let Some(mut fonts) = test_fonts() else {
+            return;
+        };
+        let message = Content::Message("Nothing playing".into());
+        let (layout, frame) = render_with(&mut fonts, &settings(), &message);
+        let (left, _, top, bottom) = span(&ink(&frame, layout.panel));
+        assert!(left + SPILL >= layout.message.x && left < layout.message.x + 4);
+        assert!(top >= layout.message.y && bottom < layout.message.bottom());
+        let (above, below) = (top, layout.height - 1 - bottom);
+        assert!(
+            above.abs_diff(below) <= layout.sizes.title / 4,
+            "{above} {below}"
+        );
+        assert!(ink(&frame, some(layout.art)).is_empty());
+    }
+
+    #[test]
+    fn hidden_texts_are_not_drawn() {
+        let Some(mut fonts) = test_fonts() else {
+            return;
+        };
+        let s = with(|s| {
+            s.show_progress = false;
+            s.show_title = false;
+            s.show_position = false;
+            s.show_duration = false;
+            s.show_artist = false;
+            s.show_album = false;
+        });
+        let (layout, frame) = render_with(&mut fonts, &s, &texts("Title", false));
+        assert!(ink(&frame, layout.panel).is_empty());
+    }
+
+    #[test]
+    fn nothing_stays_transparent_with_fonts() {
+        let Some(mut fonts) = test_fonts() else {
+            return;
+        };
+        let (layout, frame) = render_with(&mut fonts, &settings(), &Content::Nothing);
+        assert_eq!(frame, Frame::transparent(layout.width, layout.height));
     }
 }
