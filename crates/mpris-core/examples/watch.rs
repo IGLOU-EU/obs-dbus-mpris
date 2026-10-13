@@ -1,15 +1,18 @@
 //! Prints, once per second, what a source would show for the players of
 //! the session bus, to check the core against real players without OBS.
 //!
-//! `cargo run --example watch [player-key]`, the key standing for the
-//! player remembered in the source settings (B-03).
+//! `cargo run --example watch [bus-name]`, the bus name standing for the
+//! instance remembered in the source settings (B-03). The
+//! `org.mpris.MediaPlayer2.` prefix may be left out, so `watch mpv` follows
+//! any mpv and `watch mpv.instance-XYZ` that instance alone.
 
 use std::thread;
 use std::time::{Duration, Instant};
 
 use mpris_core::content::{Content, content};
 use mpris_core::dbus::Core;
-use mpris_core::model::{PlayerKey, Settings};
+use mpris_core::model::Settings;
+use mpris_core::player::MPRIS_PREFIX;
 use mpris_core::selection::select_player;
 use mpris_core::time::format_time;
 
@@ -34,14 +37,14 @@ impl log::Log for StderrLog {
 fn main() {
     let _ = log::set_logger(&StderrLog).map(|()| log::set_max_level(log::LevelFilter::Info));
     let settings = Settings {
-        player: std::env::args().nth(1).map(PlayerKey),
+        player: std::env::args().nth(1).map(bus_name),
         ..Settings::default()
     };
     let core = Core::start();
     loop {
         thread::sleep(Duration::from_secs(1));
         let snapshot = core.snapshot();
-        let player = select_player(&snapshot.players, settings.player.as_ref());
+        let player = select_player(&snapshot.players, settings.player.as_deref());
         match player {
             Some(p) => println!(
                 "{} ({}) {:?}, {} player(s) on the bus",
@@ -53,6 +56,15 @@ fn main() {
             None => println!("no player"),
         }
         print_content(&content(player, &settings, Instant::now()));
+    }
+}
+
+/// The short form saves typing the prefix shared by every MPRIS name.
+fn bus_name(arg: String) -> String {
+    if arg.starts_with(MPRIS_PREFIX) {
+        arg
+    } else {
+        format!("{MPRIS_PREFIX}{arg}")
     }
 }
 

@@ -121,8 +121,10 @@ impl Rgba {
 /// the schema in [`crate::settings`], never from a second definition.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Settings {
-    /// Remembered player. `None` until the user picks one (B-07).
-    pub player: Option<PlayerKey>,
+    /// Full bus name of the remembered instance (B-03), `None` until the
+    /// user picks one (B-07). Its key is derived with
+    /// [`crate::player::player_key`] when needed, never stored twice (D-06).
+    pub player: Option<String>,
     pub show_art: bool,
     pub fetch_art_online: bool,
     pub show_title: bool,

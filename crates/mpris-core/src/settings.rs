@@ -4,7 +4,7 @@
 //! [`Settings::from_lookup`] reads the same table, so each default is
 //! written once, here.
 
-use crate::model::{PlayerKey, Rgba, Settings};
+use crate::model::{Rgba, Settings};
 
 /// What a setting holds, and so which OBS property declares it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -18,7 +18,8 @@ pub enum Kind {
     /// Color with alpha (B-31).
     Color,
     Text,
-    /// Player chosen from those present on the bus, stored as its key.
+    /// Player instance chosen from those present on the bus, stored as
+    /// its full bus name (B-03).
     Player,
 }
 
@@ -154,7 +155,7 @@ impl Settings {
         let player = read_text(&get, &PLAYER);
         let player = player.trim();
         Settings {
-            player: (!player.is_empty()).then(|| PlayerKey(player.to_owned())),
+            player: (!player.is_empty()).then(|| player.to_owned()),
             show_art: read_bool(&get, &SHOW_ART),
             fetch_art_online: read_bool(&get, &FETCH_ART_ONLINE),
             show_title: read_bool(&get, &SHOW_TITLE),
@@ -415,7 +416,7 @@ mod tests {
         use SettingValue::{Bool, Color, Int, Text};
         let stored = |key: &str| {
             Some(match key {
-                "player" => Text("mpv".to_owned()),
+                "player" => Text("org.mpris.MediaPlayer2.mpv.instance-mWyyJbmA".to_owned()),
                 "show_art" => Bool(false),
                 "fetch_art_online" => Bool(true),
                 "show_title" => Bool(false),
@@ -439,7 +440,7 @@ mod tests {
             })
         };
         let expected = Settings {
-            player: Some(PlayerKey("mpv".to_owned())),
+            player: Some("org.mpris.MediaPlayer2.mpv.instance-mWyyJbmA".to_owned()),
             show_art: false,
             fetch_art_online: true,
             show_title: false,
@@ -536,11 +537,24 @@ mod tests {
     }
 
     #[test]
+    fn player_is_the_whole_bus_name_of_the_instance() {
+        let bus_name = "org.mpris.MediaPlayer2.mpv.instance-mWyyJbmA";
+        assert_eq!(with_player(bus_name).player.as_deref(), Some(bus_name));
+    }
+
+    #[test]
     fn player_is_trimmed() {
         assert_eq!(
-            with_player(" vlc ").player,
-            Some(PlayerKey("vlc".to_owned()))
+            with_player(" \torg.mpris.MediaPlayer2.vlc \n")
+                .player
+                .as_deref(),
+            Some("org.mpris.MediaPlayer2.vlc")
         );
+    }
+
+    #[test]
+    fn player_that_is_not_an_mpris_name_is_kept_for_the_selector() {
+        assert_eq!(with_player("mpv").player.as_deref(), Some("mpv"));
     }
 
     #[test]

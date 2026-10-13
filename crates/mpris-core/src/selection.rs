@@ -1,37 +1,38 @@
 //! Which player a source follows (B-05, B-06, B-07) and the selector entries (B-02, B-03).
 
 use crate::model::{PlaybackStatus, Player, PlayerKey};
+use crate::player::player_key;
 
-/// Player a source follows right now (B-05). Never stored: callers
-/// re-evaluate it on every frame, which is what brings a source back to its
-/// remembered player when that player reappears (B-06).
+/// Player a source follows right now (B-05), given the bus name of the
+/// remembered instance. Never stored: callers re-evaluate it on every frame,
+/// which is what lets a source follow its player again once it comes back
+/// under a new instance name (B-06).
 ///
-/// A remembered player wins whatever its status, even stopped while another
-/// plays, because an explicit choice outranks the activity of other players.
-pub fn select_player<'a>(
-    players: &'a [Player],
-    remembered: Option<&PlayerKey>,
-) -> Option<&'a Player> {
+/// The remembered instance wins whatever its status, even stopped while
+/// another plays, because an explicit choice outranks the activity of other
+/// players.
+pub fn select_player<'a>(players: &'a [Player], remembered: Option<&str>) -> Option<&'a Player> {
     remembered
-        .and_then(|key| instance_of(players, key))
-        .or_else(|| first(players.iter().filter(|p| is_playing(p))))
-        .or_else(|| first(players.iter()))
+        .and_then(|name| players.iter().find(|p| p.bus_name == name))
+        .or_else(|| instance_of(players, &player_key(remembered?)?))
+        .or_else(|| preferred(players.iter()))
 }
 
-/// The instance that stands for `key` when several share it (B-04).
+/// The instance that stands for `key` once the remembered one is gone (B-06).
 fn instance_of<'a>(players: &'a [Player], key: &PlayerKey) -> Option<&'a Player> {
-    first(players.iter().filter(|p| p.key == *key))
+    preferred(players.iter().filter(|p| p.key == *key))
 }
 
-fn first<'a>(players: impl Iterator<Item = &'a Player>) -> Option<&'a Player> {
-    players.min_by(|a, b| rank(a).cmp(&rank(b)))
+/// The first playing player, or the first player when none plays (B-05).
+fn preferred<'a>(players: impl Iterator<Item = &'a Player>) -> Option<&'a Player> {
+    players.min_by_key(|&p| (!is_playing(p), rank(p)))
 }
 
-/// Keys come first so the result stays the same from one session to the
-/// next (B-05), the playing instance leads within a key (B-04), and the bus
-/// name settles the rest so the order players appeared in never matters.
-fn rank(player: &Player) -> (&PlayerKey, bool, &str) {
-    (&player.key, !is_playing(player), &player.bus_name)
+/// What "first" means in B-05. Keys come first so the result stays the same
+/// from one session to the next, and the bus name settles the rest so the
+/// order players appeared in never matters.
+fn rank(player: &Player) -> (&PlayerKey, &str) {
+    (&player.key, &player.bus_name)
 }
 
 fn is_playing(player: &Player) -> bool {
@@ -110,7 +111,7 @@ mod tests {
     }
 
     fn selected<'a>(players: &'a [Player], remembered: Option<&str>) -> Option<&'a str> {
-        select_player(players, remembered.map(key).as_ref()).map(|p| p.bus_name.as_str())
+        select_player(players, remembered).map(|p| p.bus_name.as_str())
     }
 
     /// Every rotation of `players` and of its reverse, so a result that
@@ -128,65 +129,182 @@ mod tests {
         all
     }
 
-    // select_player
+    // select_player, step 1: the remembered instance
 
     #[test]
-    fn no_player_selects_nothing() {
-        assert_eq!(selected(&[], None), None);
+    fn remembered_instance_wins_whatever_its_status() {
+        for status in [Stopped, Paused] {
+            let players = [
+                player("chromium", Playing),
+                instance("mpv", "instance-a", Playing),
+                instance("mpv", "instance-b", status),
+                player("vlc", Playing),
+            ];
+            for order in orders(&players) {
+                assert_eq!(
+                    selected(&order, Some("org.mpris.MediaPlayer2.mpv.instance-b")),
+                    Some("org.mpris.MediaPlayer2.mpv.instance-b"),
+                    "{status:?} {order:?}"
+                );
+            }
+        }
     }
 
     #[test]
-    fn no_player_selects_nothing_even_with_a_remembered_one() {
-        assert_eq!(selected(&[], Some("mpv")), None);
-    }
-
-    #[test]
-    fn remembered_player_wins_over_a_playing_one_even_when_stopped() {
+    fn remembered_instance_without_suffix_wins_when_stopped() {
         let players = [player("chromium", Playing), player("mpv", Stopped)];
-        assert_eq!(
-            selected(&players, Some("mpv")),
-            Some("org.mpris.MediaPlayer2.mpv")
-        );
+        for order in orders(&players) {
+            assert_eq!(
+                selected(&order, Some("org.mpris.MediaPlayer2.mpv")),
+                Some("org.mpris.MediaPlayer2.mpv"),
+                "{order:?}"
+            );
+        }
     }
 
-    #[test]
-    fn remembered_player_wins_when_paused() {
-        let players = [player("chromium", Playing), player("mpv", Paused)];
-        assert_eq!(
-            selected(&players, Some("mpv")),
-            Some("org.mpris.MediaPlayer2.mpv")
-        );
-    }
+    // select_player, step 2: another instance of the remembered key
 
     #[test]
-    fn remembered_player_is_found_under_a_new_instance_name() {
+    fn gone_remembered_instance_gives_way_to_a_playing_instance_of_its_key() {
         let players = [
             player("chromium", Playing),
-            instance("mpv", "instance-mWyyJbmA", Paused),
+            instance("mpv", "instance-a", Paused),
+            instance("mpv", "instance-b", Playing),
+            instance("mpv", "instance-c", Stopped),
+        ];
+        for order in orders(&players) {
+            assert_eq!(
+                selected(&order, Some("org.mpris.MediaPlayer2.mpv.instance-gone")),
+                Some("org.mpris.MediaPlayer2.mpv.instance-b"),
+                "{order:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn gone_remembered_instance_gives_way_to_the_first_instance_of_its_key() {
+        let players = [
+            player("chromium", Playing),
+            instance("mpv", "instance-c", Paused),
+            instance("mpv", "instance-b", Stopped),
+            instance("mpv", "instance-d", Paused),
+        ];
+        for order in orders(&players) {
+            assert_eq!(
+                selected(&order, Some("org.mpris.MediaPlayer2.mpv.instance-a")),
+                Some("org.mpris.MediaPlayer2.mpv.instance-b"),
+                "{order:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn restarted_player_is_followed_under_its_new_instance_name() {
+        let players = [
+            player("chromium", Playing),
+            instance("mpv", "instance-Qx81bZcd", Stopped),
         ];
         assert_eq!(
-            selected(&players, Some("mpv")),
-            Some("org.mpris.MediaPlayer2.mpv.instance-mWyyJbmA")
+            selected(
+                &players,
+                Some("org.mpris.MediaPlayer2.mpv.instance-mWyyJbmA")
+            ),
+            Some("org.mpris.MediaPlayer2.mpv.instance-Qx81bZcd")
         );
     }
 
     #[test]
-    fn absent_remembered_player_falls_back_to_the_playing_one() {
-        let players = [player("chromium", Paused), player("vlc", Playing)];
+    fn remembered_name_without_suffix_follows_any_instance_of_its_key() {
+        let players = [
+            player("chromium", Playing),
+            instance("mpv", "instance-a", Paused),
+        ];
         assert_eq!(
-            selected(&players, Some("mpv")),
+            selected(&players, Some("org.mpris.MediaPlayer2.mpv")),
+            Some("org.mpris.MediaPlayer2.mpv.instance-a")
+        );
+    }
+
+    #[test]
+    fn a_key_that_merely_starts_like_the_remembered_one_is_another_player() {
+        let players = [player("mpvx", Paused), player("vlc", Playing)];
+        assert_eq!(
+            selected(&players, Some("org.mpris.MediaPlayer2.mpv.instance-a")),
             Some("org.mpris.MediaPlayer2.vlc")
         );
     }
 
+    // select_player, steps 3 to 5: no instance of the remembered key
+
     #[test]
-    fn absent_remembered_player_falls_back_to_the_first_present() {
+    fn without_an_instance_of_the_remembered_key_the_first_playing_wins() {
+        let players = [
+            player("chromium", Paused),
+            player("vlc", Playing),
+            player("audacious", Playing),
+        ];
+        for order in orders(&players) {
+            assert_eq!(
+                selected(&order, Some("org.mpris.MediaPlayer2.mpv.instance-a")),
+                Some("org.mpris.MediaPlayer2.audacious"),
+                "{order:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn without_an_instance_of_the_remembered_key_nor_a_playing_one_the_first_wins() {
         let players = [player("vlc", Paused), player("chromium", Stopped)];
+        for order in orders(&players) {
+            assert_eq!(
+                selected(&order, Some("org.mpris.MediaPlayer2.mpv.instance-a")),
+                Some("org.mpris.MediaPlayer2.chromium"),
+                "{order:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn no_player_selects_nothing() {
+        assert_eq!(selected(&[], None), None);
         assert_eq!(
-            selected(&players, Some("mpv")),
-            Some("org.mpris.MediaPlayer2.chromium")
+            selected(&[], Some("org.mpris.MediaPlayer2.mpv.instance-a")),
+            None
         );
     }
+
+    #[test]
+    fn remembered_text_that_is_not_an_mpris_name_counts_as_nothing_remembered() {
+        let one_playing = [
+            instance("mpv", "instance-a", Paused),
+            player("vlc", Playing),
+        ];
+        let none_playing = [
+            instance("mpv", "instance-a", Paused),
+            player("vlc", Stopped),
+        ];
+        for text in [
+            "mpv",
+            "",
+            ":1.42",
+            "org.mpris.MediaPlayer2.",
+            "org.mpris.MediaPlayer2Extra.mpv",
+        ] {
+            assert_eq!(
+                selected(&one_playing, Some(text)),
+                Some("org.mpris.MediaPlayer2.vlc"),
+                "{text:?}"
+            );
+            assert_eq!(
+                selected(&none_playing, Some(text)),
+                Some("org.mpris.MediaPlayer2.mpv.instance-a"),
+                "{text:?}"
+            );
+            assert_eq!(selected(&[], Some(text)), None, "{text:?}");
+        }
+    }
+
+    // select_player, nothing remembered (B-07) and the meaning of "first"
 
     #[test]
     fn without_remembered_player_the_first_playing_by_key_wins() {
@@ -227,22 +345,6 @@ mod tests {
     }
 
     #[test]
-    fn among_instances_of_the_remembered_key_the_playing_one_wins() {
-        let players = [
-            instance("mpv", "instance-a", Paused),
-            instance("mpv", "instance-b", Playing),
-            instance("mpv", "instance-c", Stopped),
-        ];
-        for order in orders(&players) {
-            assert_eq!(
-                selected(&order, Some("mpv")),
-                Some("org.mpris.MediaPlayer2.mpv.instance-b"),
-                "{order:?}"
-            );
-        }
-    }
-
-    #[test]
     fn among_idle_instances_the_first_by_bus_name_wins() {
         let players = [
             instance("mpv", "instance-c", Paused),
@@ -250,11 +352,6 @@ mod tests {
             instance("mpv", "instance-b", Paused),
         ];
         for order in orders(&players) {
-            assert_eq!(
-                selected(&order, Some("mpv")),
-                Some("org.mpris.MediaPlayer2.mpv.instance-a"),
-                "{order:?}"
-            );
             assert_eq!(
                 selected(&order, None),
                 Some("org.mpris.MediaPlayer2.mpv.instance-a"),
@@ -290,6 +387,22 @@ mod tests {
             assert_eq!(
                 selected(&order, None),
                 Some("org.mpris.MediaPlayer2.mpv.instance-b"),
+                "{order:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn first_goes_by_key_before_bus_name() {
+        // By bus name alone `mpv-x` would come first, `-` sorting before `.`.
+        let players = [
+            player("mpv-x", Paused),
+            instance("mpv", "instance-a", Paused),
+        ];
+        for order in orders(&players) {
+            assert_eq!(
+                selected(&order, None),
+                Some("org.mpris.MediaPlayer2.mpv.instance-a"),
                 "{order:?}"
             );
         }

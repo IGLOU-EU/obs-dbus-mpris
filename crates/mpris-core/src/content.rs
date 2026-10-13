@@ -284,7 +284,7 @@ mod tests {
         let t0 = Instant::now();
         let p = player(Playing, t0);
         let s = Settings {
-            player: Some(PlayerKey("vlc".into())),
+            player: Some("org.mpris.MediaPlayer2.vlc".into()),
             ..Settings::default()
         };
         assert_eq!(
