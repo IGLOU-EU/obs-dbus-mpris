@@ -1,0 +1,10 @@
+[package]
+name = "gen-libobs-bindings"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.87"
+license = "GPL-2.0-or-later"
+publish = false
+
+[dependencies]
+bindgen = { version = "0.73", default-features = false, features = ["runtime"] }
