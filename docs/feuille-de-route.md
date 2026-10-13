@@ -2,15 +2,17 @@
 
 Les phases sont ordonnées par risque : ce qui peut faire échouer le projet passe en premier. Chaque phase se termine sur un état utilisable et testé, jamais sur un chantier ouvert.
 
+La phase 2 a été avancée avant la phase 1 (décision du 2026-10-13) : le cœur ne dépend pas d'OBS et se teste seul.
+
 Les validations se font dans OBS Flatpak. Le build natif est produit à chaque phase, mais sa validation dans un OBS natif est reportée.
 
 ## État d'avancement
 
 | Phase | Objet | État |
 |-------|-------|------|
-| 0 | Cadrage | en cours |
+| 0 | Cadrage | fait |
 | 1 | Squelette marchant, natif et Flatpak | à faire |
-| 2 | Cœur MPRIS, hors OBS | à faire |
+| 2 | Cœur MPRIS, hors OBS | en cours : écrit et testé, reste la validation sur Chrome et Strawberry ou Elisa |
 | 3 | Primitives de rendu | à faire |
 | 4 | Source complète | à faire |
 | 5 | Pochette en ligne, en option | à faire |

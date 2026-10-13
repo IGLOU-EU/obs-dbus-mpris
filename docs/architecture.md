@@ -71,7 +71,7 @@ La séparation entre `mpris-core` et `obs-mpris` a une raison concrète : les te
 
 ## Fils d'exécution
 
-- **Fil du cœur** : un seul pour tout le plugin, démarré par `obs_module_load` et arrêté par `obs_module_unload`. Une boucle d'événements unique qui reçoit les signaux D-Bus et les messages des autres fils. Un bus injoignable n'empêche pas le chargement du module, il est journalisé et la source affiche le message de repli.
+- **Fil du cœur** : un seul pour tout le plugin, démarré par `obs_module_load` et arrêté par `obs_module_unload`. Une boucle d'événements asynchrone unique qui reçoit les signaux D-Bus, le minuteur de relecture et les messages des autres fils. L'exécuteur de zbus tourne dans ce fil (`internal_executor(false)`), sans fil caché, ce qui permet à l'arrêt d'interrompre même un appel en attente sur un lecteur figé. Un bus injoignable n'empêche pas le chargement du module, il est journalisé et la source affiche le message de repli.
 - **Fil réseau** : démarré à la première demande de pochette en ligne, jamais sinon (B-48). Il ne touche pas au `Store`, il renvoie ses résultats au fil du cœur.
 - **Fil graphique d'OBS** (`video_tick`, `video_render`) : lit l'instantané courant, sans attente sur le fil du cœur.
 - **Fil d'interface d'OBS** (`get_properties`, `update`) : lit l'instantané pour construire la liste des lecteurs.
@@ -82,7 +82,7 @@ L'instantané est le seul état partagé entre fils. Il se publie par remplaceme
 
 **D-01 Bindings libobs maison.** Le crate `obs-wrapper` n'est plus maintenu (dernière version 0.4.1, septembre 2022). Les bindings sont générés par bindgen à partir des en-têtes d'OBS 32, présents dans OBS Flatpak (`/app/include/obs`) et dans le paquet `obs-studio` natif. On limite la génération à l'API utilisée (liste blanche) et on commite le résultat, pour que le build n'exige ni libclang ni en-têtes. Un script les régénère au changement de version majeure d'OBS.
 
-**D-02 D-Bus avec zbus 5.** Pur Rust, maintenu, sans dépendance à libdbus. On n'utilise pas le crate `mpris`, qui passe par libdbus et n'apporte rien pour deux interfaces en lecture seule.
+**D-02 D-Bus avec zbus 5.** Pur Rust, maintenu, sans dépendance à libdbus. On n'utilise pas le crate `mpris`, qui passe par libdbus et n'apporte rien pour deux interfaces en lecture seule. Chaque appel de méthode expire après une seconde, et une erreur d'appel vaut donnée manquante : un lecteur figé ne bloque jamais les autres. La journalisation passe par la façade `log`, que la colle OBS relaiera vers `blog`.
 
 **D-03 Images par le crate `image`**, limité aux formats utiles (JPEG, PNG). Un seul chemin pour `data:`, `file://` et les pochettes en ligne : des octets, décodés en RGBA hors du fil graphique, puis envoyés en texture (`gs_texture_create`) par le fil graphique. Écarté : `gs_image_file`, qui n'accepte qu'un chemin de fichier et forcerait à écrire les miniatures `data:` sur disque.
 
