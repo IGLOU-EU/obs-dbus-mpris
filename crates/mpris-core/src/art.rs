@@ -263,6 +263,11 @@ mod tests {
         encode(width, height, ImageFormat::Jpeg)
     }
 
+    /// Lossless, so decoded pixels can be checked exactly.
+    fn webp(width: u32, height: u32) -> Vec<u8> {
+        encode(width, height, ImageFormat::WebP)
+    }
+
     fn data_uri(media_type: &str, bytes: &[u8]) -> String {
         format!("data:{media_type};base64,{}", STANDARD.encode(bytes))
     }
@@ -508,6 +513,19 @@ mod tests {
     fn jpeg_data_uri_loads() {
         let image = load_art(&data_uri("image/jpeg", &jpeg(16, 8))).expect("load");
         assert_opaque(&image, 16, 8);
+    }
+
+    #[test]
+    fn webp_data_uri_loads() {
+        let image = load_art(&data_uri("image/webp", &webp(3, 2))).expect("load");
+        assert_gradient(&image, 3, 2);
+    }
+
+    #[test]
+    fn webp_file_url_loads() {
+        // AudioTube caches its covers as WebP files.
+        let file = TempFile::new(b"cover.webp", &webp(5, 4));
+        assert_gradient(&load_art(&file.url()).expect("load"), 5, 4);
     }
 
     #[test]

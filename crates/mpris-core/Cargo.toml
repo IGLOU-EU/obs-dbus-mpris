@@ -8,7 +8,7 @@ publish = false
 
 [dependencies]
 zbus = "5"
-image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
 base64 = "0.22"
 percent-encoding = "2"
 log = "0.4"
