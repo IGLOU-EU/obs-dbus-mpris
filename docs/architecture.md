@@ -88,14 +88,21 @@ L'instantané est le seul état partagé entre fils. Il se publie par remplaceme
 
 **D-03 Images par le crate `image`**, limité aux formats rencontrés chez les lecteurs réels : JPEG, PNG, et WebP (AudioTube). Un seul chemin pour `data:`, `file://` et les pochettes en ligne : des octets, décodés en RGBA hors du fil graphique, puis envoyés en texture (`gs_texture_create`) par le fil graphique. Un chargement qui dépasse deux secondes (fichier sur un montage réseau figé) est abandonné et compte comme un échec, pour que l'état des autres lecteurs continue d'avancer. Écarté : `gs_image_file`, qui n'accepte qu'un chemin de fichier et forcerait à écrire les miniatures `data:` sur disque.
 
-**D-04 Rendu du texte : à trancher par un essai en phase 3.** Deux options :
+**D-04 Rendu du texte : rastérisation en Rust par `cosmic-text` 0.17**, tranchée par l'essai de la phase 3 (2026-10-14). La source entière, texte compris, est dessinée en une image RGBA par le crate `render`, puis montrée comme une texture. Options comparées :
 
 | Option | Pour | Contre |
 |--------|------|--------|
 | Sources texte privées d'OBS (`text_ft2_source_v2`) en sources enfants | aucun rastériseur à maintenir, polices système d'OBS | contrôle limité sur la troncature et l'alignement, dépend du comportement d'une autre source |
 | Rastérisation en Rust (`cosmic-text`, mise en forme et repli de polices) vers une texture | contrôle total, même rendu en natif et en Flatpak | dépendance lourde, découverte des polices à gérer |
 
-Critères de choix : repli correct sur les caractères japonais (cas réel de mpv), troncature dans une largeur donnée, alpha du texte, coût CPU.
+Critères de choix : repli correct sur les caractères japonais (cas réel de mpv), troncature dans une largeur donnée, alpha du texte, coût CPU. L'option `cosmic-text` les remplit tous, l'autre n'a pas été essayée. Constats :
+
+- **Japonais.** « 愛をとりもどせ!! (MOVIE ver.) » s'affiche sur l'hôte et dans le bac à sable d'OBS Flatpak 32.2.2, avec des images identiques au pixel près : le bac à sable voit les polices de l'hôte sous `/run/host/fonts`, Noto Sans CJK et Noto Color Emoji compris. Les idéogrammes suivent la langue du système (Noto Sans CJK SC hors d'une locale japonaise), les kanas Noto Sans CJK JP.
+- **Police par défaut.** C'est celle de `cosmic-text` (Open Sans, puis Noto Sans, DejaVu Sans, FreeSans), et non celle de fontconfig : `fontdb` retient le dernier alias `sans-serif` qu'il lit, Nimbus Sans Narrow sur l'hôte et FreeSans dans le bac à sable, là où `fc-match` donne Noto Sans et DejaVu Sans. Suivre exactement fontconfig demanderait de lier libfontconfig ou de refaire son ordre de préférence.
+- **Troncature.** Coupure sur les avances des glyphes mis en forme, vérifiée par une seconde mise en forme, points de suspension compris dans la largeur.
+- **Alpha.** La couverture des glyphes se mélange en lumière linéaire dans l'image prémultipliée, comme le reste de la source.
+- **Coût.** La lecture des polices du système prend 80 ms à chaud et 2,1 s à froid (2 868 faces sur le poste de développement). Un redessin du panneau complet avec miniature (600 × 156) prend 0,55 ms, mais le premier d'une piste monte à 3,6 ms (pochette 360 × 360) et 12 ms (1024 × 1024, le maximum gardé par le cœur), et le premier usage d'une police de repli coûte quelques millisecondes. Le dessin tourne donc sur un fil dédié, qui charge aussi les polices, et le fil graphique ne fait que demander des images et envoyer la dernière reçue en texture.
+- **glibc.** Le rastériseur de swash (`zeno`) appelle `acosf`, qu'un hôte en glibc 2.43 ou plus lie en version 2.43, absente du runtime 25.08 (2.42). La bibliothèque l'enveloppe (`-Wl,--wrap=acosf`) et le remplace par celui du crate `libm` : elle n'exige pas plus que GLIBC_2.39, comme avant `cosmic-text`.
 
 **D-05 Position extrapolée** (B-17). Recalage sur `Seeked`, sur changement de piste ou d'état, et relecture périodique de `Position` à un intervalle à régler à l'usage, pour les lecteurs qui omettent `Seeked`.
 
