@@ -213,17 +213,19 @@ fn set_track(player: &mut Player, track: &Track, at: Instant) {
     if *track == player.track {
         return;
     }
+    let new_track = is_new_track(&player.track, track);
     // The real position is unknown until the adapter re-reads it, and a
     // track starts at zero far more often than not.
-    if is_new_track(&player.track, track) {
+    if new_track {
         player.anchor = PositionAnchor {
             position: Duration::ZERO,
             at,
         };
     }
-    // Two tracks of one album often share a cover: keep it rather than
-    // decode the same image again.
-    if track.art_url != player.track.art_url {
+    // A new track reloads its art even under the same url: some players
+    // write each cover to one fixed path, and a cover that failed for the
+    // previous track deserves another try.
+    if new_track || track.art_url != player.track.art_url {
         player.art = art_for(track);
     }
     player.track = track.clone();
@@ -241,7 +243,9 @@ fn is_new_track(old: &Track, new: &Track) -> bool {
 }
 
 /// Only an image for the url the player shows now is kept: a slow load for
-/// a previous track must not overwrite the current one.
+/// a previous url must not overwrite the current one. A load started for
+/// the previous track under the same url looks the same and is taken, a
+/// race as short as one decode.
 fn load_art(player: &mut Player, url: &str, image: Option<Arc<ArtImage>>) {
     if matches!(player.art, Art::Pending) && player.track.art_url.as_deref() == Some(url) {
         player.art = image.map_or(Art::Failed, Art::Ready);
@@ -762,18 +766,37 @@ mod tests {
     }
 
     #[test]
-    fn new_track_sharing_the_art_url_keeps_the_art() {
+    fn new_track_sharing_the_art_url_reloads_its_art() {
+        let t0 = Instant::now();
+        for loaded in [Some(image()), None] {
+            let mut store = store_playing(t0);
+            store.apply(art_loaded("file:///a.png", loaded.clone()));
+            assert!(store.apply(track_changed(
+                track("b", Some("file:///a.png")),
+                t0 + secs(30),
+            )));
+            let p = player(&store, BUS);
+            assert_eq!(p.anchor, anchor(Duration::ZERO, t0 + secs(30)));
+            assert_eq!(p.art, Art::Pending, "after {loaded:?}");
+            assert_eq!(
+                store.pending_art(),
+                [(UNIQUE.to_string(), "file:///a.png".to_string())]
+            );
+        }
+    }
+
+    #[test]
+    fn same_track_with_the_same_art_url_does_not_retry_failed_art() {
         let t0 = Instant::now();
         let mut store = store_playing(t0);
-        let image = image();
-        store.apply(art_loaded("file:///a.png", Some(image.clone())));
-        store.apply(track_changed(
-            track("b", Some("file:///a.png")),
-            t0 + secs(30),
-        ));
-        let p = player(&store, BUS);
-        assert_eq!(p.anchor, anchor(Duration::ZERO, t0 + secs(30)));
-        assert_eq!(p.art, Art::Ready(image));
+        store.apply(art_loaded("file:///a.png", None));
+        let longer = Track {
+            length: Some(secs(180)),
+            ..track("a", Some("file:///a.png"))
+        };
+        assert!(store.apply(track_changed(longer, t0 + secs(30))));
+        assert_eq!(player(&store, BUS).art, Art::Failed);
+        assert!(store.pending_art().is_empty());
     }
 
     #[test]

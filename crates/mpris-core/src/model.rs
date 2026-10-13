@@ -64,7 +64,8 @@ pub enum Art {
     /// `art_url` is known and waits for decoding.
     Pending,
     Ready(Arc<ArtImage>),
-    /// `art_url` could not be read or decoded. Kept so it is not retried.
+    /// `art_url` could not be read or decoded. Kept so it is not retried
+    /// before the next track.
     Failed,
 }
 
