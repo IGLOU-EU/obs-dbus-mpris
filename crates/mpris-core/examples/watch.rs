@@ -2,10 +2,12 @@
 //! the session bus and the entries of its player selector, to check the
 //! core against real players without OBS.
 //!
-//! `cargo run --example watch [bus-name]`, the bus name standing for the
-//! instance remembered in the source settings (B-03). The
+//! `cargo run --example watch [bus-name] [--strict]`, the bus name standing
+//! for the instance remembered in the source settings (B-03). The
 //! `org.mpris.MediaPlayer2.` prefix may be left out, so `watch mpv` follows
-//! any mpv and `watch mpv.instance-XYZ` that instance alone.
+//! any mpv and `watch mpv.instance-XYZ` that instance alone. `--strict`,
+//! anywhere in the arguments, turns automatic selection off (B-05), so only
+//! the exact remembered instance is shown.
 
 use std::thread;
 use std::time::{Duration, Instant};
@@ -35,10 +37,15 @@ impl log::Log for StderrLog {
     fn flush(&self) {}
 }
 
+const STRICT: &str = "--strict";
+
 fn main() {
     let _ = log::set_logger(&StderrLog).map(|()| log::set_max_level(log::LevelFilter::Info));
+    let (strict, names): (Vec<String>, Vec<String>) =
+        std::env::args().skip(1).partition(|arg| arg == STRICT);
     let settings = Settings {
-        player: std::env::args().nth(1).map(bus_name),
+        player: names.into_iter().next().map(bus_name),
+        auto_select: strict.is_empty(),
         ..Settings::default()
     };
     let core = Core::start();
