@@ -267,6 +267,33 @@ fn seeked_moves_the_anchor() {
 }
 
 #[test]
+fn signals_of_a_player_apply_in_the_order_it_sent_them() {
+    let bus = PrivateBus::start();
+    let fake = FakePlayer::start(&bus, FAKE, paused(secs(10)));
+    let core = Core::start_at(&bus.address);
+    discovered(&core, FAKE);
+
+    // Decoding this cover keeps the loop busy far longer than the next two
+    // signals take to queue up behind it, whatever order it reads them in.
+    let cover = png_data_url(1500, 1500);
+    fake.set_metadata(track("/fake/2", "Title two", Some(&cover)));
+    fake.seek(secs(30));
+    fake.set_position(Duration::ZERO);
+    fake.set_metadata(track("/fake/3", "Title three", None));
+
+    wait_for(&core, "the third track", |s| {
+        find(s, FAKE).is_some_and(|p| p.track.title.as_deref() == Some("Title three"))
+    });
+    // A Seeked handled after the track that followed it lands right after,
+    // and nothing else moves the anchor of a paused player.
+    thread::sleep(Duration::from_millis(200));
+    let snapshot = core.snapshot();
+    let player = find(&snapshot, FAKE).unwrap();
+    assert_eq!(player.track.title.as_deref(), Some("Title three"));
+    assert_eq!(player.anchor.position, Duration::ZERO);
+}
+
+#[test]
 fn playing_position_is_read_again_without_seeked() {
     let bus = PrivateBus::start();
     let fake = FakePlayer::start(&bus, FAKE, playing(secs(10)));

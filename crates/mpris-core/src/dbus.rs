@@ -171,8 +171,7 @@ async fn connect(address: Option<&str>) -> zbus::Result<Connection> {
 /// What woke the loop.
 enum Input {
     Owner(Message),
-    Properties(Message),
-    Seeked(Message),
+    Player(Message),
     Poll,
     Lost,
 }
@@ -181,16 +180,14 @@ async fn watch(conn: &Connection, shared: &Shared) -> zbus::Result<()> {
     // Subscribed before the first scan, so a player starting in between is
     // not missed.
     let mut owners = subscribe(conn, owner_rule()?).await?;
-    let mut properties = subscribe(conn, properties_rule()?).await?;
-    let mut seeks = subscribe(conn, seeked_rule()?).await?;
+    let mut players = subscribe(conn, player_rule()?).await?;
     let mut watcher = Watcher::new(conn, shared);
     watcher.discover().await;
 
     let mut poll = Timer::after(POLL_INTERVAL);
     loop {
         let input = next(&mut owners, Input::Owner)
-            .or(next(&mut properties, Input::Properties))
-            .or(next(&mut seeks, Input::Seeked))
+            .or(next(&mut players, Input::Player))
             .or(async {
                 (&mut poll).await;
                 Input::Poll
@@ -198,8 +195,7 @@ async fn watch(conn: &Connection, shared: &Shared) -> zbus::Result<()> {
             .await;
         match input {
             Input::Owner(msg) => watcher.on_owner_changed(&msg).await,
-            Input::Properties(msg) => watcher.on_properties_changed(&msg).await,
-            Input::Seeked(msg) => watcher.on_seeked(&msg),
+            Input::Player(msg) => watcher.on_player_signal(&msg).await,
             Input::Poll => {
                 watcher.poll_positions().await;
                 // Counted from the end of the poll, so a slow player never
@@ -237,20 +233,12 @@ fn owner_rule() -> zbus::Result<MatchRule<'static>> {
         .build())
 }
 
-fn properties_rule() -> zbus::Result<MatchRule<'static>> {
+/// Every signal of the MPRIS object, in one stream: a player's
+/// `PropertiesChanged` and `Seeked` must apply in the order it sent them,
+/// which streams polled by priority do not keep.
+fn player_rule() -> zbus::Result<MatchRule<'static>> {
     Ok(MatchRule::builder()
         .msg_type(MessageType::Signal)
-        .interface(PROPERTIES_IFACE)?
-        .member("PropertiesChanged")?
-        .path(MPRIS_PATH)?
-        .build())
-}
-
-fn seeked_rule() -> zbus::Result<MatchRule<'static>> {
-    Ok(MatchRule::builder()
-        .msg_type(MessageType::Signal)
-        .interface(PLAYER_IFACE)?
-        .member("Seeked")?
         .path(MPRIS_PATH)?
         .build())
 }
@@ -312,6 +300,21 @@ impl<'a> Watcher<'a> {
             }
         };
         self.commit(changed);
+    }
+
+    /// Ignores the signals of interfaces the store does not follow, which
+    /// the one rule for the whole object lets through.
+    async fn on_player_signal(&mut self, msg: &Message) {
+        let header = msg.header();
+        let interface = header.interface().map(|name| name.as_str());
+        let member = header.member().map(|name| name.as_str());
+        match (interface, member) {
+            (Some(PROPERTIES_IFACE), Some("PropertiesChanged")) => {
+                self.on_properties_changed(msg).await
+            }
+            (Some(PLAYER_IFACE), Some("Seeked")) => self.on_seeked(msg),
+            _ => {}
+        }
     }
 
     async fn on_properties_changed(&mut self, msg: &Message) {
