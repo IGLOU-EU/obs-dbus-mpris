@@ -43,7 +43,7 @@ video_tick, par source (fil graphique d'OBS)
 video_render : dessine fond, miniature, textes, barre (aucune entrée-sortie)
 ```
 
-Le `Store` indexe les lecteurs par nom unique D-Bus (`:1.42`), puisque les signaux arrivent de ce nom et non du nom connu.
+Le `Store` indexe les lecteurs par nom connu (`org.mpris.MediaPlayer2.mpv.instance-…`) et rattache les signaux par nom unique D-Bus (`:1.42`), puisque c'est de ce nom qu'ils arrivent. Un même processus peut posséder plusieurs noms MPRIS, un signal touche alors chacun d'eux.
 
 Pochette en ligne (B-18), quand une source a l'option cochée et que la miniature locale manque :
 
