@@ -5,12 +5,23 @@
 //! the store asks for, and publishes an immutable [`Snapshot`] that any
 //! thread reads without waiting on the bus (B-41).
 //!
-//! The loop is async on a single thread: the zbus streams, the poll timer
-//! and the stop signal are awaited together, so a stop request ends the
-//! thread even while a call to a frozen player is pending. Blocking feeder
-//! threads could not be woken out of their reads, and shutdown would wait
-//! on them. The connection runs without zbus's own executor thread, so
-//! joining the core thread is enough to know nothing of ours still runs.
+//! The loop is async on a single thread: the zbus streams, the poll timer,
+//! the art loads and the stop signal are awaited together, so a stop
+//! request ends the thread even while a call to a frozen player or the read
+//! of a cover on a hung mount is pending. Blocking feeder threads could not
+//! be woken out of their reads, and shutdown would wait on them. The
+//! connection runs without zbus's own executor thread, so once the core
+//! thread is joined nothing reads the bus or writes the snapshot. Other
+//! threads remain, shared by the whole process and holding no player state:
+//! the `blocking` pool, which zbus connects through and which keeps an
+//! abandoned art load until it returns, and the global `async-io` thread.
+//!
+//! A hostile local process can slow the loop by flooding signals or by never
+//! answering the reads of the properties it invalidates, each read waiting
+//! out its one-second timeout. This is accepted, since it takes a malicious
+//! process in the user's own session, while a hung but honest player sends
+//! nothing and delays the others only while a call to it waits out that same
+//! timeout.
 
 use std::collections::{BTreeSet, HashMap};
 use std::panic::{self, AssertUnwindSafe};
