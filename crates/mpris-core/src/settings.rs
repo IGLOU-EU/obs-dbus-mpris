@@ -60,7 +60,9 @@ const MAX_SIDE: u32 = 8192;
 /// Same purpose as [`MAX_SIDE`], for glyph rasterization.
 const MAX_FONT_SIZE: u32 = 512;
 
-// Built by the constructor of their kind, so a default always fits its kind.
+// Flags, colors and sizes come from the constructor of their kind, so their
+// default fits their kind by construction. `PLAYER` and `FALLBACK_TEXT` are
+// alone of their kind, and a constructor would serve a single call.
 const PLAYER: Field = Field {
     key: "player",
     kind: Kind::Player,
@@ -195,8 +197,12 @@ impl Rgba {
     }
 }
 
-// The `unreachable!` arms below hold because each field is built by the
-// constructor of its kind, and each reader is only given fields of its kind.
+// The `unreachable!` arms below hold because `from_lookup` gives each reader
+// only fields of its kind, and every default matches its field: the
+// constructors ensure it for flags, colors and sizes, and the literals
+// `PLAYER` and `FALLBACK_TEXT` carry a text default, which `read_text`
+// accepts. A slip panics in `defaults_match_the_table`, which runs every
+// reader on its default.
 
 fn read_bool(get: &impl Fn(&str) -> Option<SettingValue>, field: &Field) -> bool {
     match (get(field.key), field.default) {

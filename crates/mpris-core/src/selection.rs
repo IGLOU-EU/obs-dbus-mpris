@@ -58,7 +58,7 @@ pub fn player_choices(players: &[Player], remembered: Option<&PlayerKey>) -> Vec
         .map(|key| match instance_of(players, key) {
             Some(player) => Choice {
                 key: key.clone(),
-                label: label(player),
+                label: player.identity.clone(),
                 available: true,
             },
             None => Choice {
@@ -68,15 +68,6 @@ pub fn player_choices(players: &[Player], remembered: Option<&PlayerKey>) -> Vec
             },
         })
         .collect()
-}
-
-/// A blank `Identity` would leave an entry the user cannot read.
-fn label(player: &Player) -> String {
-    if player.identity.trim().is_empty() {
-        player.key.0.clone()
-    } else {
-        player.identity.clone()
-    }
 }
 
 #[cfg(test)]
@@ -354,18 +345,6 @@ mod tests {
         for order in orders(&players) {
             assert_eq!(choices(&order, None), expected, "{order:?}");
         }
-    }
-
-    #[test]
-    fn empty_identity_falls_back_to_the_key() {
-        let mut nameless = player("mpv", Playing);
-        nameless.identity = String::new();
-        let mut blank = player("vlc", Paused);
-        blank.identity = " \t".into();
-        assert_eq!(
-            choices(&[nameless, blank], None),
-            [choice("mpv", "mpv", true), choice("vlc", "vlc", true)]
-        );
     }
 
     #[test]

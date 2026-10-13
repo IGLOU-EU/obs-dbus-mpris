@@ -22,6 +22,7 @@ pub enum Event {
         unique_name: String,
         bus_name: String,
         key: PlayerKey,
+        /// Never blank, see [`Player::identity`].
         identity: String,
         status: PlaybackStatus,
         rate: f64,
@@ -37,11 +38,13 @@ pub enum Event {
         status: Option<PlaybackStatus>,
         rate: Option<f64>,
         track: Option<Track>,
+        /// Never blank, see [`Player::identity`].
         identity: Option<String>,
         at: Instant,
     },
     /// A position read at `at`: `Seeked`, a periodic poll, or the re-read
-    /// that follows a track change.
+    /// the adapter makes after every status change and every metadata
+    /// change, where the store can only guess the position (B-17).
     PositionRead {
         unique_name: String,
         position: Duration,
@@ -58,8 +61,9 @@ pub enum Event {
 /// Every player present on the bus.
 #[derive(Debug, Default)]
 pub struct Store {
-    /// Keyed by well-known name, the identity of a player on the bus (B-04).
-    /// Ordered, so the same state always gives the same snapshot.
+    /// Keyed by well-known name, since every instance of a player shares its
+    /// key (B-04) and still needs its own entry. Ordered, so the same state
+    /// always gives the same snapshot.
     players: BTreeMap<String, Player>,
 }
 
@@ -133,8 +137,10 @@ impl Store {
         }
     }
 
-    /// Immutable copy of every player, ordered by bus name. Images are
-    /// shared, not copied, so taking one on every change stays cheap.
+    /// Immutable copy of every player, ordered by bus name. Decoded images
+    /// are shared, but each `art_url` is copied, and mpv puts its whole
+    /// cover there as a base64 `data:` URI. One such string copy per
+    /// published change is acceptable at the rate bus events arrive.
     pub fn snapshot(&self) -> Snapshot {
         Snapshot {
             players: self.players.values().cloned().collect(),
@@ -181,17 +187,18 @@ fn change(
     identity: Option<&str>,
     at: Instant,
 ) {
-    let rate = rate.and_then(finite);
-    let status_changes = status.is_some_and(|status| status != player.status);
-    let rate_changes = rate.is_some_and(|rate| rate != player.rate);
+    let status = status.filter(|status| *status != player.status);
+    let rate = rate.and_then(finite).filter(|rate| *rate != player.rate);
     // The anchor only holds for the status and rate it was taken under:
     // re-anchoring at the event time freezes the position on pause and keeps
-    // it continuous across a rate change (B-17).
-    if status_changes || rate_changes {
-        player.anchor = PositionAnchor {
-            position: display_position(player, at),
-            at,
+    // it continuous across a rate change (B-17). A stop anchors at zero
+    // because MPRIS restarts the track on the next Play.
+    if status.is_some() || rate.is_some() {
+        let position = match status {
+            Some(PlaybackStatus::Stopped) => Duration::ZERO,
+            _ => display_position(player, at),
         };
+        player.anchor = PositionAnchor { position, at };
     }
     if let Some(status) = status {
         player.status = status;
@@ -211,36 +218,39 @@ fn set_track(player: &mut Player, track: &Track, at: Instant) {
     if *track == player.track {
         return;
     }
+    let new_track = is_new_track(&player.track, track);
     // The real position is unknown until the adapter re-reads it, and a
     // track starts at zero far more often than not.
-    if is_new_track(&player.track, track) {
+    if new_track {
         player.anchor = PositionAnchor {
             position: Duration::ZERO,
             at,
         };
     }
-    // Two tracks of one album often share a cover: keep it rather than
-    // decode the same image again.
-    if track.art_url != player.track.art_url {
+    // A new track reloads its art even under the same url: some players
+    // write each cover to one fixed path, and a cover that failed for the
+    // previous track deserves another try.
+    if new_track || track.art_url != player.track.art_url {
         player.art = art_for(track);
     }
     player.track = track.clone();
 }
 
 /// Players send metadata updates for the playing track too (length found,
-/// art written to disk), and those must not reset the position. Without
-/// `mpris:trackid`, the tags are the only way to tell.
+/// art written to disk), and those must not reset the position. The id
+/// alone cannot tell: some players keep one `mpris:trackid` for every track
+/// (Firefox sends `/org/mpris/MediaPlayer2/firefox`), so the tags count too.
 fn is_new_track(old: &Track, new: &Track) -> bool {
-    match (&old.id, &new.id) {
-        (None, None) => {
-            old.title != new.title || old.album != new.album || old.artists != new.artists
-        }
-        (old_id, new_id) => old_id != new_id,
-    }
+    old.id != new.id
+        || old.title != new.title
+        || old.album != new.album
+        || old.artists != new.artists
 }
 
 /// Only an image for the url the player shows now is kept: a slow load for
-/// a previous track must not overwrite the current one.
+/// a previous url must not overwrite the current one. A load started for
+/// the previous track under the same url looks the same and is taken, a
+/// race as short as one decode.
 fn load_art(player: &mut Player, url: &str, image: Option<Arc<ArtImage>>) {
     if matches!(player.art, Art::Pending) && player.track.art_url.as_deref() == Some(url) {
         player.art = image.map_or(Art::Failed, Art::Ready);
@@ -642,6 +652,37 @@ mod tests {
     }
 
     #[test]
+    fn play_after_stop_restarts_the_track() {
+        let t0 = Instant::now();
+        let mut store = Store::new();
+        store.apply(appeared(
+            UNIQUE,
+            BUS,
+            PlaybackStatus::Playing,
+            track("a", None),
+            secs(100),
+            t0,
+        ));
+        assert!(store.apply(status_changed(PlaybackStatus::Stopped, t0 + secs(5))));
+        assert_eq!(player(&store, BUS).anchor, anchor(secs(0), t0 + secs(5)));
+        assert!(store.apply(status_changed(PlaybackStatus::Playing, t0 + secs(60))));
+        let p = player(&store, BUS);
+        assert_eq!(p.anchor, anchor(secs(0), t0 + secs(60)));
+        assert_eq!(display_position(&p, t0 + secs(62)), secs(2));
+    }
+
+    #[test]
+    fn position_read_after_stop_wins_over_the_restart_guess() {
+        let t0 = Instant::now();
+        let mut store = store_playing(t0);
+        store.apply(status_changed(PlaybackStatus::Stopped, t0 + secs(5)));
+        store.apply(position_read(secs(7), t0 + secs(6)));
+        assert!(!store.apply(status_changed(PlaybackStatus::Stopped, t0 + secs(9))));
+        assert!(!store.apply(rate_changed(1.0, t0 + secs(9))));
+        assert_eq!(player(&store, BUS).anchor, anchor(secs(7), t0 + secs(6)));
+    }
+
+    #[test]
     fn rate_change_keeps_position_continuous() {
         let t0 = Instant::now();
         let mut store = store_playing(t0);
@@ -730,57 +771,102 @@ mod tests {
     }
 
     #[test]
-    fn new_track_sharing_the_art_url_keeps_the_art() {
+    fn new_track_sharing_the_art_url_reloads_its_art() {
         let t0 = Instant::now();
-        let mut store = store_playing(t0);
-        let image = image();
-        store.apply(art_loaded("file:///a.png", Some(image.clone())));
-        store.apply(track_changed(
-            track("b", Some("file:///a.png")),
-            t0 + secs(30),
-        ));
-        let p = player(&store, BUS);
-        assert_eq!(p.anchor, anchor(Duration::ZERO, t0 + secs(30)));
-        assert_eq!(p.art, Art::Ready(image));
+        for loaded in [Some(image()), None] {
+            let mut store = store_playing(t0);
+            store.apply(art_loaded("file:///a.png", loaded.clone()));
+            assert!(store.apply(track_changed(
+                track("b", Some("file:///a.png")),
+                t0 + secs(30),
+            )));
+            let p = player(&store, BUS);
+            assert_eq!(p.anchor, anchor(Duration::ZERO, t0 + secs(30)));
+            assert_eq!(p.art, Art::Pending, "after {loaded:?}");
+            assert_eq!(
+                store.pending_art(),
+                [(UNIQUE.to_string(), "file:///a.png".to_string())]
+            );
+        }
     }
 
     #[test]
-    fn without_ids_title_album_or_artists_tell_a_new_track() {
+    fn same_track_with_the_same_art_url_does_not_retry_failed_art() {
         let t0 = Instant::now();
-        let base = Track {
-            id: None,
-            ..track("a", None)
+        let mut store = store_playing(t0);
+        store.apply(art_loaded("file:///a.png", None));
+        let longer = Track {
+            length: Some(secs(180)),
+            ..track("a", Some("file:///a.png"))
         };
-        let variants = [
-            Track {
-                title: Some("Other title".into()),
-                ..base.clone()
-            },
-            Track {
-                album: Some("Other album".into()),
-                ..base.clone()
-            },
-            Track {
-                artists: vec!["Other artist".into()],
-                ..base.clone()
-            },
-        ];
-        for next in variants {
-            let mut store = Store::new();
-            store.apply(appeared(
-                UNIQUE,
-                BUS,
-                PlaybackStatus::Playing,
-                base.clone(),
-                secs(10),
-                t0,
-            ));
-            assert!(store.apply(track_changed(next.clone(), t0 + secs(30))));
-            assert_eq!(
-                player(&store, BUS).anchor,
-                anchor(Duration::ZERO, t0 + secs(30)),
-                "{next:?}"
-            );
+        assert!(store.apply(track_changed(longer, t0 + secs(30))));
+        assert_eq!(player(&store, BUS).art, Art::Failed);
+        assert!(store.pending_art().is_empty());
+    }
+
+    #[test]
+    fn constant_track_id_still_tells_a_new_track_by_its_title() {
+        let t0 = Instant::now();
+        let firefox = |title: &str| Track {
+            id: Some("/org/mpris/MediaPlayer2/firefox".into()),
+            title: Some(title.into()),
+            ..Track::default()
+        };
+        let mut store = Store::new();
+        store.apply(appeared(
+            UNIQUE,
+            BUS,
+            PlaybackStatus::Playing,
+            firefox("A"),
+            secs(200),
+            t0,
+        ));
+        assert!(store.apply(track_changed(firefox("B"), t0 + secs(30))));
+        assert_eq!(
+            player(&store, BUS).anchor,
+            anchor(Duration::ZERO, t0 + secs(30))
+        );
+    }
+
+    #[test]
+    fn title_album_or_artists_tell_a_new_track_with_or_without_ids() {
+        let t0 = Instant::now();
+        for id in [Some("a".to_string()), None] {
+            let base = Track {
+                id,
+                ..track("a", None)
+            };
+            let variants = [
+                Track {
+                    title: Some("Other title".into()),
+                    ..base.clone()
+                },
+                Track {
+                    album: Some("Other album".into()),
+                    ..base.clone()
+                },
+                Track {
+                    artists: vec!["Other artist".into()],
+                    ..base.clone()
+                },
+            ];
+            for next in variants {
+                let mut store = Store::new();
+                store.apply(appeared(
+                    UNIQUE,
+                    BUS,
+                    PlaybackStatus::Playing,
+                    base.clone(),
+                    secs(10),
+                    t0,
+                ));
+                assert!(store.apply(track_changed(next.clone(), t0 + secs(30))));
+                assert_eq!(
+                    player(&store, BUS).anchor,
+                    anchor(Duration::ZERO, t0 + secs(30)),
+                    "{next:?}"
+                );
+            }
         }
     }
 

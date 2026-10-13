@@ -40,11 +40,13 @@ fn read_track_id(value: &Value<'_>) -> Option<String> {
     (!id.is_empty() && id != NO_TRACK).then(|| id.to_owned())
 }
 
-/// A non-empty string, kept as sent: `mpris:artUrl` may be a `data:` URI
-/// that any change would corrupt.
+/// A string with something visible in it, kept as sent: `mpris:artUrl` may
+/// be a `data:` URI that any change would corrupt. Blank text says no more
+/// than a missing key, and rejecting it here spares every reader of the
+/// track from checking again.
 fn read_text(value: &Value<'_>) -> Option<String> {
     read_str(value)
-        .filter(|text| !text.is_empty())
+        .filter(|text| !text.trim().is_empty())
         .map(str::to_owned)
 }
 
@@ -204,6 +206,41 @@ mod tests {
             ("mpris:artUrl", Value::from("")),
         ]);
         assert_eq!(track, Track::default());
+    }
+
+    #[test]
+    fn blank_strings_are_absent() {
+        for blank in [" ", "\t\n ", "\u{3000}"] {
+            let track = parse(vec![
+                ("xesam:title", Value::from(blank)),
+                ("xesam:album", Value::from(blank)),
+                (
+                    "xesam:artist",
+                    Value::from(vec![blank, "CRYSTAL KING", blank]),
+                ),
+                ("xesam:albumArtist", Value::from(blank)),
+                ("mpris:artUrl", Value::from(blank)),
+            ]);
+            let expected = Track {
+                artists: strings(&["CRYSTAL KING"]),
+                ..Track::default()
+            };
+            assert_eq!(track, expected, "{blank:?}");
+        }
+    }
+
+    #[test]
+    fn text_around_spaces_is_kept_untrimmed() {
+        let track = parse(vec![
+            ("xesam:title", Value::from(" Title ")),
+            ("xesam:album", Value::from("\tAlbum")),
+            ("xesam:artist", Value::from(vec!["Artist "])),
+            ("xesam:albumArtist", Value::from("\u{3000}Band")),
+        ]);
+        assert_eq!(track.title.as_deref(), Some(" Title "));
+        assert_eq!(track.album.as_deref(), Some("\tAlbum"));
+        assert_eq!(track.artists, strings(&["Artist "]));
+        assert_eq!(track.album_artists, strings(&["\u{3000}Band"]));
     }
 
     #[test]

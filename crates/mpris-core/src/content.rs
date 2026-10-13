@@ -17,8 +17,13 @@ pub enum Content {
     Track(TrackContent),
 }
 
-/// A field is `None` when its setting hides it or when the player does not
-/// provide it: the layout treats both the same way.
+/// A text or time field is `None` when its setting hides it or when the
+/// player does not provide it: the layout treats both the same way.
+///
+/// `art` is the exception. The thumbnail slot is decided by
+/// `settings.show_art` alone, and `art: None` only means nothing to draw in
+/// it, so the layout does not jump while a cover is pending or after it
+/// failed (B-10).
 #[derive(Debug, Clone, PartialEq)]
 pub struct TrackContent {
     /// Drives the pause indicator (B-21).
@@ -32,6 +37,7 @@ pub struct TrackContent {
     pub duration: Option<Duration>,
     /// Exact position over length, in `[0, 1]`.
     pub progress: Option<f32>,
+    /// What to draw in the thumbnail slot, never whether the slot exists.
     pub art: Option<Arc<ArtImage>>,
 }
 
@@ -59,8 +65,6 @@ fn fallback(text: &str) -> Content {
 fn track_content(player: &Player, settings: &Settings, now: Instant) -> TrackContent {
     let track = &player.track;
     let position = display_position(player, now);
-    // A zero length says no more than a missing one, and cannot divide.
-    let length = track.length.filter(|length| !length.is_zero());
     TrackContent {
         paused: player.status == PlaybackStatus::Paused,
         title: settings.show_title.then(|| track.title.clone()).flatten(),
@@ -72,11 +76,15 @@ fn track_content(player: &Player, settings: &Settings, now: Instant) -> TrackCon
         position: settings.show_position.then(|| whole_seconds(position)),
         duration: settings
             .show_duration
-            .then(|| length.map(whole_seconds))
+            .then(|| track.length.map(whole_seconds))
             .flatten(),
         progress: settings
             .show_progress
-            .then(|| length.map(|length| (position.as_secs_f64() / length.as_secs_f64()) as f32))
+            .then(|| {
+                track
+                    .length
+                    .map(|length| (position.as_secs_f64() / length.as_secs_f64()) as f32)
+            })
             .flatten(),
         art: settings
             .show_art
@@ -88,15 +96,9 @@ fn track_content(player: &Player, settings: &Settings, now: Instant) -> TrackCon
     }
 }
 
-/// Blank names say no more than an empty list, and must not block the
-/// album artist fallback (B-12).
+/// An empty list gives `None`, so the album artist fallback applies (B-12).
 fn names(list: &[String]) -> Option<String> {
-    let names: Vec<&str> = list
-        .iter()
-        .map(String::as_str)
-        .filter(|name| !name.trim().is_empty())
-        .collect();
-    (!names.is_empty()).then(|| names.join(", "))
+    (!list.is_empty()).then(|| list.join(", "))
 }
 
 fn whole_seconds(duration: Duration) -> Duration {
@@ -106,7 +108,7 @@ fn whole_seconds(duration: Duration) -> Duration {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{PlayerKey, PositionAnchor, Rgba, Track};
+    use crate::model::{PlayerKey, PositionAnchor, Track};
 
     use PlaybackStatus::{Paused, Playing, Stopped};
 
@@ -118,28 +120,10 @@ mod tests {
         Duration::from_millis(ms)
     }
 
-    fn settings() -> Settings {
+    fn with_fallback(text: &str) -> Settings {
         Settings {
-            player: None,
-            show_art: true,
-            fetch_art_online: false,
-            show_title: true,
-            show_artist: true,
-            show_album: true,
-            show_progress: true,
-            show_position: true,
-            show_duration: true,
-            art_right: false,
-            color_background: Rgba::new(0, 0, 0, 153),
-            color_text: Rgba::new(255, 255, 255, 255),
-            color_bar_fill: Rgba::new(255, 255, 255, 255),
-            color_bar_track: Rgba::new(255, 255, 255, 64),
-            width: 600,
-            height: 120,
-            font_size_title: 32,
-            font_size_subtitle: 24,
-            font_size_time: 20,
-            fallback_text: "Nothing playing".into(),
+            fallback_text: text.into(),
+            ..Settings::default()
         }
     }
 
@@ -200,26 +184,27 @@ mod tests {
 
     #[test]
     fn no_player_shows_the_fallback_message() {
+        let s = Settings::default();
         assert_eq!(
-            content(None, &settings(), Instant::now()),
-            Content::Message("Nothing playing".into())
+            content(None, &s, Instant::now()),
+            Content::Message(s.fallback_text.clone())
         );
     }
 
     #[test]
     fn stopped_player_shows_the_fallback_message() {
         let t0 = Instant::now();
+        let s = Settings::default();
         assert_eq!(
-            content(Some(&player(Stopped, t0)), &settings(), t0),
-            Content::Message("Nothing playing".into())
+            content(Some(&player(Stopped, t0)), &s, t0),
+            Content::Message(s.fallback_text.clone())
         );
     }
 
     #[test]
     fn empty_fallback_text_draws_nothing() {
         let t0 = Instant::now();
-        let mut s = settings();
-        s.fallback_text = String::new();
+        let s = with_fallback("");
         assert_eq!(content(None, &s, t0), Content::Nothing);
         assert_eq!(
             content(Some(&player(Stopped, t0)), &s, t0),
@@ -229,15 +214,13 @@ mod tests {
 
     #[test]
     fn blank_fallback_text_draws_nothing() {
-        let mut s = settings();
-        s.fallback_text = " \t\n ".into();
+        let s = with_fallback(" \t\n ");
         assert_eq!(content(None, &s, Instant::now()), Content::Nothing);
     }
 
     #[test]
     fn fallback_text_is_shown_as_typed() {
-        let mut s = settings();
-        s.fallback_text = "Aucune lecture ♪".into();
+        let s = with_fallback("Aucune lecture ♪");
         assert_eq!(
             content(None, &s, Instant::now()),
             Content::Message("Aucune lecture ♪".into())
@@ -255,7 +238,7 @@ mod tests {
             other => panic!("unexpected art {other:?}"),
         };
         assert_eq!(
-            content(Some(&p), &settings(), t0),
+            content(Some(&p), &Settings::default(), t0),
             Content::Track(TrackContent {
                 paused: false,
                 title: Some("Title".into()),
@@ -272,7 +255,7 @@ mod tests {
     #[test]
     fn paused_player_shows_the_track_marked_paused() {
         let t0 = Instant::now();
-        let track = track_of(content(Some(&player(Paused, t0)), &settings(), t0));
+        let track = track_of(content(Some(&player(Paused, t0)), &Settings::default(), t0));
         assert!(track.paused);
         assert_eq!(visible(&track), [true; 7]);
     }
@@ -281,7 +264,7 @@ mod tests {
     fn playing_position_and_progress_advance_with_time() {
         let t0 = Instant::now();
         let p = player(Playing, t0);
-        let track = track_of(content(Some(&p), &settings(), t0 + secs(45)));
+        let track = track_of(content(Some(&p), &Settings::default(), t0 + secs(45)));
         assert_eq!(track.position, Some(secs(90)));
         assert_eq!(track.progress, Some(0.5));
     }
@@ -290,8 +273,8 @@ mod tests {
     fn paused_position_and_progress_stay_frozen() {
         let t0 = Instant::now();
         let p = player(Paused, t0);
-        let before = track_of(content(Some(&p), &settings(), t0));
-        let after = track_of(content(Some(&p), &settings(), t0 + secs(60)));
+        let before = track_of(content(Some(&p), &Settings::default(), t0));
+        let after = track_of(content(Some(&p), &Settings::default(), t0 + secs(60)));
         assert_eq!(after.position, Some(secs(45)));
         assert_eq!(after, before);
     }
@@ -300,11 +283,13 @@ mod tests {
     fn remembered_player_in_settings_does_not_change_the_content() {
         let t0 = Instant::now();
         let p = player(Playing, t0);
-        let mut s = settings();
-        s.player = Some(PlayerKey("vlc".into()));
+        let s = Settings {
+            player: Some(PlayerKey("vlc".into())),
+            ..Settings::default()
+        };
         assert_eq!(
             content(Some(&p), &s, t0),
-            content(Some(&p), &settings(), t0)
+            content(Some(&p), &Settings::default(), t0)
         );
     }
 
@@ -324,7 +309,7 @@ mod tests {
         let t0 = Instant::now();
         let p = player(Playing, t0);
         for (hidden, toggle) in toggles.iter().enumerate() {
-            let mut s = settings();
+            let mut s = Settings::default();
             *toggle(&mut s) = false;
             let mut expected = [true; 7];
             expected[hidden] = false;
@@ -336,14 +321,16 @@ mod tests {
     #[test]
     fn every_toggle_off_still_shows_a_track_with_its_state() {
         let t0 = Instant::now();
-        let mut s = settings();
-        s.show_art = false;
-        s.show_title = false;
-        s.show_artist = false;
-        s.show_album = false;
-        s.show_progress = false;
-        s.show_position = false;
-        s.show_duration = false;
+        let s = Settings {
+            show_art: false,
+            show_title: false,
+            show_artist: false,
+            show_album: false,
+            show_progress: false,
+            show_position: false,
+            show_duration: false,
+            ..Settings::default()
+        };
         let track = track_of(content(Some(&player(Paused, t0)), &s, t0));
         assert!(track.paused);
         assert_eq!(visible(&track), [false; 7]);
@@ -358,7 +345,7 @@ mod tests {
         p.track = Track::default();
         p.anchor.position = secs(12);
         p.art = Art::None;
-        let track = track_of(content(Some(&p), &settings(), t0));
+        let track = track_of(content(Some(&p), &Settings::default(), t0));
         assert_eq!(
             track,
             TrackContent {
@@ -381,7 +368,7 @@ mod tests {
         let t0 = Instant::now();
         let mut p = player(Playing, t0);
         p.track.artists = vec!["A".into(), "B".into(), "C".into()];
-        let track = track_of(content(Some(&p), &settings(), t0));
+        let track = track_of(content(Some(&p), &Settings::default(), t0));
         assert_eq!(track.artist.as_deref(), Some("A, B, C"));
     }
 
@@ -391,33 +378,19 @@ mod tests {
         let mut p = player(Playing, t0);
         p.track.artists = vec![];
         p.track.album_artists = vec!["X".into(), "Y".into()];
-        let track = track_of(content(Some(&p), &settings(), t0));
+        let track = track_of(content(Some(&p), &Settings::default(), t0));
         assert_eq!(track.artist.as_deref(), Some("X, Y"));
     }
 
     #[test]
     fn artists_win_over_album_artists() {
         let t0 = Instant::now();
-        let track = track_of(content(Some(&player(Playing, t0)), &settings(), t0));
+        let track = track_of(content(
+            Some(&player(Playing, t0)),
+            &Settings::default(),
+            t0,
+        ));
         assert_eq!(track.artist.as_deref(), Some("Artist"));
-    }
-
-    #[test]
-    fn blank_artist_names_are_skipped() {
-        let t0 = Instant::now();
-        let mut p = player(Playing, t0);
-        p.track.artists = vec!["A".into(), " ".into(), String::new(), "B".into()];
-        let track = track_of(content(Some(&p), &settings(), t0));
-        assert_eq!(track.artist.as_deref(), Some("A, B"));
-    }
-
-    #[test]
-    fn blank_artists_fall_back_to_album_artists() {
-        let t0 = Instant::now();
-        let mut p = player(Playing, t0);
-        p.track.artists = vec![String::new()];
-        let track = track_of(content(Some(&p), &settings(), t0));
-        assert_eq!(track.artist.as_deref(), Some("Album Artist"));
     }
 
     #[test]
@@ -425,8 +398,8 @@ mod tests {
         let t0 = Instant::now();
         let mut p = player(Playing, t0);
         p.track.artists = vec![];
-        p.track.album_artists = vec![" ".into()];
-        let track = track_of(content(Some(&p), &settings(), t0));
+        p.track.album_artists = vec![];
+        let track = track_of(content(Some(&p), &Settings::default(), t0));
         assert_eq!(track.artist, None);
     }
 
@@ -438,7 +411,7 @@ mod tests {
         p.track.album = Some("愛をとりもどせ!! (MOVIE ver.)".into());
         p.track.artists = vec![];
         p.track.album_artists = vec!["CRYSTAL KING".into()];
-        let track = track_of(content(Some(&p), &settings(), t0));
+        let track = track_of(content(Some(&p), &Settings::default(), t0));
         assert_eq!(track.title.as_deref(), Some("愛をとりもどせ!!"));
         assert_eq!(
             track.album.as_deref(),
@@ -454,7 +427,7 @@ mod tests {
         let t0 = Instant::now();
         let mut p = player(Playing, t0);
         p.anchor.position = millis(10_900);
-        let at = |offset| track_of(content(Some(&p), &settings(), t0 + offset)).position;
+        let at = |offset| track_of(content(Some(&p), &Settings::default(), t0 + offset)).position;
         assert_eq!(at(Duration::ZERO), Some(secs(10)));
         assert_eq!(at(millis(50)), Some(secs(10)));
         assert_eq!(at(millis(200)), Some(secs(11)));
@@ -465,7 +438,7 @@ mod tests {
         let t0 = Instant::now();
         let mut p = player(Playing, t0);
         p.track.length = Some(millis(180_999));
-        let track = track_of(content(Some(&p), &settings(), t0));
+        let track = track_of(content(Some(&p), &Settings::default(), t0));
         assert_eq!(track.duration, Some(secs(180)));
     }
 
@@ -475,7 +448,7 @@ mod tests {
         let mut p = player(Playing, t0);
         p.anchor.position = millis(500);
         p.track.length = Some(secs(2));
-        let track = track_of(content(Some(&p), &settings(), t0));
+        let track = track_of(content(Some(&p), &Settings::default(), t0));
         assert_eq!(track.position, Some(Duration::ZERO));
         assert_eq!(track.progress, Some(0.25));
     }
@@ -485,7 +458,7 @@ mod tests {
         let t0 = Instant::now();
         let mut p = player(Playing, t0);
         p.anchor.position = Duration::ZERO;
-        let track = track_of(content(Some(&p), &settings(), t0));
+        let track = track_of(content(Some(&p), &Settings::default(), t0));
         assert_eq!(track.progress, Some(0.0));
     }
 
@@ -493,7 +466,7 @@ mod tests {
     fn progress_stops_at_one_past_the_end() {
         let t0 = Instant::now();
         let p = player(Playing, t0);
-        let track = track_of(content(Some(&p), &settings(), t0 + secs(3600)));
+        let track = track_of(content(Some(&p), &Settings::default(), t0 + secs(3600)));
         assert_eq!(track.position, Some(secs(180)));
         assert_eq!(track.progress, Some(1.0));
     }
@@ -503,18 +476,8 @@ mod tests {
         let t0 = Instant::now();
         let mut p = player(Playing, t0);
         p.track.length = None;
-        let track = track_of(content(Some(&p), &settings(), t0 + secs(3600)));
+        let track = track_of(content(Some(&p), &Settings::default(), t0 + secs(3600)));
         assert_eq!(track.position, Some(secs(3645)));
-        assert_eq!(track.duration, None);
-        assert_eq!(track.progress, None);
-    }
-
-    #[test]
-    fn zero_length_is_treated_as_unknown() {
-        let t0 = Instant::now();
-        let mut p = player(Playing, t0);
-        p.track.length = Some(Duration::ZERO);
-        let track = track_of(content(Some(&p), &settings(), t0));
         assert_eq!(track.duration, None);
         assert_eq!(track.progress, None);
     }
@@ -525,7 +488,7 @@ mod tests {
     fn ready_art_is_shared_not_copied() {
         let t0 = Instant::now();
         let p = player(Playing, t0);
-        let track = track_of(content(Some(&p), &settings(), t0));
+        let track = track_of(content(Some(&p), &Settings::default(), t0));
         match (&p.art, &track.art) {
             (Art::Ready(stored), Some(shown)) => assert!(Arc::ptr_eq(stored, shown)),
             other => panic!("unexpected art {other:?}"),
@@ -538,7 +501,7 @@ mod tests {
         for art in [Art::None, Art::Pending, Art::Failed] {
             let mut p = player(Playing, t0);
             p.art = art.clone();
-            let track = track_of(content(Some(&p), &settings(), t0));
+            let track = track_of(content(Some(&p), &Settings::default(), t0));
             assert_eq!(track.art, None, "{art:?}");
         }
     }

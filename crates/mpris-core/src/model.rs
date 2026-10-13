@@ -19,6 +19,10 @@ pub enum PlaybackStatus {
 }
 
 /// Track metadata as the player reports it, before any display choice.
+///
+/// No text field holds blank text and `length` is never zero:
+/// [`crate::metadata::parse_track`] reads both as absent, so readers of a
+/// track need no second check.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Track {
     /// `mpris:trackid`.
@@ -56,7 +60,7 @@ pub struct ArtImage {
 }
 
 /// Thumbnail state for the current `Track::art_url`.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub enum Art {
     /// The track has no `art_url`.
     #[default]
@@ -64,22 +68,9 @@ pub enum Art {
     /// `art_url` is known and waits for decoding.
     Pending,
     Ready(Arc<ArtImage>),
-    /// `art_url` could not be read or decoded. Kept so it is not retried.
+    /// `art_url` could not be read or decoded. Kept so it is not retried
+    /// before the next track.
     Failed,
-}
-
-impl PartialEq for Art {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Art::None, Art::None) | (Art::Pending, Art::Pending) | (Art::Failed, Art::Failed) => {
-                true
-            }
-            // Pointer check first: snapshots share the same Arc, and
-            // comparing megabytes of pixels on every frame would be waste.
-            (Art::Ready(a), Art::Ready(b)) => Arc::ptr_eq(a, b) || a == b,
-            _ => false,
-        }
-    }
 }
 
 /// One player present on the bus.
@@ -91,7 +82,10 @@ pub struct Player {
     /// Well-known name, `org.mpris.MediaPlayer2.<key>[.<instance>]`.
     pub bus_name: String,
     pub key: PlayerKey,
-    /// `Identity`, the human-readable name shown in the selector.
+    /// `Identity`, the human-readable name shown in the selector (B-02).
+    /// Never blank: the adapter reads it with
+    /// [`crate::player::read_identity`] and falls back to the key when the
+    /// player gives none.
     pub identity: String,
     pub status: PlaybackStatus,
     /// `Rate`, 1.0 when the player does not report it.
@@ -149,4 +143,31 @@ pub struct Settings {
     pub font_size_time: u32,
     /// Shown when nothing plays. Empty means a fully transparent source.
     pub fallback_text: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn image(red: u8) -> Arc<ArtImage> {
+        Arc::new(ArtImage {
+            width: 1,
+            height: 1,
+            rgba: vec![red, 0, 0, 255],
+        })
+    }
+
+    #[test]
+    fn art_equality_follows_state_and_image_content() {
+        let shared = image(255);
+        assert_eq!(Art::Ready(shared.clone()), Art::Ready(shared));
+        assert_eq!(Art::Ready(image(255)), Art::Ready(image(255)));
+        assert_ne!(Art::Ready(image(255)), Art::Ready(image(0)));
+        let states = [Art::None, Art::Pending, Art::Ready(image(255)), Art::Failed];
+        for (i, a) in states.iter().enumerate() {
+            for (j, b) in states.iter().enumerate() {
+                assert_eq!(a == b, i == j, "{a:?} vs {b:?}");
+            }
+        }
+    }
 }
