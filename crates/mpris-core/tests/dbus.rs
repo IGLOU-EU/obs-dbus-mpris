@@ -2,11 +2,13 @@
 
 mod common;
 
+use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
 
 use common::{
-    Fake, FakePlayer, PrivateBus, find, metadata, own_name, png_data_url, secs, track, wait_for,
+    Fake, FakePlayer, HungFile, PrivateBus, find, metadata, own_name, png_data_url, secs, track,
+    wait_for, wait_until,
 };
 use mpris_core::dbus::Core;
 use mpris_core::model::{Art, PlaybackStatus, PlayerKey};
@@ -81,10 +83,12 @@ fn discovers_a_player_present_before_start() {
 #[test]
 fn discovers_a_player_appearing_after_start() {
     let bus = PrivateBus::start();
+    let early_name = "org.mpris.MediaPlayer2.early";
+    let _early = FakePlayer::start(&bus, early_name, paused(secs(0)));
     let core = Core::start_at(&bus.address);
-    // Lets the core finish its first scan, so the player comes by signal.
-    thread::sleep(Duration::from_millis(200));
-    assert!(core.snapshot().players.is_empty());
+    // The first scan publishes only once it has read every name, so the
+    // late player can only come by NameOwnerChanged.
+    discovered(&core, early_name);
 
     let fake = FakePlayer::start(&bus, FAKE, paused(secs(12)));
     let snapshot = wait_for(&core, "the late player", |s| find(s, FAKE).is_some());
@@ -229,21 +233,25 @@ fn pause_and_resume_update_status_and_anchor() {
     let core = Core::start_at(&bus.address);
     discovered(&core, FAKE);
 
+    // The status and the position re-read on it are published together, so
+    // the position is checked on the first snapshot with the new status: a
+    // later periodic read cannot stand in for the re-read.
     fake.set_position(secs(42));
     fake.set_status("Paused");
-    wait_for(&core, "the pause at the player's position", |s| {
-        find(s, FAKE)
-            .is_some_and(|p| p.status == PlaybackStatus::Paused && p.anchor.position == secs(42))
+    let snapshot = wait_for(&core, "the pause", |s| {
+        find(s, FAKE).is_some_and(|p| p.status == PlaybackStatus::Paused)
     });
+    assert_eq!(find(&snapshot, FAKE).unwrap().anchor.position, secs(42));
 
     fake.set_position(secs(50));
     let resumed_at = Instant::now();
     fake.set_status("Playing");
-    let snapshot = wait_for(&core, "the resume at the player's position", |s| {
-        find(s, FAKE)
-            .is_some_and(|p| p.status == PlaybackStatus::Playing && p.anchor.position == secs(50))
+    let snapshot = wait_for(&core, "the resume", |s| {
+        find(s, FAKE).is_some_and(|p| p.status == PlaybackStatus::Playing)
     });
-    assert!(find(&snapshot, FAKE).unwrap().anchor.at >= resumed_at);
+    let player = find(&snapshot, FAKE).unwrap();
+    assert_eq!(player.anchor.position, secs(50));
+    assert!(player.anchor.at >= resumed_at);
 }
 
 #[test]
@@ -258,6 +266,33 @@ fn seeked_moves_the_anchor() {
     wait_for(&core, "the seeked position", |s| {
         find(s, FAKE).is_some_and(|p| p.anchor.position == secs(100))
     });
+}
+
+#[test]
+fn signals_of_a_player_apply_in_the_order_it_sent_them() {
+    let bus = PrivateBus::start();
+    let fake = FakePlayer::start(&bus, FAKE, paused(secs(10)));
+    let core = Core::start_at(&bus.address);
+    discovered(&core, FAKE);
+
+    // Decoding this cover keeps the loop busy far longer than the next two
+    // signals take to queue up behind it, whatever order it reads them in.
+    let cover = png_data_url(1500, 1500);
+    fake.set_metadata(track("/fake/2", "Title two", Some(&cover)));
+    fake.seek(secs(30));
+    fake.set_position(Duration::ZERO);
+    fake.set_metadata(track("/fake/3", "Title three", None));
+
+    wait_for(&core, "the third track", |s| {
+        find(s, FAKE).is_some_and(|p| p.track.title.as_deref() == Some("Title three"))
+    });
+    // A Seeked handled after the track that followed it lands right after,
+    // and nothing else moves the anchor of a paused player.
+    thread::sleep(Duration::from_millis(200));
+    let snapshot = core.snapshot();
+    let player = find(&snapshot, FAKE).unwrap();
+    assert_eq!(player.track.title.as_deref(), Some("Title three"));
+    assert_eq!(player.anchor.position, Duration::ZERO);
 }
 
 #[test]
@@ -450,6 +485,34 @@ fn drop_returns_quickly_while_a_call_hangs() {
         elapsed < Duration::from_millis(300),
         "drop took {elapsed:?}"
     );
+}
+
+#[test]
+fn drop_returns_quickly_while_an_art_load_hangs() {
+    let bus = PrivateBus::start();
+    let mut cover = HungFile::new();
+    let _fake = FakePlayer::start(
+        &bus,
+        FAKE,
+        Fake::new(
+            "Fake Player",
+            "Paused",
+            track("/fake/1", "Title one", Some(&cover.url())),
+        ),
+    );
+    let core = Core::start_at(&bus.address);
+    wait_until("the core to open the cover", || cover.has_waiting_open());
+
+    let (done, dropped) = mpsc::channel();
+    let dropper = thread::spawn(move || {
+        drop(core);
+        let _ = done.send(());
+    });
+    let outcome = dropped.recv_timeout(Duration::from_millis(300));
+    // Lets a core still stuck in the load go on, so the test ends either way.
+    cover.release();
+    dropper.join().expect("drop does not panic");
+    assert!(outcome.is_ok(), "drop waited for the art load");
 }
 
 #[test]

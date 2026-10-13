@@ -39,17 +39,15 @@ fn drop_stops_the_core_promptly_and_leaves_no_thread() {
             ..Fake::new("Fake Player", "Playing", track("/fake/1", "Title", None))
         },
     );
-    let zbus_threads = count("zbus::");
     assert_eq!(count("mpris-core"), 0);
 
     let core = Core::start_at(&bus.address);
     wait_for(&core, "the fake player", |s| find(s, FAKE).is_some());
     assert_eq!(count("mpris-core"), 1, "one core thread");
-    assert_eq!(
-        count("zbus::"),
-        zbus_threads,
-        "the core drives its own connection"
-    );
+    // Only the fake player's executor: the core drives its own connection.
+    // Counted once the fake has answered the core, since a thread names
+    // itself only once it runs.
+    assert_eq!(count("zbus::"), 1, "{:?}", thread_names());
 
     let start = Instant::now();
     drop(core);
@@ -59,5 +57,5 @@ fn drop_stops_the_core_promptly_and_leaves_no_thread() {
         "drop took {elapsed:?}"
     );
     assert_eq!(count("mpris-core"), 0, "{:?}", thread_names());
-    assert_eq!(count("zbus::"), zbus_threads, "{:?}", thread_names());
+    assert_eq!(count("zbus::"), 1, "{:?}", thread_names());
 }

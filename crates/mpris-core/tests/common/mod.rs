@@ -6,9 +6,14 @@
 
 use std::borrow::Cow;
 use std::collections::HashMap;
-use std::io::{BufRead, BufReader, Cursor};
-use std::process::{Child, Command, Stdio};
+use std::env;
+use std::fs::{self, File};
+use std::io::{self, BufRead, BufReader, Cursor};
+use std::os::fd::AsRawFd;
+use std::path::PathBuf;
+use std::process::{self, Child, Command, Stdio};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -333,22 +338,99 @@ pub fn own_name(bus: &PrivateBus, name: &str) -> Connection {
     .expect("connection owning a name")
 }
 
-/// Polls the core until `done` holds, and fails with what it saw last.
-pub fn wait_for(core: &Core, what: &str, done: impl Fn(&Snapshot) -> bool) -> Arc<Snapshot> {
+/// A cover whose `open` blocks until released, as a read on a hung network
+/// mount does. It holds a write lease (fcntl(2), "Leases"): the kernel
+/// keeps any other open of the file waiting until the lease goes, or for
+/// `/proc/sys/fs/lease-break-time` at most.
+pub struct HungFile {
+    path: PathBuf,
+    lease: Option<File>,
+}
+
+impl HungFile {
+    pub fn new() -> HungFile {
+        static NEXT: AtomicUsize = AtomicUsize::new(0);
+        let unique = NEXT.fetch_add(1, Ordering::Relaxed);
+        let name = format!("mpris-core-hung-{}-{unique}.png", process::id());
+        let path = env::temp_dir().join(name);
+        fs::write(&path, b"").expect("hung file written");
+        // Built before the lease is taken, so a failure below still
+        // removes the file.
+        let mut hung = HungFile { path, lease: None };
+        let file = File::open(&hung.path).expect("hung file opened");
+        let fd = file.as_raw_fd();
+        // SAFETY: fcntl on a descriptor this function owns, with integer
+        // arguments only.
+        let leased = unsafe { libc::fcntl(fd, libc::F_SETLEASE, libc::F_WRLCK) };
+        assert_eq!(
+            leased,
+            0,
+            "write lease refused ({}), leases must be enabled in /proc/sys/fs/leases-enable",
+            io::Error::last_os_error()
+        );
+        // With no owner the kernel sends no SIGIO when the lease is broken,
+        // a signal that would kill the test process.
+        // SAFETY: as above.
+        let unowned = unsafe { libc::fcntl(fd, libc::F_SETOWN, 0) };
+        assert_eq!(unowned, 0, "{}", io::Error::last_os_error());
+        hung.lease = Some(file);
+        hung
+    }
+
+    pub fn url(&self) -> String {
+        format!("file://{}", self.path.display())
+    }
+
+    /// Whether an open of the file waits on the lease: the kernel then
+    /// reports the read lease it is breaking the write lease down to.
+    pub fn has_waiting_open(&self) -> bool {
+        let Some(lease) = &self.lease else {
+            return false;
+        };
+        // SAFETY: fcntl on a descriptor `lease` keeps open.
+        unsafe { libc::fcntl(lease.as_raw_fd(), libc::F_GETLEASE) == libc::F_RDLCK }
+    }
+
+    /// Lets every waiting open through.
+    pub fn release(&mut self) {
+        self.lease = None;
+    }
+}
+
+impl Drop for HungFile {
+    fn drop(&mut self) {
+        self.release();
+        let _ = fs::remove_file(&self.path);
+    }
+}
+
+/// Polls `attempt` until it gives a value, and fails with `what` and the
+/// state `seen` describes once the deadline has passed.
+fn poll<T>(what: &str, attempt: impl Fn() -> Option<T>, seen: impl Fn() -> String) -> T {
     let deadline = Instant::now() + DEADLINE;
     loop {
-        let snapshot = core.snapshot();
-        if done(&snapshot) {
-            return snapshot;
+        if let Some(value) = attempt() {
+            return value;
         }
         if Instant::now() > deadline {
-            panic!(
-                "timed out waiting for {what}, last snapshot:\n{}",
-                describe(&snapshot)
-            );
+            panic!("timed out waiting for {what}{}", seen());
         }
         thread::sleep(Duration::from_millis(5));
     }
+}
+
+/// Polls the core until `done` holds, and fails with what it saw last.
+pub fn wait_for(core: &Core, what: &str, done: impl Fn(&Snapshot) -> bool) -> Arc<Snapshot> {
+    poll(
+        what,
+        || Some(core.snapshot()).filter(|snapshot| done(snapshot)),
+        || format!(", last snapshot:\n{}", describe(&core.snapshot())),
+    )
+}
+
+/// Polls `done` until it holds.
+pub fn wait_until(what: &str, done: impl Fn() -> bool) {
+    poll(what, || done().then_some(()), String::new)
 }
 
 pub fn find<'a>(snapshot: &'a Snapshot, bus_name: &str) -> Option<&'a Player> {

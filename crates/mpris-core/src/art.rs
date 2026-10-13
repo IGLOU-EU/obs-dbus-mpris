@@ -1,7 +1,7 @@
 //! Thumbnail loading: `mpris:artUrl` to decoded RGBA (B-10, D-03).
 //!
-//! Runs on the core thread: reading and decoding are never allowed in an
-//! OBS render callback (B-41).
+//! Blocking work, which the core runs on its `blocking` pool: reading and
+//! decoding are never allowed in an OBS render callback (B-41).
 
 use std::ffi::OsString;
 use std::fmt;
@@ -181,8 +181,8 @@ fn load_art_within(url: &str, max_file_bytes: u64) -> Result<ArtImage, ArtError>
 }
 
 fn read_file(path: &Path, max_bytes: u64) -> Result<Vec<u8>, ArtError> {
-    // Checked before opening: opening a FIFO would block the core thread
-    // until a writer shows up.
+    // Checked before opening: opening a FIFO would block until a writer
+    // shows up, and the core waits for every load it starts.
     let metadata = fs::metadata(path)?;
     if !metadata.is_file() {
         return Err(ArtError::Io(io::Error::new(

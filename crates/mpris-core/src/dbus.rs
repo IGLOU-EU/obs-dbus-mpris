@@ -5,12 +5,23 @@
 //! the store asks for, and publishes an immutable [`Snapshot`] that any
 //! thread reads without waiting on the bus (B-41).
 //!
-//! The loop is async on a single thread: the zbus streams, the poll timer
-//! and the stop signal are awaited together, so a stop request ends the
-//! thread even while a call to a frozen player is pending. Blocking feeder
-//! threads could not be woken out of their reads, and shutdown would wait
-//! on them. The connection runs without zbus's own executor thread, so
-//! joining the core thread is enough to know nothing of ours still runs.
+//! The loop is async on a single thread: the zbus streams, the poll timer,
+//! the art loads and the stop signal are awaited together, so a stop
+//! request ends the thread even while a call to a frozen player or the read
+//! of a cover on a hung mount is pending. Blocking feeder threads could not
+//! be woken out of their reads, and shutdown would wait on them. The
+//! connection runs without zbus's own executor thread, so once the core
+//! thread is joined nothing reads the bus or writes the snapshot. Other
+//! threads remain, shared by the whole process and holding no player state:
+//! the `blocking` pool, which zbus connects through and which keeps an
+//! abandoned art load until it returns, and the global `async-io` thread.
+//!
+//! A hostile local process can slow the loop by flooding signals or by never
+//! answering the reads of the properties it invalidates, each read waiting
+//! out its one-second timeout. This is accepted, since it takes a malicious
+//! process in the user's own session, while a hung but honest player sends
+//! nothing and delays the others only while a call to it waits out that same
+//! timeout.
 
 use std::collections::{BTreeSet, HashMap};
 use std::panic::{self, AssertUnwindSafe};
@@ -171,8 +182,7 @@ async fn connect(address: Option<&str>) -> zbus::Result<Connection> {
 /// What woke the loop.
 enum Input {
     Owner(Message),
-    Properties(Message),
-    Seeked(Message),
+    Player(Message),
     Poll,
     Lost,
 }
@@ -181,16 +191,14 @@ async fn watch(conn: &Connection, shared: &Shared) -> zbus::Result<()> {
     // Subscribed before the first scan, so a player starting in between is
     // not missed.
     let mut owners = subscribe(conn, owner_rule()?).await?;
-    let mut properties = subscribe(conn, properties_rule()?).await?;
-    let mut seeks = subscribe(conn, seeked_rule()?).await?;
+    let mut players = subscribe(conn, player_rule()?).await?;
     let mut watcher = Watcher::new(conn, shared);
     watcher.discover().await;
 
     let mut poll = Timer::after(POLL_INTERVAL);
     loop {
         let input = next(&mut owners, Input::Owner)
-            .or(next(&mut properties, Input::Properties))
-            .or(next(&mut seeks, Input::Seeked))
+            .or(next(&mut players, Input::Player))
             .or(async {
                 (&mut poll).await;
                 Input::Poll
@@ -198,8 +206,7 @@ async fn watch(conn: &Connection, shared: &Shared) -> zbus::Result<()> {
             .await;
         match input {
             Input::Owner(msg) => watcher.on_owner_changed(&msg).await,
-            Input::Properties(msg) => watcher.on_properties_changed(&msg).await,
-            Input::Seeked(msg) => watcher.on_seeked(&msg),
+            Input::Player(msg) => watcher.on_player_signal(&msg).await,
             Input::Poll => {
                 watcher.poll_positions().await;
                 // Counted from the end of the poll, so a slow player never
@@ -237,20 +244,12 @@ fn owner_rule() -> zbus::Result<MatchRule<'static>> {
         .build())
 }
 
-fn properties_rule() -> zbus::Result<MatchRule<'static>> {
+/// Every signal of the MPRIS object, in one stream: a player's
+/// `PropertiesChanged` and `Seeked` must apply in the order it sent them,
+/// which streams polled by priority do not keep.
+fn player_rule() -> zbus::Result<MatchRule<'static>> {
     Ok(MatchRule::builder()
         .msg_type(MessageType::Signal)
-        .interface(PROPERTIES_IFACE)?
-        .member("PropertiesChanged")?
-        .path(MPRIS_PATH)?
-        .build())
-}
-
-fn seeked_rule() -> zbus::Result<MatchRule<'static>> {
-    Ok(MatchRule::builder()
-        .msg_type(MessageType::Signal)
-        .interface(PLAYER_IFACE)?
-        .member("Seeked")?
         .path(MPRIS_PATH)?
         .build())
 }
@@ -294,7 +293,7 @@ impl<'a> Watcher<'a> {
                 changed |= self.appear(name, &owner).await;
             }
         }
-        self.commit(changed);
+        self.commit(changed).await;
     }
 
     async fn on_owner_changed(&mut self, msg: &Message) {
@@ -311,7 +310,22 @@ impl<'a> Watcher<'a> {
                 self.vanish(&name) | self.appear(&name, &owner).await
             }
         };
-        self.commit(changed);
+        self.commit(changed).await;
+    }
+
+    /// Ignores the signals of interfaces the store does not follow, which
+    /// the one rule for the whole object lets through.
+    async fn on_player_signal(&mut self, msg: &Message) {
+        let header = msg.header();
+        let interface = header.interface().map(|name| name.as_str());
+        let member = header.member().map(|name| name.as_str());
+        match (interface, member) {
+            (Some(PROPERTIES_IFACE), Some("PropertiesChanged")) => {
+                self.on_properties_changed(msg).await
+            }
+            (Some(PLAYER_IFACE), Some("Seeked")) => self.on_seeked(msg).await,
+            _ => {}
+        }
     }
 
     async fn on_properties_changed(&mut self, msg: &Message) {
@@ -344,10 +358,10 @@ impl<'a> Watcher<'a> {
         if reread {
             changed |= self.read_position(&owner).await;
         }
-        self.commit(changed);
+        self.commit(changed).await;
     }
 
-    fn on_seeked(&mut self, msg: &Message) {
+    async fn on_seeked(&mut self, msg: &Message) {
         let Some(owner) = sender(msg) else { return };
         let Ok(micros) = msg.body().deserialize::<i64>() else {
             return;
@@ -358,7 +372,7 @@ impl<'a> Watcher<'a> {
             at: Instant::now(),
         };
         let changed = self.store.apply(event);
-        self.commit(changed);
+        self.commit(changed).await;
     }
 
     /// Re-reads the position of playing players, for those that omit
@@ -375,7 +389,7 @@ impl<'a> Watcher<'a> {
         for owner in playing {
             changed |= self.read_position(&owner).await;
         }
-        self.commit(changed);
+        self.commit(changed).await;
     }
 
     async fn appear(&mut self, bus_name: &str, owner: &str) -> bool {
@@ -428,13 +442,18 @@ impl<'a> Watcher<'a> {
     }
 
     /// Loads the art the store waits for, then publishes, if anything
-    /// changed. Decoding happens here, never on a render thread (B-41).
-    fn commit(&mut self, changed: bool) {
+    /// changed. Loading never runs on a render thread (B-41). It runs on
+    /// the `blocking` pool, awaited within the loop that races the stop
+    /// signal, because a cover on a hung network mount can block its reader
+    /// for good: a stop abandons such a load instead of waiting for it.
+    async fn commit(&mut self, changed: bool) {
         if !changed {
             return;
         }
         for (owner, url) in self.store.pending_art() {
-            let image = load_art(&url)
+            let loading = url.clone();
+            let image = blocking::unblock(move || load_art(&loading))
+                .await
                 .inspect_err(|error| log::debug!("MPRIS: no art for {owner}: {error}"))
                 .ok()
                 .map(Arc::new);

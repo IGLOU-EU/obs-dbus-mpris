@@ -15,4 +15,9 @@ log = "0.4"
 futures-lite = "2"
 async-io = "2"
 async-channel = "2"
+blocking = "1"
 serde = "1"
+
+[dev-dependencies]
+# File leases, to stand in for a cover on a hung network mount.
+libc = "0.2"
