@@ -6,7 +6,7 @@ Chaque exigence porte un identifiant B-xx, repris par la feuille de route et par
 
 **B-01 Découverte.** La source détecte en continu les lecteurs présents sur le bus de session (noms `org.mpris.MediaPlayer2.*`), apparitions et disparitions comprises, sans redémarrer OBS.
 
-**B-02 Sélecteur.** Les propriétés de la source proposent une entrée par instance de lecteur présente sur le bus, libellée par le titre de ce qu'elle joue (`xesam:title`), à défaut par le nom lisible du lecteur (`Identity`). Plusieurs instances d'un même lecteur, plusieurs mpv par exemple, se distinguent ainsi. La liste est triée selon l'ordre défini en B-05.
+**B-02 Sélecteur.** Les propriétés de la source proposent une entrée par instance de lecteur présente sur le bus, libellée par le titre de ce qu'elle joue (`xesam:title`), à défaut par le nom lisible du lecteur (`Identity`). Plusieurs instances d'un même lecteur, plusieurs mpv par exemple, se distinguent ainsi. Une première entrée « Aucun choix » efface le choix mémorisé (B-07). La liste est triée selon l'ordre défini en B-05.
 
 **B-03 Mémorisation.** L'instance choisie dans le sélecteur est mémorisée dans les réglages de la source par son nom de bus complet (`org.mpris.MediaPlayer2.mpv.instance-mWyyJbmA`), donc propre à chaque source et sauvegardée avec la collection de scènes. Si elle est absente à l'ouverture des propriétés, elle reste dans la liste, libellée par la clé de son lecteur (B-04) et marquée « (indisponible) », pour que le choix ne se perde pas.
 

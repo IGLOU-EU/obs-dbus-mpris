@@ -73,14 +73,16 @@ La séparation entre `mpris-core` et `obs-mpris` a une raison concrète : les te
 
 - **Fil du cœur** : un seul pour tout le plugin, démarré par `obs_module_load` et arrêté par `obs_module_unload`. Une boucle d'événements asynchrone unique qui reçoit les signaux D-Bus, le minuteur de relecture et les messages des autres fils. L'exécuteur de zbus tourne dans ce fil (`internal_executor(false)`), ce qui permet à l'arrêt d'interrompre même un appel en attente sur un lecteur figé. Les miniatures se lisent et se décodent sur le pool de `blocking`, attendues dans cette même boucle, si bien que l'arrêt abandonne aussi une lecture bloquée sur un montage réseau figé. Ce pool, par lequel zbus se connecte aussi, et le fil global `async-io` sont partagés par tout le processus et survivent à l'arrêt du cœur, sans aucun état de lecteur. Un bus injoignable n'empêche pas le chargement du module, il est journalisé et la source affiche le message de repli.
 - **Fil réseau** : démarré à la première demande de pochette en ligne, jamais sinon (B-48). Il ne touche pas au `Store`, il renvoie ses résultats au fil du cœur.
-- **Fil graphique d'OBS** (`video_tick`, `video_render`) : lit l'instantané courant, sans attente sur le fil du cœur.
-- **Fil d'interface d'OBS** (`get_properties`, `update`) : lit l'instantané pour construire la liste des lecteurs.
+- **Fil graphique d'OBS** (`video_tick`, `video_render`, et `update`, qu'OBS 32 diffère au tick graphique pour une source vidéo) : lit l'instantané courant, sans attente sur le fil du cœur.
+- **Fil d'interface d'OBS** (`create`, `get_defaults`, `get_properties`) : lit l'instantané pour construire la liste des lecteurs.
+
+Les réglages d'une source sont écrits et lus depuis ces deux fils : ils sont protégés par un `Mutex`, tenu le temps d'une copie.
 
 L'instantané est le seul état partagé entre fils. Il se publie par remplacement atomique d'un `Arc` (`arc-swap` ou un `Mutex<Arc<Snapshot>>` tenu le temps d'un clonage).
 
 ## Décisions techniques
 
-**D-01 Bindings libobs maison.** Le crate `obs-wrapper` n'est plus maintenu (dernière version 0.4.1, septembre 2022). Les bindings sont générés par bindgen à partir des en-têtes d'OBS 32, présents dans OBS Flatpak (`/app/include/obs`) et dans le paquet `obs-studio` natif. On limite la génération à l'API utilisée (liste blanche) et on commite le résultat, pour que le build n'exige ni libclang ni en-têtes. Un script les régénère au changement de version majeure d'OBS.
+**D-01 Bindings libobs maison.** Le crate `obs-wrapper` n'est plus maintenu (dernière version 0.4.1, septembre 2022). Les bindings sont générés par bindgen à partir des en-têtes d'OBS 32, présents dans OBS Flatpak (`/app/include/obs`) et dans le paquet `obs-studio` natif. On limite la génération à l'API utilisée (liste blanche) et on commite le résultat, pour que le build n'exige ni libclang ni en-têtes. Un script les régénère au changement de version majeure d'OBS : `scripts/gen-libobs-bindings.sh [include-dir]`, qui pilote le générateur `tools/gen-libobs-bindings` (projet cargo exclu du workspace, seul à dépendre de bindgen). La liste blanche nomme chaque fonction utilisée, garde opaques les types qu'`obs_source_info` référence sans que le plugin s'en serve, et génère les enums en constantes, pour qu'une valeur inconnue venue d'OBS ne soit jamais un comportement indéfini. La disposition des structures est vérifiée à la compilation.
 
 **D-02 D-Bus avec zbus 5.** Pur Rust, maintenu, sans dépendance à libdbus. On n'utilise pas le crate `mpris`, qui passe par libdbus et n'apporte rien pour deux interfaces en lecture seule. Chaque appel de méthode expire après une seconde, et une erreur d'appel vaut donnée manquante : un lecteur figé ne bloque jamais les autres. La journalisation passe par la façade `log`, que la colle OBS relaiera vers `blog`.
 
@@ -123,9 +125,11 @@ Critères de choix : couverture sur des pistes réelles (japonaises comprises), 
   data/locale/fr-FR.ini, en-US.ini
 ```
 
-Le plugin ne lie pas `libobs` à l'édition de liens : ses symboles se résolvent au chargement, dans le processus d'OBS qui a déjà chargé `libobs`. Le build n'a ainsi besoin ni de `libobs` ni de ses en-têtes, seulement des bindings commités (D-01).
+Le plugin ne lie pas `libobs` à l'édition de liens : ses symboles se résolvent au chargement, dans le processus d'OBS qui a déjà chargé `libobs`. Le build n'a ainsi besoin ni de `libobs` ni de ses en-têtes, seulement des bindings commités (D-01). rustc ne passe pas `-z defs` et active `BIND_NOW` : tout se résout au `dlopen`, qu'OBS fait en `RTLD_NOW`. La cdylib `libobs_mpris.so` est installée sous le nom `obs-dbus-mpris.so`.
 
-**Développement avec OBS Flatpak.** Le même `.so` natif est copié dans `~/.var/app/com.obsproject.Studio/config/obs-studio/plugins/obs-dbus-mpris/` (mêmes sous-dossiers `bin/64bit` et `data/locale`), qu'OBS Flatpak charge directement. Il tourne alors avec la glibc du runtime (2.42), plus ancienne que celle de l'hôte : le script d'installation vérifie qu'aucun symbole plus récent n'est requis, et que chaque symbole `libobs` attendu existe dans la `libobs` d'OBS Flatpak.
+La clé de traduction d'une propriété est sa clé de réglage, et un test vérifie que chaque fichier de langue contient exactement les clés utilisées.
+
+**Développement avec OBS Flatpak.** `scripts/install-dev.sh [--native]` construit le plugin en release et le copie (par défaut dans le dossier Flatpak, avec `--native` dans `~/.config/obs-studio/plugins`). Le même `.so` natif est copié dans `~/.var/app/com.obsproject.Studio/config/obs-studio/plugins/obs-dbus-mpris/` (mêmes sous-dossiers `bin/64bit` et `data/locale`), qu'OBS Flatpak charge directement. Il tourne alors avec la glibc du runtime (2.42), plus ancienne que celle de l'hôte : le script d'installation vérifie qu'aucun symbole plus récent n'est requis, et que chaque symbole `libobs` attendu existe dans la `libobs` d'OBS Flatpak.
 
 **Flatpak.** Un manifeste `com.obsproject.Studio.Plugin.DbusMpris` construit une extension de l'application OBS. Disposition relevée sur l'extension Tuna installée et dans les métadonnées d'OBS (`directory=plugins`, `merge-dirs=lib/obs-plugins;share/obs/obs-plugins`) :
 
@@ -151,7 +155,7 @@ Le build Flatpak se fait hors ligne : les dépendances Cargo sont fournies au ma
 
 | Risque | Traitement |
 |--------|------------|
-| Build Rust hors ligne en Flatpak | levé en phase 1, avant toute fonctionnalité |
+| Build Rust hors ligne en Flatpak | reporté en phase 7 avec le manifeste, le développement passant par le dossier de plugins utilisateur |
 | Rendu du texte et repli CJK | essai comparatif en phase 3 (D-04) |
 | Miniatures hors du bac à sable d'OBS Flatpak (Chrome en Flatpak) | option de pochette en ligne (B-18) |
 | Pochette en ligne fausse ou introuvable (titres de vidéos non normalisés) | accepté : l'option est décochée par défaut, un échec laisse l'emplacement vide |

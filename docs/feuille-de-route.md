@@ -11,7 +11,7 @@ Les validations se font dans OBS Flatpak. Le build natif est produit à chaque p
 | Phase | Objet | État |
 |-------|-------|------|
 | 0 | Cadrage | fait |
-| 1 | Squelette marchant, natif et Flatpak | à faire |
+| 1 | Squelette marchant, natif et Flatpak | fait, essai dans OBS en attente |
 | 2 | Cœur MPRIS, hors OBS | fait, lecteur local (Strawberry ou Elisa) à vérifier à l'occasion |
 | 3 | Primitives de rendu | à faire |
 | 4 | Source complète | à faire |
