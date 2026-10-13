@@ -1,0 +1,19 @@
+[package]
+name = "obs-mpris"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+# A test binary of this library could not resolve the libobs symbols, which
+# only exist inside OBS. The logic worth testing lives in mpris-core.
+test = false
+doctest = false
+
+[dependencies]
+libobs-sys = { path = "../libobs-sys" }
+mpris-core = { path = "../mpris-core" }
+log = "0.4"

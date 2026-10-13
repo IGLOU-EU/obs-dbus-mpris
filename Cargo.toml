@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/mpris-core", "crates/libobs-sys"]
+members = ["crates/mpris-core", "crates/libobs-sys", "crates/obs-mpris"]
 # Needs libclang and the OBS headers, which the normal build must not (D-01).
 exclude = ["tools/gen-libobs-bindings"]
 
