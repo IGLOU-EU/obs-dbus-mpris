@@ -69,6 +69,7 @@ const PLAYER: Field = Field {
     kind: Kind::Player,
     default: DefaultValue::Text(""),
 };
+const AUTO_SELECT: Field = flag("auto_select", true);
 const SHOW_ART: Field = flag("show_art", true);
 const FETCH_ART_ONLINE: Field = flag("fetch_art_online", false);
 const SHOW_TITLE: Field = flag("show_title", true);
@@ -99,6 +100,7 @@ const FALLBACK_TEXT: Field = Field {
 /// Every setting, in the order of besoins.md section 5.
 pub const FIELDS: &[Field] = &[
     PLAYER,
+    AUTO_SELECT,
     SHOW_ART,
     FETCH_ART_ONLINE,
     SHOW_TITLE,
@@ -156,6 +158,7 @@ impl Settings {
         let player = player.trim();
         Settings {
             player: (!player.is_empty()).then(|| player.to_owned()),
+            auto_select: read_bool(&get, &AUTO_SELECT),
             show_art: read_bool(&get, &SHOW_ART),
             fetch_art_online: read_bool(&get, &FETCH_ART_ONLINE),
             show_title: read_bool(&get, &SHOW_TITLE),
@@ -245,8 +248,9 @@ mod tests {
 
     use super::*;
 
-    const EXPECTED_KEYS: [&str; 20] = [
+    const EXPECTED_KEYS: [&str; 21] = [
         "player",
+        "auto_select",
         "show_art",
         "fetch_art_online",
         "show_title",
@@ -297,6 +301,7 @@ mod tests {
     fn table_defaults() -> Settings {
         Settings {
             player: None,
+            auto_select: true,
             show_art: true,
             fetch_art_online: false,
             show_title: true,
@@ -336,9 +341,8 @@ mod tests {
         for f in FIELDS {
             let expected = match f.key {
                 "player" => "player",
-                k if k.starts_with("show_") || k == "fetch_art_online" || k == "art_right" => {
-                    "bool"
-                }
+                "auto_select" | "fetch_art_online" | "art_right" => "bool",
+                k if k.starts_with("show_") => "bool",
                 k if k.starts_with("color_") => "color",
                 "width" | "height" | "font_size_title" | "font_size_subtitle"
                 | "font_size_time" => "int",
@@ -386,6 +390,26 @@ mod tests {
     }
 
     #[test]
+    fn auto_select_is_on_unless_stored_off() {
+        use SettingValue::{Bool, Color, Int, Text};
+        let read = |stored: Option<SettingValue>| {
+            Settings::from_lookup(|key| (key == "auto_select").then(|| stored.clone()).flatten())
+                .auto_select
+        };
+        assert!(read(None));
+        assert!(read(Some(Bool(true))));
+        assert!(!read(Some(Bool(false))));
+        for wrong in [
+            Int(0),
+            Text("false".to_owned()),
+            Text(String::new()),
+            Color(Rgba::new(0, 0, 0, 0)),
+        ] {
+            assert!(read(Some(wrong.clone())), "{wrong:?}");
+        }
+    }
+
+    #[test]
     fn default_colors_in_obs_layout() {
         let obs = |key: &str| match field(key).map(|f| f.default) {
             Some(DefaultValue::Color(c)) => c.to_obs(),
@@ -417,6 +441,7 @@ mod tests {
         let stored = |key: &str| {
             Some(match key {
                 "player" => Text("org.mpris.MediaPlayer2.mpv.instance-mWyyJbmA".to_owned()),
+                "auto_select" => Bool(false),
                 "show_art" => Bool(false),
                 "fetch_art_online" => Bool(true),
                 "show_title" => Bool(false),
@@ -441,6 +466,7 @@ mod tests {
         };
         let expected = Settings {
             player: Some("org.mpris.MediaPlayer2.mpv.instance-mWyyJbmA".to_owned()),
+            auto_select: false,
             show_art: false,
             fetch_art_online: true,
             show_title: false,

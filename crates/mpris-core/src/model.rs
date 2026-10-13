@@ -125,6 +125,10 @@ pub struct Settings {
     /// user picks one (B-07). Its key is derived with
     /// [`crate::player::player_key`] when needed, never stored twice (D-06).
     pub player: Option<String>,
+    /// Whether the source may follow another player than the remembered
+    /// instance (B-05 steps 2 to 4). Off, a source dedicated to one player
+    /// never switches to another.
+    pub auto_select: bool,
     pub show_art: bool,
     pub fetch_art_online: bool,
     pub show_title: bool,
