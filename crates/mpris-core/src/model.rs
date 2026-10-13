@@ -19,6 +19,10 @@ pub enum PlaybackStatus {
 }
 
 /// Track metadata as the player reports it, before any display choice.
+///
+/// No text field holds blank text and `length` is never zero:
+/// [`crate::metadata::parse_track`] reads both as absent, so readers of a
+/// track need no second check.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Track {
     /// `mpris:trackid`.
