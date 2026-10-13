@@ -17,4 +17,5 @@ doctest = false
 libobs-sys = { path = "../libobs-sys" }
 mpris-core = { path = "../mpris-core" }
 render = { path = "../render" }
+libm = "0.2"
 log = "0.4"

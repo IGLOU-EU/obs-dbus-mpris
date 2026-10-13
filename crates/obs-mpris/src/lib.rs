@@ -1,6 +1,6 @@
 //! OBS module of the "Now Playing (MPRIS)" source: the entry points OBS
-//! looks up, as `OBS_DECLARE_MODULE()` declares them in C, and the one
-//! MPRIS core every source reads.
+//! looks up, as `OBS_DECLARE_MODULE()` declares them in C, the one MPRIS
+//! core every source reads, and the one render thread that draws them.
 //!
 //! Nothing here links libobs: OBS loads this library into a process that
 //! already holds libobs, and its symbols resolve there (architecture.md,
@@ -20,10 +20,13 @@ use std::panic::{self, AssertUnwindSafe};
 use std::ptr;
 use std::sync::atomic::{AtomicPtr, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::time::Instant;
 
 use libobs_sys::{LIBOBS_API_MAJOR_VER, LIBOBS_API_MINOR_VER, LIBOBS_API_PATCH_VER, obs_module_t};
 use mpris_core::dbus::Core;
 use mpris_core::model::Snapshot;
+use render::text::Fonts;
+use render::worker::{Painter, Worker};
 
 /// The libobs version the bindings were generated from, as
 /// `LIBOBS_API_VER`. OBS refuses a module built for a newer libobs than
@@ -37,6 +40,10 @@ static MODULE: AtomicPtr<obs_module_t> = AtomicPtr::new(ptr::null_mut());
 /// One core for the whole module, so the bus is watched once however many
 /// sources there are (architecture.md, Fils d'exécution).
 static CORE: Mutex<Option<Core>> = Mutex::new(None);
+
+/// One drawing thread for the whole module, which holds the fonts every
+/// source shares.
+static WORKER: Mutex<Option<Worker>> = Mutex::new(None);
 
 #[unsafe(no_mangle)]
 pub extern "C" fn obs_module_set_pointer(module: *mut obs_module_t) {
@@ -64,6 +71,10 @@ pub extern "C" fn obs_module_load() -> bool {
         // An unreachable bus is logged by the core and leaves the sources
         // showing their fallback, so it never stops the module from loading.
         *core() = Some(Core::start());
+        // Sources stay empty without it, which beats failing to load.
+        *worker() = Worker::start(load_fonts)
+            .inspect_err(|error| log::error!("cannot start the render thread: {error}"))
+            .ok();
         source::register();
         log::info!("version {} loaded", env!("CARGO_PKG_VERSION"));
         true
@@ -73,8 +84,10 @@ pub extern "C" fn obs_module_load() -> bool {
 #[unsafe(no_mangle)]
 pub extern "C" fn obs_module_unload() {
     guard("obs_module_unload", (), || {
-        // Taken out first, so the wait for the core thread does not hold
-        // the lock.
+        // Taken out first, so the waits for the threads do not hold the
+        // locks.
+        let stopped = worker().take();
+        drop(stopped);
         let stopped = core().take();
         drop(stopped);
     });
@@ -100,9 +113,43 @@ fn snapshot() -> Arc<Snapshot> {
 }
 
 fn core() -> MutexGuard<'static, Option<Core>> {
-    // The lock only guards a swap of the whole value, which a panic cannot
+    // Both locks only guard a swap of the whole value, which a panic cannot
     // leave half done.
     CORE.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+fn worker() -> MutexGuard<'static, Option<Worker>> {
+    WORKER.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+/// A new source's link to the render thread, `None` without one.
+fn painter() -> Option<Painter> {
+    worker().as_ref().map(Worker::painter)
+}
+
+/// The system fonts, read on the render thread since it takes up to seconds
+/// (B-41). A failure leaves text undrawn rather than the thread dead.
+fn load_fonts() -> Fonts {
+    let started = Instant::now();
+    match panic::catch_unwind(Fonts::system) {
+        Ok(fonts) => {
+            log::debug!("fonts loaded in {:?}", started.elapsed());
+            fonts
+        }
+        Err(payload) => {
+            log::error!("cannot load the fonts: {}", panic_message(payload.as_ref()));
+            Fonts::none()
+        }
+    }
+}
+
+/// OBS Flatpak runs this library on the glibc of its runtime (2.42), older
+/// than the `acosf` a newer build host links by default (2.43), which glyph
+/// rasterization calls. The build script wraps the symbol, and the portable
+/// version stands in for it, so that the library loads there.
+#[unsafe(no_mangle)]
+pub extern "C" fn __wrap_acosf(x: f32) -> f32 {
+    libm::acosf(x)
 }
 
 /// Runs `body` and turns a panic into `fallback`, logged with `what`, so

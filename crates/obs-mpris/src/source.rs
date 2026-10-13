@@ -1,25 +1,30 @@
-//! The `mpris_now_playing` source. For now it draws its background at the
-//! size it is set to, and its properties list the players the core sees
-//! (feuille-de-route.md, phase 1).
+//! The `mpris_now_playing` source: the track its player plays, drawn as one
+//! frame by the render worker, and shown as a texture the way OBS's own
+//! image source shows its image.
 
 use std::ffi::{CStr, c_char, c_void};
 use std::ptr;
 use std::sync::{Mutex, MutexGuard, PoisonError};
+use std::time::Instant;
 
 use libobs_sys::{
-    OBS_EFFECT_SOLID, OBS_ICON_TYPE_MEDIA, OBS_SOURCE_CUSTOM_DRAW, OBS_SOURCE_SRGB,
-    OBS_SOURCE_TYPE_INPUT, OBS_SOURCE_VIDEO, gs_draw_sprite, gs_effect_get_param_by_name,
-    gs_effect_get_technique, gs_effect_set_vec4, gs_effect_t, gs_enable_framebuffer_srgb,
-    gs_framebuffer_srgb_enabled, gs_get_linear_srgb, gs_technique_begin, gs_technique_begin_pass,
-    gs_technique_end, gs_technique_end_pass, obs_data_t, obs_get_base_effect, obs_properties_t,
-    obs_register_source_s, obs_source_info, obs_source_t, vec4, vec4__bindgen_ty_1,
+    GS_BLEND_INVSRCALPHA, GS_BLEND_ONE, GS_RGBA, OBS_ICON_TYPE_MEDIA, OBS_SOURCE_SRGB,
+    OBS_SOURCE_TYPE_INPUT, OBS_SOURCE_VIDEO, gs_blend_function, gs_blend_state_pop,
+    gs_blend_state_push, gs_draw_sprite, gs_effect_get_param_by_name, gs_effect_set_texture_srgb,
+    gs_effect_t, gs_enable_framebuffer_srgb, gs_framebuffer_srgb_enabled, gs_texture_create,
+    gs_texture_destroy, gs_texture_t, obs_data_t, obs_enter_graphics, obs_leave_graphics,
+    obs_properties_t, obs_register_source_s, obs_source_info, obs_source_t,
 };
-use mpris_core::model::{Rgba, Settings};
-use render::color::solid_fill;
+use mpris_core::content::content;
+use mpris_core::model::Settings;
+use mpris_core::selection::select_player;
+use render::draw::{RedrawKey, redraw_key};
+use render::frame::Frame;
 use render::layout::layout;
+use render::worker::Painter;
 
 use crate::locale::obs_module_text;
-use crate::{guard, settings, snapshot};
+use crate::{guard, painter, settings, snapshot};
 
 const ID: &CStr = c"mpris_now_playing";
 
@@ -27,15 +32,42 @@ const ID: &CStr = c"mpris_now_playing";
 struct Source {
     /// Shared by the threads OBS calls a source from: `create` and
     /// `get_properties` run on the UI thread, while OBS defers `update` of a
-    /// video source to the graphics thread, where `video_render` runs.
+    /// video source to the graphics thread, where `video_tick` and
+    /// `video_render` run.
     settings: Mutex<Settings>,
+    /// `None` when the render worker could not start, and then the source
+    /// stays empty.
+    painter: Option<Painter>,
+    /// Touched by the graphics thread, and by `destroy` once OBS no longer
+    /// draws the source.
+    view: Mutex<View>,
+}
+
+/// What the source last asked the worker for, and what it shows.
+#[derive(Default)]
+struct View {
+    /// `None` until the first request.
+    asked: Option<RedrawKey>,
+    texture: Option<Texture>,
+}
+
+/// A texture of the graphics subsystem, which only the graphics thread, or
+/// a thread inside `obs_enter_graphics`, may create or destroy.
+struct Texture {
+    raw: *mut gs_texture_t,
+    width: u32,
+    height: u32,
 }
 
 impl Source {
     fn settings(&self) -> MutexGuard<'_, Settings> {
-        // The lock only guards a swap of the whole value, which a panic
-        // cannot leave half done.
+        // Both locks only guard a swap of a whole value, which a panic cannot
+        // leave half done.
         self.settings.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    fn view(&self) -> MutexGuard<'_, View> {
+        self.view.lock().unwrap_or_else(PoisonError::into_inner)
     }
 }
 
@@ -43,8 +75,9 @@ pub fn register() {
     let info = obs_source_info {
         id: ID.as_ptr(),
         type_: OBS_SOURCE_TYPE_INPUT,
-        // Drawn by hand, in sRGB-aware fashion, like OBS's own color source.
-        output_flags: OBS_SOURCE_VIDEO | OBS_SOURCE_CUSTOM_DRAW | OBS_SOURCE_SRGB,
+        // Without custom drawing, OBS hands `video_render` the default
+        // effect, as it does for its own image source.
+        output_flags: OBS_SOURCE_VIDEO | OBS_SOURCE_SRGB,
         get_name: Some(get_name),
         create: Some(create),
         destroy: Some(destroy),
@@ -53,6 +86,7 @@ pub fn register() {
         get_defaults: Some(get_defaults),
         get_properties: Some(get_properties),
         update: Some(update),
+        video_tick: Some(video_tick),
         video_render: Some(video_render),
         icon_type: OBS_ICON_TYPE_MEDIA,
         ..Default::default()
@@ -87,6 +121,8 @@ unsafe extern "C" fn create(data: *mut obs_data_t, _source: *mut obs_source_t) -
         let settings = unsafe { settings::read(data) };
         let source = Box::new(Source {
             settings: Mutex::new(settings),
+            painter: painter(),
+            view: Mutex::default(),
         });
         Box::into_raw(source).cast()
     })
@@ -94,10 +130,24 @@ unsafe extern "C" fn create(data: *mut obs_data_t, _source: *mut obs_source_t) -
 
 unsafe extern "C" fn destroy(data: *mut c_void) {
     guard("destroy", (), || {
-        if !data.is_null() {
-            // SAFETY: `data` comes from `Box::into_raw` in `create`, and OBS
-            // destroys a source once.
-            drop(unsafe { Box::from_raw(data.cast::<Source>()) });
+        if data.is_null() {
+            return;
+        }
+        // SAFETY: `data` comes from `Box::into_raw` in `create`, and OBS
+        // destroys a source once.
+        let source = unsafe { Box::from_raw(data.cast::<Source>()) };
+        let view = source
+            .view
+            .into_inner()
+            .unwrap_or_else(PoisonError::into_inner);
+        if let Some(texture) = view.texture {
+            // SAFETY: OBS may destroy a source outside the graphics thread,
+            // hence the graphics context entered around the texture's end.
+            unsafe {
+                obs_enter_graphics();
+                gs_texture_destroy(texture.raw);
+                obs_leave_graphics();
+            }
         }
     });
 }
@@ -143,50 +193,91 @@ unsafe extern "C" fn get_height(data: *mut c_void) -> u32 {
     })
 }
 
-unsafe extern "C" fn video_render(data: *mut c_void, _effect: *mut gs_effect_t) {
+/// Asks the worker for a new frame when what the source shows changed
+/// (B-43): a new second, a pixel more of progress, a new track or setting.
+unsafe extern "C" fn video_tick(data: *mut c_void, _seconds: f32) {
+    guard("video_tick", (), || {
+        // SAFETY: OBS passes what `create` returned.
+        let Some(source) = (unsafe { source(data) }) else {
+            return;
+        };
+        let Some(painter) = &source.painter else {
+            return;
+        };
+        let settings = source.settings().clone();
+        let snapshot = snapshot();
+        let player = select_player(&snapshot.players, &settings);
+        let shown = content(player, &settings, Instant::now());
+        let layout = layout(&settings);
+        let key = redraw_key(&layout, &shown, &settings);
+        let mut view = source.view();
+        if view.asked.as_ref() != Some(&key) {
+            painter.request(layout, shown, settings);
+            view.asked = Some(key);
+        }
+    });
+}
+
+unsafe extern "C" fn video_render(data: *mut c_void, effect: *mut gs_effect_t) {
     guard("video_render", (), || {
         // SAFETY: OBS passes what `create` returned.
         let Some(source) = (unsafe { source(data) }) else {
             return;
         };
-        let (color, width, height) = {
-            let settings = source.settings();
-            let layout = layout(&settings);
-            (settings.color_background, layout.width, layout.height)
-        };
-        // SAFETY: OBS calls `video_render` on its graphics thread, inside
-        // the graphics context.
-        unsafe { draw_rectangle(color, width, height) };
+        let mut view = source.view();
+        if let Some(frame) = source.painter.as_ref().and_then(Painter::take) {
+            // SAFETY: OBS calls `video_render` inside the graphics context.
+            unsafe { replace_texture(&mut view.texture, &frame) };
+        }
+        if let (Some(texture), false) = (&view.texture, effect.is_null()) {
+            // SAFETY: inside the graphics context, with the effect OBS passed.
+            unsafe { draw_texture(texture, effect) };
+        }
     });
 }
 
-/// Draws a `width` by `height` rectangle of `color` at the origin of the
-/// source, as OBS's color source does.
+/// Puts `frame` in `texture`, freeing the texture it replaces.
 ///
 /// # Safety
 ///
 /// Runs inside the OBS graphics context.
-unsafe fn draw_rectangle(color: Rgba, width: u32, height: u32) {
-    // SAFETY: inside the graphics context per the contract of this function,
-    // the solid effect is one OBS always provides, and the names are static
-    // C strings.
-    unsafe {
-        let fill = solid_fill(color, gs_get_linear_srgb());
-        let solid = obs_get_base_effect(OBS_EFFECT_SOLID);
-        let param = gs_effect_get_param_by_name(solid, c"color".as_ptr());
-        let technique = gs_effect_get_technique(solid, c"Solid".as_ptr());
-        let value = vec4 {
-            __bindgen_anon_1: vec4__bindgen_ty_1 { ptr: fill.rgba },
-        };
+unsafe fn replace_texture(texture: &mut Option<Texture>, frame: &Frame) {
+    if let Some(old) = texture.take() {
+        // SAFETY: inside the graphics context per the contract of this
+        // function, and the texture is no longer referenced.
+        unsafe { gs_texture_destroy(old.raw) };
+    }
+    let (width, height) = (frame.width(), frame.height());
+    if width == 0 || height == 0 {
+        return;
+    }
+    let mut planes = [frame.pixels().as_ptr()];
+    // SAFETY: inside the graphics context, and the single plane holds the
+    // `width * height` RGBA pixels the format asks for, which OBS copies.
+    let raw = unsafe { gs_texture_create(width, height, GS_RGBA, 1, planes.as_mut_ptr(), 0) };
+    *texture = (!raw.is_null()).then_some(Texture { raw, width, height });
+}
 
+/// Draws `texture`, premultiplied and sRGB-encoded, as OBS's image source
+/// draws its image.
+///
+/// # Safety
+///
+/// Runs inside the OBS graphics context, `effect` being the one OBS passed
+/// to `video_render`.
+unsafe fn draw_texture(texture: &Texture, effect: *mut gs_effect_t) {
+    // SAFETY: inside the graphics context per the contract of this function,
+    // with a live texture and effect, and a static parameter name. The blend
+    // state and the framebuffer conversion are put back as found.
+    unsafe {
         let previous = gs_framebuffer_srgb_enabled();
-        gs_enable_framebuffer_srgb(fill.linear);
-        gs_effect_set_vec4(param, &value);
-        gs_technique_begin(technique);
-        gs_technique_begin_pass(technique, 0);
-        gs_draw_sprite(ptr::null_mut(), 0, width, height);
-        gs_technique_end_pass(technique);
-        gs_technique_end(technique);
+        gs_enable_framebuffer_srgb(true);
+        gs_blend_state_push();
+        gs_blend_function(GS_BLEND_ONE, GS_BLEND_INVSRCALPHA);
+        let image = gs_effect_get_param_by_name(effect, c"image".as_ptr());
+        gs_effect_set_texture_srgb(image, texture.raw);
+        gs_draw_sprite(texture.raw, 0, texture.width, texture.height);
+        gs_blend_state_pop();
         gs_enable_framebuffer_srgb(previous);
     }
 }

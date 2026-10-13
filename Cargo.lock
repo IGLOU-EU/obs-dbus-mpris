@@ -651,6 +651,7 @@ dependencies = [
 name = "obs-mpris"
 version = "0.1.0"
 dependencies = [
+ "libm",
  "libobs-sys",
  "log",
  "mpris-core",
