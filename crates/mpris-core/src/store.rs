@@ -230,15 +230,14 @@ fn set_track(player: &mut Player, track: &Track, at: Instant) {
 }
 
 /// Players send metadata updates for the playing track too (length found,
-/// art written to disk), and those must not reset the position. Without
-/// `mpris:trackid`, the tags are the only way to tell.
+/// art written to disk), and those must not reset the position. The id
+/// alone cannot tell: some players keep one `mpris:trackid` for every track
+/// (Firefox sends `/org/mpris/MediaPlayer2/firefox`), so the tags count too.
 fn is_new_track(old: &Track, new: &Track) -> bool {
-    match (&old.id, &new.id) {
-        (None, None) => {
-            old.title != new.title || old.album != new.album || old.artists != new.artists
-        }
-        (old_id, new_id) => old_id != new_id,
-    }
+    old.id != new.id
+        || old.title != new.title
+        || old.album != new.album
+        || old.artists != new.artists
 }
 
 /// Only an image for the url the player shows now is kept: a slow load for
@@ -778,42 +777,68 @@ mod tests {
     }
 
     #[test]
-    fn without_ids_title_album_or_artists_tell_a_new_track() {
+    fn constant_track_id_still_tells_a_new_track_by_its_title() {
         let t0 = Instant::now();
-        let base = Track {
-            id: None,
-            ..track("a", None)
+        let firefox = |title: &str| Track {
+            id: Some("/org/mpris/MediaPlayer2/firefox".into()),
+            title: Some(title.into()),
+            ..Track::default()
         };
-        let variants = [
-            Track {
-                title: Some("Other title".into()),
-                ..base.clone()
-            },
-            Track {
-                album: Some("Other album".into()),
-                ..base.clone()
-            },
-            Track {
-                artists: vec!["Other artist".into()],
-                ..base.clone()
-            },
-        ];
-        for next in variants {
-            let mut store = Store::new();
-            store.apply(appeared(
-                UNIQUE,
-                BUS,
-                PlaybackStatus::Playing,
-                base.clone(),
-                secs(10),
-                t0,
-            ));
-            assert!(store.apply(track_changed(next.clone(), t0 + secs(30))));
-            assert_eq!(
-                player(&store, BUS).anchor,
-                anchor(Duration::ZERO, t0 + secs(30)),
-                "{next:?}"
-            );
+        let mut store = Store::new();
+        store.apply(appeared(
+            UNIQUE,
+            BUS,
+            PlaybackStatus::Playing,
+            firefox("A"),
+            secs(200),
+            t0,
+        ));
+        assert!(store.apply(track_changed(firefox("B"), t0 + secs(30))));
+        assert_eq!(
+            player(&store, BUS).anchor,
+            anchor(Duration::ZERO, t0 + secs(30))
+        );
+    }
+
+    #[test]
+    fn title_album_or_artists_tell_a_new_track_with_or_without_ids() {
+        let t0 = Instant::now();
+        for id in [Some("a".to_string()), None] {
+            let base = Track {
+                id,
+                ..track("a", None)
+            };
+            let variants = [
+                Track {
+                    title: Some("Other title".into()),
+                    ..base.clone()
+                },
+                Track {
+                    album: Some("Other album".into()),
+                    ..base.clone()
+                },
+                Track {
+                    artists: vec!["Other artist".into()],
+                    ..base.clone()
+                },
+            ];
+            for next in variants {
+                let mut store = Store::new();
+                store.apply(appeared(
+                    UNIQUE,
+                    BUS,
+                    PlaybackStatus::Playing,
+                    base.clone(),
+                    secs(10),
+                    t0,
+                ));
+                assert!(store.apply(track_changed(next.clone(), t0 + secs(30))));
+                assert_eq!(
+                    player(&store, BUS).anchor,
+                    anchor(Duration::ZERO, t0 + secs(30)),
+                    "{next:?}"
+                );
+            }
         }
     }
 
