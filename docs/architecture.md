@@ -97,7 +97,7 @@ Critères de choix : repli correct sur les caractères japonais (cas réel de mp
 
 **D-05 Position extrapolée** (B-17). Recalage sur `Seeked`, sur changement de piste ou d'état, et relecture périodique de `Position` à un intervalle à régler à l'usage, pour les lecteurs qui omettent `Seeked`.
 
-**D-06 Choix mémorisé et clé de lecteur.** Le réglage mémorise le nom de bus de l'instance choisie (B-03). La clé de lecteur (B-04) en est dérivée à la demande, jamais stockée en double. Ordre « premier » : alphabétique sur la clé, puis sur le nom de bus (B-05).
+**D-06 Choix mémorisé et clé de lecteur.** Le réglage mémorise le nom de bus de l'instance choisie (B-03). La clé de lecteur (B-04) en est dérivée à la demande, jamais stockée en double. Ordre « premier » : alphabétique sur la clé, puis sur le nom de bus, sans tenir compte de la casse (B-05).
 
 **D-07 Frontière FFI étanche.** Chaque rappel `extern "C"` passe par `catch_unwind`. Les erreurs sont journalisées via `blog`, jamais propagées à OBS.
 

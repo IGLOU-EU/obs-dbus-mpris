@@ -20,13 +20,15 @@ Chaque exigence porte un identifiant B-xx, repris par la feuille de route et par
 4. sinon le premier lecteur disponible,
 5. sinon aucun, et la source affiche le message de repli (B-23).
 
-« Premier » s'entend dans l'ordre alphabétique des clés (B-04), puis des noms de bus, pour un résultat stable tant que les lecteurs tournent.
+« Premier » s'entend dans l'ordre alphabétique des clés (B-04), puis des noms de bus, sans tenir compte de la casse, pour un résultat stable tant que les lecteurs tournent.
+
+La case « Sélection automatique », cochée par défaut, commande les étapes 2 à 4. Décochée, seule l'étape 1 s'applique : sans l'instance mémorisée exacte, même après une relance du même lecteur, la source affiche le message de repli jusqu'à un nouveau choix. Une source dédiée à un lecteur ne bascule ainsi jamais sur un autre.
 
 Conséquence voulue de l'étape 1 : si l'instance mémorisée est présente mais arrêtée pendant qu'un autre lecteur joue, la source affiche le message de repli. Le choix explicite prime sur l'activité des autres lecteurs.
 
-**B-06 Retour automatique.** Le repli ne modifie jamais le choix mémorisé. Quand l'instance mémorisée a disparu et qu'un lecteur de même clé apparaît (relance de mpv avec un nouveau suffixe d'instance, par exemple), la source le suit d'elle-même (étape 2).
+**B-06 Retour automatique.** Le repli ne modifie jamais le choix mémorisé. Quand l'instance mémorisée a disparu et qu'un lecteur de même clé apparaît (relance de mpv avec un nouveau suffixe d'instance, par exemple), la source le suit d'elle-même (étape 2), si la sélection automatique est cochée.
 
-**B-07 Nouvelle source.** Une source sans choix mémorisé applique la règle B-05 à partir de l'étape 3.
+**B-07 Nouvelle source.** Une source sans choix mémorisé applique la règle B-05 à partir de l'étape 3, ou affiche le message de repli si la sélection automatique est décochée.
 
 ## 2. Contenu affiché
 
@@ -96,6 +98,7 @@ Récapitulatif des réglages d'une source. Les valeurs par défaut des couleurs 
 | Clé | Type | Défaut proposé | Besoin |
 |-----|------|----------------|--------|
 | `player` | liste (nom de bus de l'instance) | vide (aucun choix mémorisé) | B-02 à B-07 |
+| `auto_select` | case | oui | B-05 à B-07 |
 | `show_art` | case | oui | B-10 |
 | `fetch_art_online` | case | non | B-18 |
 | `show_title` | case | oui | B-11 |
@@ -153,6 +156,7 @@ La version 1.0 est acceptée quand ces scénarios passent dans OBS Flatpak. Le b
 7. Un titre très long, ou en japonais, s'affiche lisiblement et ne déborde pas du cadre.
 8. Deux sources réglées sur deux lecteurs différents vivent côte à côte sans interférer.
 10. Trois instances de mpv jouent : le sélecteur propose trois entrées, chacune libellée par son titre, et la source affiche exactement l'instance choisie.
+11. Sélection automatique décochée, instance mémorisée fermée alors que d'autres lecteurs jouent : message de repli. Relance du même lecteur : toujours le message de repli, jusqu'à un nouveau choix dans le sélecteur.
 9. Une piste dont la miniature locale est illisible : option B-18 décochée, emplacement vide et aucune requête réseau. Option cochée, une pochette trouvée en ligne s'affiche, et changer de piste puis revenir ne relance pas de requête.
 
 ## 8. Questions ouvertes
