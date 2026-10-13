@@ -16,8 +16,6 @@ pub const LIBOBS_API_MINOR_VER: u32 = 2;
 pub const LIBOBS_API_PATCH_VER: u32 = 2;
 #[doc = " Source has video.\n\n Unless SOURCE_ASYNC_VIDEO is specified, the source must include the\n video_render callback in the source definition structure."]
 pub const OBS_SOURCE_VIDEO: u32 = 1;
-#[doc = " Source uses custom drawing, rather than a default effect.\n\n If this flag is specified, the video_render callback will pass a NULL\n effect, and effect-based filters will not use direct rendering."]
-pub const OBS_SOURCE_CUSTOM_DRAW: u32 = 8;
 #[doc = " Source understands SRGB rendering"]
 pub const OBS_SOURCE_SRGB: u32 = 32768;
 #[doc = " Use if there's a problem that can potentially affect the program,\n but isn't enough to require termination of the program.\n\n Use in creation functions and core subsystem functions.  Places that\n should definitely not fail."]
@@ -101,44 +99,17 @@ pub struct gs_effect {
 }
 #[repr(C)]
 #[derive(Debug)]
-pub struct gs_effect_technique {
-    _unused: [u8; 0],
-}
-#[repr(C)]
-#[derive(Debug)]
 pub struct gs_effect_param {
     _unused: [u8; 0],
 }
 pub type gs_texture_t = gs_texture;
 pub type gs_effect_t = gs_effect;
-pub type gs_technique_t = gs_effect_technique;
 pub type gs_eparam_t = gs_effect_param;
-unsafe extern "C" {
-    pub fn gs_effect_get_technique(
-        effect: *const gs_effect_t,
-        name: *const ::std::os::raw::c_char,
-    ) -> *mut gs_technique_t;
-}
-unsafe extern "C" {
-    pub fn gs_technique_begin(technique: *mut gs_technique_t) -> usize;
-}
-unsafe extern "C" {
-    pub fn gs_technique_end(technique: *mut gs_technique_t);
-}
-unsafe extern "C" {
-    pub fn gs_technique_begin_pass(technique: *mut gs_technique_t, pass: usize) -> bool;
-}
-unsafe extern "C" {
-    pub fn gs_technique_end_pass(technique: *mut gs_technique_t);
-}
 unsafe extern "C" {
     pub fn gs_effect_get_param_by_name(
         effect: *const gs_effect_t,
         name: *const ::std::os::raw::c_char,
     ) -> *mut gs_eparam_t;
-}
-unsafe extern "C" {
-    pub fn gs_effect_set_vec4(param: *mut gs_eparam_t, val: *const vec4);
 }
 unsafe extern "C" {
     pub fn gs_effect_set_texture_srgb(param: *mut gs_eparam_t, val: *mut gs_texture_t);
@@ -170,83 +141,10 @@ unsafe extern "C" {
     pub fn gs_framebuffer_srgb_enabled() -> bool;
 }
 unsafe extern "C" {
-    pub fn gs_get_linear_srgb() -> bool;
-}
-unsafe extern "C" {
     pub fn gs_blend_function(src: gs_blend_type, dest: gs_blend_type);
 }
 unsafe extern "C" {
     pub fn gs_texture_destroy(tex: *mut gs_texture_t);
-}
-pub type __m128 = [f32; 4usize];
-#[repr(C)]
-#[repr(align(16))]
-#[derive(Copy, Clone)]
-pub struct vec4 {
-    pub __bindgen_anon_1: vec4__bindgen_ty_1,
-}
-#[repr(C)]
-#[repr(align(16))]
-#[derive(Copy, Clone)]
-pub union vec4__bindgen_ty_1 {
-    pub __bindgen_anon_1: vec4__bindgen_ty_1__bindgen_ty_1,
-    pub ptr: [f32; 4usize],
-    pub m: __m128,
-}
-#[repr(C)]
-#[derive(Debug, Default, Copy, Clone)]
-pub struct vec4__bindgen_ty_1__bindgen_ty_1 {
-    pub x: f32,
-    pub y: f32,
-    pub z: f32,
-    pub w: f32,
-}
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of vec4__bindgen_ty_1__bindgen_ty_1"]
-        [::std::mem::size_of::<vec4__bindgen_ty_1__bindgen_ty_1>() - 16usize];
-    ["Alignment of vec4__bindgen_ty_1__bindgen_ty_1"]
-        [::std::mem::align_of::<vec4__bindgen_ty_1__bindgen_ty_1>() - 4usize];
-    ["Offset of field: vec4__bindgen_ty_1__bindgen_ty_1::x"]
-        [::std::mem::offset_of!(vec4__bindgen_ty_1__bindgen_ty_1, x) - 0usize];
-    ["Offset of field: vec4__bindgen_ty_1__bindgen_ty_1::y"]
-        [::std::mem::offset_of!(vec4__bindgen_ty_1__bindgen_ty_1, y) - 4usize];
-    ["Offset of field: vec4__bindgen_ty_1__bindgen_ty_1::z"]
-        [::std::mem::offset_of!(vec4__bindgen_ty_1__bindgen_ty_1, z) - 8usize];
-    ["Offset of field: vec4__bindgen_ty_1__bindgen_ty_1::w"]
-        [::std::mem::offset_of!(vec4__bindgen_ty_1__bindgen_ty_1, w) - 12usize];
-};
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of vec4__bindgen_ty_1"][::std::mem::size_of::<vec4__bindgen_ty_1>() - 16usize];
-    ["Alignment of vec4__bindgen_ty_1"][::std::mem::align_of::<vec4__bindgen_ty_1>() - 16usize];
-    ["Offset of field: vec4__bindgen_ty_1::ptr"]
-        [::std::mem::offset_of!(vec4__bindgen_ty_1, ptr) - 0usize];
-    ["Offset of field: vec4__bindgen_ty_1::m"]
-        [::std::mem::offset_of!(vec4__bindgen_ty_1, m) - 0usize];
-};
-impl Default for vec4__bindgen_ty_1 {
-    fn default() -> Self {
-        let mut s = ::std::mem::MaybeUninit::<Self>::uninit();
-        unsafe {
-            ::std::ptr::write_bytes(s.as_mut_ptr(), 0, 1);
-            s.assume_init()
-        }
-    }
-}
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of vec4"][::std::mem::size_of::<vec4>() - 16usize];
-    ["Alignment of vec4"][::std::mem::align_of::<vec4>() - 16usize];
-};
-impl Default for vec4 {
-    fn default() -> Self {
-        let mut s = ::std::mem::MaybeUninit::<Self>::uninit();
-        unsafe {
-            ::std::ptr::write_bytes(s.as_mut_ptr(), 0, 1);
-            s.assume_init()
-        }
-    }
 }
 #[repr(C)]
 #[repr(align(8))]
@@ -859,29 +757,4 @@ unsafe extern "C" {
 unsafe extern "C" {
     #[doc = " Helper function for leaving the OBS graphics context"]
     pub fn obs_leave_graphics();
-}
-#[doc = "< RGB/YUV"]
-pub const OBS_EFFECT_DEFAULT: obs_base_effect = 0;
-#[doc = "< RGB/YUV (using texture_rect)"]
-pub const OBS_EFFECT_DEFAULT_RECT: obs_base_effect = 1;
-#[doc = "< RGB/YUV (alpha set to 1.0)"]
-pub const OBS_EFFECT_OPAQUE: obs_base_effect = 2;
-#[doc = "< RGB/YUV (solid color only)"]
-pub const OBS_EFFECT_SOLID: obs_base_effect = 3;
-#[doc = "< Bicubic downscale"]
-pub const OBS_EFFECT_BICUBIC: obs_base_effect = 4;
-#[doc = "< Lanczos downscale"]
-pub const OBS_EFFECT_LANCZOS: obs_base_effect = 5;
-#[doc = "< Bilinear low resolution downscale"]
-pub const OBS_EFFECT_BILINEAR_LOWRES: obs_base_effect = 6;
-#[doc = "< Premultiplied alpha"]
-pub const OBS_EFFECT_PREMULTIPLIED_ALPHA: obs_base_effect = 7;
-#[doc = "< RGB/YUV (repeating)"]
-pub const OBS_EFFECT_REPEAT: obs_base_effect = 8;
-#[doc = "< Area rescale"]
-pub const OBS_EFFECT_AREA: obs_base_effect = 9;
-pub type obs_base_effect = ::std::os::raw::c_uint;
-unsafe extern "C" {
-    #[doc = " Returns a commonly used base effect"]
-    pub fn obs_get_base_effect(effect: obs_base_effect) -> *mut gs_effect_t;
 }

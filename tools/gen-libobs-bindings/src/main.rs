@@ -35,15 +35,6 @@ const FUNCTIONS: &[&str] = &[
     "obs_properties_add_text",
     "obs_properties_add_list",
     "obs_property_list_add_string",
-    // Drawing a solid rectangle, as OBS's own color source does.
-    "obs_get_base_effect",
-    "gs_effect_get_technique",
-    "gs_effect_set_vec4",
-    "gs_technique_begin",
-    "gs_technique_begin_pass",
-    "gs_technique_end_pass",
-    "gs_technique_end",
-    "gs_get_linear_srgb",
     // Drawing a premultiplied sRGB texture, as OBS's own image source does.
     "obs_enter_graphics",
     "obs_leave_graphics",
@@ -69,7 +60,6 @@ const VARS: &[&str] = &[
     "LOG_INFO",
     "LOG_DEBUG",
     "OBS_SOURCE_VIDEO",
-    "OBS_SOURCE_CUSTOM_DRAW",
     "OBS_SOURCE_SRGB",
 ];
 
