@@ -48,9 +48,9 @@ impl Frame {
     }
 
     /// Paints `shape` with corners of `radius`, capped at half its shorter
-    /// side. `paint` gives the color of each column, so that one shape can
-    /// hold two colors, as the progress bar does.
-    pub(crate) fn fill(&mut self, shape: Rect, radius: u32, paint: impl Fn(u32) -> Linear) {
+    /// side. `paint` gives the color at each pixel, so that one shape can
+    /// hold two colors, as the progress bar does, or a whole image.
+    pub(crate) fn fill(&mut self, shape: Rect, radius: u32, paint: impl Fn(u32, u32) -> Linear) {
         let Some(area) = intersection(shape, self.bounds()) else {
             return;
         };
@@ -60,10 +60,24 @@ impl Frame {
             for x in area.x..area.right() {
                 let dx = inset(x, shape.x, shape.right());
                 let i = self.index(x, y);
-                self.blend(i, paint(x).scaled(coverage(dx, dy, radius)));
+                self.blend(i, paint(x, y).scaled(coverage(dx, dy, radius)));
             }
         }
     }
+    /// Replaces the pixels under `image`, its top left corner on `(x, y)`.
+    pub(crate) fn put(&mut self, (x, y): (u32, u32), image: &Frame) {
+        let target = Rect::new(x, y, image.width, image.height);
+        let Some(area) = intersection(target, self.bounds()) else {
+            return;
+        };
+        let len = area.w as usize * 4;
+        for row in area.y..area.bottom() {
+            let from = image.index(area.x - x, row - y);
+            let to = self.index(area.x, row);
+            self.pixels[to..to + len].copy_from_slice(&image.pixels[from..from + len]);
+        }
+    }
+
     fn bounds(&self) -> Rect {
         Rect::new(0, 0, self.width, self.height)
     }
@@ -130,8 +144,8 @@ mod tests {
     const BLUE: Rgba = Rgba::new(0, 0, 255, 255);
     const WHITE: Rgba = Rgba::new(255, 255, 255, 255);
 
-    fn solid(color: Rgba) -> impl Fn(u32) -> Linear {
-        move |_| Linear::from(color)
+    fn solid(color: Rgba) -> impl Fn(u32, u32) -> Linear {
+        move |_, _| Linear::from(color)
     }
 
     fn at(frame: &Frame, x: u32, y: u32) -> [u8; 4] {
@@ -254,13 +268,14 @@ mod tests {
     }
 
     #[test]
-    fn paint_picks_a_color_per_column() {
-        let mut frame = Frame::transparent(4, 1);
-        frame.fill(Rect::new(0, 0, 4, 1), 0, |x| {
-            Linear::from(if x < 2 { RED } else { BLUE })
+    fn paint_picks_a_color_per_pixel() {
+        let mut frame = Frame::transparent(4, 2);
+        frame.fill(Rect::new(0, 0, 4, 2), 0, |x, y| {
+            Linear::from(if x < 2 && y == 0 { RED } else { BLUE })
         });
         assert_eq!(at(&frame, 1, 0), [255, 0, 0, 255]);
         assert_eq!(at(&frame, 2, 0), [0, 0, 255, 255]);
+        assert_eq!(at(&frame, 1, 1), [0, 0, 255, 255]);
     }
 
     #[test]
@@ -280,5 +295,33 @@ mod tests {
     fn empty_shape_paints_nothing() {
         let frame = filled(4, 4, Rect::new(1, 1, 0, 3), 2, WHITE);
         assert_eq!(frame, Frame::transparent(4, 4));
+    }
+
+    #[test]
+    fn put_replaces_the_pixels_under_the_image() {
+        let image = filled(
+            2,
+            2,
+            Rect::new(0, 0, 2, 2),
+            0,
+            Rgba::new(255, 255, 255, 128),
+        );
+        let mut frame = filled(4, 3, Rect::new(0, 0, 4, 3), 0, RED);
+        frame.put((1, 1), &image);
+        assert_eq!(at(&frame, 0, 0), [255, 0, 0, 255]);
+        assert_eq!(at(&frame, 1, 1), [188, 188, 188, 128]);
+        assert_eq!(at(&frame, 2, 2), [188, 188, 188, 128]);
+        assert_eq!(at(&frame, 3, 2), [255, 0, 0, 255]);
+    }
+
+    #[test]
+    fn put_clips_the_image_to_the_frame() {
+        let image = filled(3, 3, Rect::new(0, 0, 3, 3), 0, WHITE);
+        let mut frame = Frame::transparent(4, 4);
+        frame.put((2, 2), &image);
+        assert_eq!(alpha(&frame, 3, 3), 255);
+        assert_eq!(alpha(&frame, 1, 1), 0);
+        frame.put((u32::MAX, u32::MAX), &image);
+        frame.put((0, 0), &Frame::transparent(0, 0));
     }
 }

@@ -2,6 +2,7 @@
 //! image. Nothing here depends on OBS or on D-Bus, so all of it runs under
 //! `cargo test`.
 
+pub mod art;
 pub mod color;
 pub mod draw;
 pub mod frame;

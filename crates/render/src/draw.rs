@@ -4,21 +4,23 @@
 use mpris_core::content::{Content, TrackContent};
 use mpris_core::model::Settings;
 
+use crate::art::ArtCache;
 use crate::color::Linear;
 use crate::frame::Frame;
 use crate::layout::Layout;
 
 /// Draws `content` at the size of `layout`. Nothing lands outside the
-/// frame, and nothing is drawn for [`Content::Nothing`] (B-23).
-pub fn draw(layout: &Layout, content: &Content, settings: &Settings) -> Frame {
+/// frame, and nothing is drawn for [`Content::Nothing`] (B-23). `art` keeps
+/// the scaled cover of one source between frames.
+pub fn draw(layout: &Layout, content: &Content, settings: &Settings, art: &mut ArtCache) -> Frame {
     let mut frame = Frame::transparent(layout.width, layout.height);
     let background = Linear::from(settings.color_background);
     match content {
         Content::Nothing => {}
-        Content::Message(_) => frame.fill(layout.panel, layout.corner_radius, |_| background),
+        Content::Message(_) => frame.fill(layout.panel, layout.corner_radius, |_, _| background),
         Content::Track(track) => {
-            frame.fill(layout.panel, layout.corner_radius, |_| background);
-            draw_track(&mut frame, layout, track, settings);
+            frame.fill(layout.panel, layout.corner_radius, |_, _| background);
+            draw_track(&mut frame, layout, track, settings, art);
         }
     }
     frame
@@ -31,12 +33,22 @@ pub fn bar_fill(width: u32, progress: f32) -> u32 {
     (f64::from(progress.clamp(0.0, 1.0)) * f64::from(width)).round() as u32
 }
 
-fn draw_track(frame: &mut Frame, layout: &Layout, track: &TrackContent, settings: &Settings) {
+fn draw_track(
+    frame: &mut Frame,
+    layout: &Layout,
+    track: &TrackContent,
+    settings: &Settings,
+    art: &mut ArtCache,
+) {
     let radius = layout.corner_radius;
-    if let Some(slot) = layout.art {
+    match (layout.art, &track.art) {
+        (Some(slot), Some(image)) => frame.put((slot.x, slot.y), art.get(image, slot.w, radius)),
         // The slot keeps its place while no cover is ready (B-10).
-        let background = Linear::from(settings.color_background);
-        frame.fill(slot, radius, |_| background);
+        (Some(slot), None) => {
+            let background = Linear::from(settings.color_background);
+            frame.fill(slot, radius, |_, _| background);
+        }
+        (None, _) => {}
     }
     if let (Some(bar), Some(progress)) = (layout.bar, track.progress) {
         let split = bar.x + bar_fill(bar.w, progress);
@@ -44,19 +56,21 @@ fn draw_track(frame: &mut Frame, layout: &Layout, track: &TrackContent, settings
             Linear::from(settings.color_bar_fill),
             Linear::from(settings.color_bar_track),
         );
-        frame.fill(bar, radius, |x| if x < split { fill } else { rest });
+        frame.fill(bar, radius, |x, _| if x < split { fill } else { rest });
     }
     if let (true, Some(pause)) = (track.paused, layout.pause) {
         let text = Linear::from(settings.color_text);
         for bar in pause.bars {
-            frame.fill(bar, radius, |_| text);
+            frame.fill(bar, radius, |_, _| text);
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use mpris_core::model::Rgba;
+    use std::sync::Arc;
+
+    use mpris_core::model::{ArtImage, Rgba};
 
     use super::*;
     use crate::layout::{Rect, layout};
@@ -99,8 +113,38 @@ mod tests {
 
     fn render(settings: &Settings, content: &Content) -> (Layout, Frame) {
         let layout = layout(settings);
-        let frame = draw(&layout, content, settings);
+        let frame = draw(&layout, content, settings, &mut ArtCache::new());
         (layout, frame)
+    }
+
+    fn with_art(content: Content, image: ArtImage) -> Content {
+        match content {
+            Content::Track(track) => Content::Track(TrackContent {
+                art: Some(Arc::new(image)),
+                ..track
+            }),
+            other => other,
+        }
+    }
+
+    /// A 16:9 image, red in its central square, blue on the sides.
+    fn cover() -> ArtImage {
+        let (width, height) = (16, 9);
+        let rgba = (0..height)
+            .flat_map(|_| 0..width)
+            .flat_map(|x| {
+                if (3..13).contains(&x) {
+                    [255, 0, 0, 255]
+                } else {
+                    [0, 0, 255, 255]
+                }
+            })
+            .collect();
+        ArtImage {
+            width,
+            height,
+            rgba,
+        }
     }
 
     fn at(frame: &Frame, x: u32, y: u32) -> [u8; 4] {
@@ -165,6 +209,39 @@ mod tests {
         let (x, y) = center(some(layout.art));
         assert_eq!(at(&frame, x, y), rgba(BACKGROUND));
         assert_eq!(at(&frame, 0, 0), [0; 4], "the slot has rounded corners");
+    }
+
+    #[test]
+    fn art_fills_its_slot_with_the_center_of_the_cover() {
+        for art_right in [false, true] {
+            let s = with(|s| s.art_right = art_right);
+            let (layout, frame) = render(&s, &with_art(track(None, false), cover()));
+            let art = some(layout.art);
+            for x in [
+                art.x + art.w / 8,
+                art.x + art.w / 2,
+                art.right() - art.w / 8,
+            ] {
+                assert_eq!(
+                    at(&frame, x, art.h / 2),
+                    [255, 0, 0, 255],
+                    "{art_right} {x}"
+                );
+            }
+            assert_eq!(at(&frame, art.x, 0), [0; 4], "rounded corner");
+            let (x, y) = center(layout.panel);
+            assert_eq!(at(&frame, x, y), rgba(BACKGROUND));
+        }
+    }
+
+    #[test]
+    fn hidden_art_draws_no_cover() {
+        let content = with_art(track(None, false), cover());
+        let (layout, frame) = render(&with(|s| s.show_art = false), &content);
+        assert_eq!(
+            at(&frame, layout.height / 2, layout.height / 2),
+            rgba(BACKGROUND)
+        );
     }
 
     #[test]
