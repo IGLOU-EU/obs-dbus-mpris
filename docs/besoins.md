@@ -53,7 +53,7 @@ Format des temps : `m:ss`, et `h:mm:ss` à partir d'une heure. Quand la durée e
 
 **B-17 Exactitude de la position.** MPRIS ne signale pas les changements de `Position`. La position affichée est donc extrapolée à partir de la dernière valeur connue, du temps écoulé et de `Rate` (1.0 par défaut), et recalée sur le signal `Seeked`, sur chaque changement de piste ou d'état, et par une relecture périodique. Affichage à la seconde, écart toléré d'une seconde.
 
-**B-18 Pochette en ligne, en option.** En Flatpak, OBS ne peut généralement pas lire les fichiers hors de son bac à sable, et notamment pas les fichiers temporaires où d'autres applications (Chrome en Flatpak, par exemple) déposent leur pochette. Une case dans les propriétés, décochée par défaut, autorise alors la source à chercher la pochette dans une base en ligne :
+**B-18 Pochette en ligne, en option.** En Flatpak, OBS ne peut généralement pas lire les fichiers hors de son bac à sable, et notamment pas les fichiers où d'autres applications Flatpak déposent leur pochette. Constaté le 2026-10-13 : Chrome la met dans son `/tmp` privé, AudioTube dans son dossier `~/.var/app`, tous deux invisibles depuis OBS Flatpak. Une case dans les propriétés, décochée par défaut, autorise alors la source à chercher la pochette dans une base en ligne :
 
 - la recherche n'a lieu que si la miniature locale (B-10) est absente ou illisible,
 - elle se fait par artiste et album, à défaut par artiste et titre,
@@ -157,7 +157,7 @@ La version 1.0 est acceptée quand ces scénarios passent dans OBS Flatpak. Le b
 
 À trancher au moment où elles deviennent utiles, pas avant.
 
-- **Organisation visuelle** : placement et alignement des éléments, marges, disposition du sous-titre, forme de l'indicateur de pause, rendu sans miniature, traitement des textes trop longs. Phase dédiée dans la feuille de route.
+- **Organisation visuelle** : placement et alignement des éléments, marges, disposition du sous-titre, forme de l'indicateur de pause, rendu sans miniature, miniatures non carrées (VLC fournit une vignette YouTube en 16:9 alors que l'emplacement est carré), traitement des textes trop longs. Phase dédiée dans la feuille de route.
 - **Service de pochettes en ligne** : choisi par essai au moment d'implémenter B-18.
 - **Forge de publication** (GitLab ou GitHub) : reportée à la phase de distribution.
 - **Validation dans un OBS natif** : reportée. Aucun OBS natif n'est installé sur le poste de développement, le build natif est produit sans y être testé.

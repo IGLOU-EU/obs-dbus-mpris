@@ -53,6 +53,8 @@ Tout le modèle et toutes les règles, testés sans OBS.
 
 Validé le 2026-10-13 sur mpv (pochette en `data:`, album japonais) et sur LibreWolf avec YouTube, qui tient lieu de navigateur : aucune pochette, `mpris:trackid` constant, durée et position publiées seulement une fois que la page les fournit (avant, la durée est inconnue et la position reste à 0).
 
+Puis avec quatre lecteurs en même temps, tous en lecture : AudioTube (pochette WebP), Chrome (artiste vide, pochette dans son `/tmp` privé), LibreWolf et VLC (pochette JPEG en 16:9, durée au-delà d'une heure). Sans lecteur mémorisé, la règle B-05 choisit bien le premier en lecture par ordre alphabétique. Cinq flux ouverts n'ont donné que quatre lecteurs MPRIS : une application qui joue plusieurs flux n'en expose apparemment qu'un.
+
 Besoins couverts : B-01, B-04 à B-07, B-10 (décodage), B-11 à B-13, B-17, B-22, B-42.
 
 ## Phase 3. Primitives de rendu
