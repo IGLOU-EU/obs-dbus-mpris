@@ -3,7 +3,6 @@
 
 use mpris_core::content::{Content, TrackContent};
 use mpris_core::model::{Rgba, Settings};
-
 use mpris_core::time::format_time;
 
 use crate::art::ArtCache;
