@@ -17,8 +17,13 @@ pub enum Content {
     Track(TrackContent),
 }
 
-/// A field is `None` when its setting hides it or when the player does not
-/// provide it: the layout treats both the same way.
+/// A text or time field is `None` when its setting hides it or when the
+/// player does not provide it: the layout treats both the same way.
+///
+/// `art` is the exception. The thumbnail slot is decided by
+/// `settings.show_art` alone, and `art: None` only means nothing to draw in
+/// it, so the layout does not jump while a cover is pending or after it
+/// failed (B-10).
 #[derive(Debug, Clone, PartialEq)]
 pub struct TrackContent {
     /// Drives the pause indicator (B-21).
@@ -32,6 +37,7 @@ pub struct TrackContent {
     pub duration: Option<Duration>,
     /// Exact position over length, in `[0, 1]`.
     pub progress: Option<f32>,
+    /// What to draw in the thumbnail slot, never whether the slot exists.
     pub art: Option<Arc<ArtImage>>,
 }
 
