@@ -25,14 +25,17 @@ fn instance_of<'a>(players: &'a [Player], key: &PlayerKey) -> Option<&'a Player>
 
 /// The first playing player, or the first player when none plays (B-05).
 fn preferred<'a>(players: impl Iterator<Item = &'a Player>) -> Option<&'a Player> {
-    players.min_by_key(|&p| (!is_playing(p), rank(p)))
+    players.min_by_key(|&p| (!is_playing(p), rank(&p.bus_name)))
 }
 
-/// What "first" means in B-05. Keys come first so the result stays the same
-/// from one session to the next, and the bus name settles the rest so the
-/// order players appeared in never matters.
-fn rank(player: &Player) -> (&PlayerKey, &str) {
-    (&player.key, &player.bus_name)
+/// What "first" means in B-05, for the selection and the selector alike.
+/// Keys come first so the order stays the same from one session to the
+/// next, and the bus name settles the rest so the order players appeared in
+/// never matters. Both are read from the bus name alone, so a remembered
+/// instance gone from the bus still ranks among the others, and a remembered
+/// text that is not an MPRIS name, having no key, ranks first.
+fn rank(bus_name: &str) -> (Option<PlayerKey>, &str) {
+    (player_key(bus_name), bus_name)
 }
 
 fn is_playing(player: &Player) -> bool {
@@ -42,33 +45,34 @@ fn is_playing(player: &Player) -> bool {
 /// One entry of the player selector (B-02).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Choice {
-    pub key: PlayerKey,
+    /// What the setting remembers when this entry is picked (B-03).
+    pub bus_name: String,
     pub label: String,
-    /// `false` for a remembered player that is not on the bus (B-03).
+    /// `false` for a remembered instance that is not on the bus (B-03).
     pub available: bool,
 }
 
-/// Selector entries, one per key, in the order of B-05. A remembered player
-/// missing from the bus keeps its entry so the user's choice is not lost
-/// when the player is closed (B-03).
-pub fn player_choices(players: &[Player], remembered: Option<&PlayerKey>) -> Vec<Choice> {
-    let mut keys: Vec<&PlayerKey> = players.iter().map(|p| &p.key).chain(remembered).collect();
-    keys.sort();
-    keys.dedup();
-    keys.into_iter()
-        .map(|key| match instance_of(players, key) {
-            Some(player) => Choice {
-                key: key.clone(),
-                label: player.identity.clone(),
-                available: true,
-            },
-            None => Choice {
-                key: key.clone(),
-                label: key.0.clone(),
-                available: false,
-            },
-        })
-        .collect()
+/// Selector entries, one per instance, in the order of B-05. The title
+/// labels an instance because it is what tells several instances of one
+/// player apart (B-02). A remembered instance missing from the bus keeps
+/// its entry so the user's choice is not lost when the player is closed
+/// (B-03).
+pub fn player_choices(players: &[Player], remembered: Option<&str>) -> Vec<Choice> {
+    let present = players.iter().map(|p| Choice {
+        bus_name: p.bus_name.clone(),
+        label: p.track.title.clone().unwrap_or_else(|| p.identity.clone()),
+        available: true,
+    });
+    let gone = remembered
+        .filter(|name| !players.iter().any(|p| p.bus_name == *name))
+        .map(|name| Choice {
+            bus_name: name.to_owned(),
+            label: player_key(name).map_or_else(|| name.to_owned(), |key| key.0),
+            available: false,
+        });
+    let mut choices: Vec<Choice> = present.chain(gone).collect();
+    choices.sort_by(|a, b| rank(&a.bus_name).cmp(&rank(&b.bus_name)));
+    choices
 }
 
 #[cfg(test)]
@@ -410,83 +414,166 @@ mod tests {
 
     // player_choices
 
-    fn choice(k: &str, label: &str, available: bool) -> Choice {
+    fn titled(mut player: Player, title: &str) -> Player {
+        player.track.title = Some(title.into());
+        player
+    }
+
+    fn choice(bus_name: &str, label: &str, available: bool) -> Choice {
         Choice {
-            key: key(k),
+            bus_name: bus_name.into(),
             label: label.into(),
             available,
         }
     }
 
-    fn choices(players: &[Player], remembered: Option<&str>) -> Vec<Choice> {
-        player_choices(players, remembered.map(key).as_ref())
-    }
-
     #[test]
     fn no_player_and_nothing_remembered_gives_no_choice() {
-        assert_eq!(choices(&[], None), []);
+        assert_eq!(player_choices(&[], None), []);
     }
 
     #[test]
-    fn one_choice_per_player_sorted_by_key_and_labelled_by_identity() {
+    fn one_entry_per_instance_labelled_by_title_and_sorted_by_key_then_bus_name() {
         let players = [
-            player("vlc", Stopped),
-            player("chromium", Playing),
-            player("mpv", Paused),
+            titled(player("vlc", Stopped), "Song V"),
+            titled(instance("mpv", "instance-c", Stopped), "Song C"),
+            titled(instance("mpv", "instance-a", Paused), "Song A"),
+            titled(instance("mpv", "instance-b", Playing), "Song B"),
+            titled(player("chromium", Playing), "Video"),
         ];
         let expected = [
-            choice("chromium", "chromium identity", true),
-            choice("mpv", "mpv identity", true),
-            choice("vlc", "vlc identity", true),
+            choice("org.mpris.MediaPlayer2.chromium", "Video", true),
+            choice("org.mpris.MediaPlayer2.mpv.instance-a", "Song A", true),
+            choice("org.mpris.MediaPlayer2.mpv.instance-b", "Song B", true),
+            choice("org.mpris.MediaPlayer2.mpv.instance-c", "Song C", true),
+            choice("org.mpris.MediaPlayer2.vlc", "Song V", true),
         ];
         for order in orders(&players) {
-            assert_eq!(choices(&order, None), expected, "{order:?}");
+            assert_eq!(player_choices(&order, None), expected, "{order:?}");
         }
     }
 
     #[test]
-    fn instances_of_one_key_are_merged_under_the_selected_instance_label() {
-        let mut idle = instance("mpv", "instance-a", Paused);
-        idle.identity = "mpv (idle)".into();
-        let mut playing = instance("mpv", "instance-b", Playing);
-        playing.identity = "mpv (playing)".into();
-        let players = [idle, playing, player("vlc", Paused)];
-        let expected = [
-            choice("mpv", "mpv (playing)", true),
-            choice("vlc", "vlc identity", true),
+    fn an_instance_without_a_title_is_labelled_by_its_identity() {
+        let players = [
+            titled(instance("mpv", "instance-a", Playing), "Song A"),
+            instance("mpv", "instance-b", Stopped),
         ];
-        for order in orders(&players) {
-            assert_eq!(choices(&order, None), expected, "{order:?}");
-        }
-    }
-
-    #[test]
-    fn absent_remembered_player_stays_listed_as_unavailable() {
-        let players = [player("vlc", Playing), player("chromium", Paused)];
         assert_eq!(
-            choices(&players, Some("mpv")),
+            player_choices(&players, None),
             [
-                choice("chromium", "chromium identity", true),
-                choice("mpv", "mpv", false),
-                choice("vlc", "vlc identity", true),
+                choice("org.mpris.MediaPlayer2.mpv.instance-a", "Song A", true),
+                choice(
+                    "org.mpris.MediaPlayer2.mpv.instance-b",
+                    "mpv identity",
+                    true
+                ),
             ]
         );
     }
 
     #[test]
-    fn absent_remembered_player_is_listed_even_when_the_bus_is_empty() {
-        assert_eq!(choices(&[], Some("mpv")), [choice("mpv", "mpv", false)]);
+    fn entries_go_by_key_before_bus_name() {
+        let players = [
+            player("mpv-x", Paused),
+            instance("mpv", "instance-a", Paused),
+        ];
+        for order in orders(&players) {
+            assert_eq!(
+                player_choices(&order, None),
+                [
+                    choice(
+                        "org.mpris.MediaPlayer2.mpv.instance-a",
+                        "mpv identity",
+                        true
+                    ),
+                    choice("org.mpris.MediaPlayer2.mpv-x", "mpv-x identity", true),
+                ],
+                "{order:?}"
+            );
+        }
     }
 
     #[test]
-    fn present_remembered_player_is_listed_once_as_available() {
+    fn present_remembered_instance_is_listed_once_as_available() {
         let players = [
-            instance("mpv", "instance-a", Stopped),
-            instance("mpv", "instance-b", Stopped),
+            titled(instance("mpv", "instance-a", Stopped), "Song A"),
+            titled(instance("mpv", "instance-b", Stopped), "Song B"),
+            titled(instance("mpv", "instance-c", Stopped), "Song C"),
         ];
+        let expected = [
+            choice("org.mpris.MediaPlayer2.mpv.instance-a", "Song A", true),
+            choice("org.mpris.MediaPlayer2.mpv.instance-b", "Song B", true),
+            choice("org.mpris.MediaPlayer2.mpv.instance-c", "Song C", true),
+        ];
+        for order in orders(&players) {
+            assert_eq!(
+                player_choices(&order, Some("org.mpris.MediaPlayer2.mpv.instance-b")),
+                expected,
+                "{order:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn gone_remembered_instance_stays_listed_as_unavailable_under_its_key() {
+        let players = [
+            player("vlc", Playing),
+            titled(instance("mpv", "instance-b", Paused), "Song B"),
+            player("chromium", Paused),
+        ];
+        let expected = [
+            choice("org.mpris.MediaPlayer2.chromium", "chromium identity", true),
+            choice("org.mpris.MediaPlayer2.mpv.instance-a", "mpv", false),
+            choice("org.mpris.MediaPlayer2.mpv.instance-b", "Song B", true),
+            choice("org.mpris.MediaPlayer2.vlc", "vlc identity", true),
+        ];
+        for order in orders(&players) {
+            assert_eq!(
+                player_choices(&order, Some("org.mpris.MediaPlayer2.mpv.instance-a")),
+                expected,
+                "{order:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn gone_remembered_instance_is_listed_even_when_the_bus_is_empty() {
         assert_eq!(
-            choices(&players, Some("mpv")),
-            [choice("mpv", "mpv identity", true)]
+            player_choices(&[], Some("org.mpris.MediaPlayer2.mpv.instance-a")),
+            [choice(
+                "org.mpris.MediaPlayer2.mpv.instance-a",
+                "mpv",
+                false
+            )]
+        );
+    }
+
+    #[test]
+    fn remembered_text_that_is_not_an_mpris_name_is_listed_as_itself() {
+        for text in ["mpv", ":1.42", "org.mpris.MediaPlayer2."] {
+            assert_eq!(
+                player_choices(&[], Some(text)),
+                [choice(text, text, false)],
+                "{text:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn remembered_text_that_is_not_an_mpris_name_comes_before_every_player() {
+        let players = [player("audacious", Paused), player("vlc", Playing)];
+        assert_eq!(
+            player_choices(&players, Some("zzz")),
+            [
+                choice("zzz", "zzz", false),
+                choice(
+                    "org.mpris.MediaPlayer2.audacious",
+                    "audacious identity",
+                    true
+                ),
+                choice("org.mpris.MediaPlayer2.vlc", "vlc identity", true),
+            ]
         );
     }
 }
