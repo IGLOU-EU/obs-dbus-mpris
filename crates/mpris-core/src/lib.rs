@@ -7,6 +7,7 @@
 //! player state) and [`dbus`] (the only module that talks to the bus).
 
 pub mod art;
+pub mod color;
 pub mod content;
 pub mod dbus;
 pub mod metadata;
