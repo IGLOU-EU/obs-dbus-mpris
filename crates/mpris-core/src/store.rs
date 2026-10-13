@@ -41,7 +41,8 @@ pub enum Event {
         at: Instant,
     },
     /// A position read at `at`: `Seeked`, a periodic poll, or the re-read
-    /// that follows a track change.
+    /// the adapter makes after every status change and every metadata
+    /// change, where the store can only guess the position (B-17).
     PositionRead {
         unique_name: String,
         position: Duration,
@@ -181,17 +182,18 @@ fn change(
     identity: Option<&str>,
     at: Instant,
 ) {
-    let rate = rate.and_then(finite);
-    let status_changes = status.is_some_and(|status| status != player.status);
-    let rate_changes = rate.is_some_and(|rate| rate != player.rate);
+    let status = status.filter(|status| *status != player.status);
+    let rate = rate.and_then(finite).filter(|rate| *rate != player.rate);
     // The anchor only holds for the status and rate it was taken under:
     // re-anchoring at the event time freezes the position on pause and keeps
-    // it continuous across a rate change (B-17).
-    if status_changes || rate_changes {
-        player.anchor = PositionAnchor {
-            position: display_position(player, at),
-            at,
+    // it continuous across a rate change (B-17). A stop anchors at zero
+    // because MPRIS restarts the track on the next Play.
+    if status.is_some() || rate.is_some() {
+        let position = match status {
+            Some(PlaybackStatus::Stopped) => Duration::ZERO,
+            _ => display_position(player, at),
         };
+        player.anchor = PositionAnchor { position, at };
     }
     if let Some(status) = status {
         player.status = status;
@@ -639,6 +641,37 @@ mod tests {
         let p = player(&store, BUS);
         assert_eq!(p.anchor, anchor(secs(15), t0 + secs(30)));
         assert_eq!(display_position(&p, t0 + secs(32)), secs(17));
+    }
+
+    #[test]
+    fn play_after_stop_restarts_the_track() {
+        let t0 = Instant::now();
+        let mut store = Store::new();
+        store.apply(appeared(
+            UNIQUE,
+            BUS,
+            PlaybackStatus::Playing,
+            track("a", None),
+            secs(100),
+            t0,
+        ));
+        assert!(store.apply(status_changed(PlaybackStatus::Stopped, t0 + secs(5))));
+        assert_eq!(player(&store, BUS).anchor, anchor(secs(0), t0 + secs(5)));
+        assert!(store.apply(status_changed(PlaybackStatus::Playing, t0 + secs(60))));
+        let p = player(&store, BUS);
+        assert_eq!(p.anchor, anchor(secs(0), t0 + secs(60)));
+        assert_eq!(display_position(&p, t0 + secs(62)), secs(2));
+    }
+
+    #[test]
+    fn position_read_after_stop_wins_over_the_restart_guess() {
+        let t0 = Instant::now();
+        let mut store = store_playing(t0);
+        store.apply(status_changed(PlaybackStatus::Stopped, t0 + secs(5)));
+        store.apply(position_read(secs(7), t0 + secs(6)));
+        assert!(!store.apply(status_changed(PlaybackStatus::Stopped, t0 + secs(9))));
+        assert!(!store.apply(rate_changed(1.0, t0 + secs(9))));
+        assert_eq!(player(&store, BUS).anchor, anchor(secs(7), t0 + secs(6)));
     }
 
     #[test]
