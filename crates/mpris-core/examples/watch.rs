@@ -5,9 +5,9 @@
 //! `cargo run --example watch [bus-name] [--strict]`, the bus name standing
 //! for the instance remembered in the source settings (B-03). The
 //! `org.mpris.MediaPlayer2.` prefix may be left out, so `watch mpv` follows
-//! any mpv and `watch mpv.instance-XYZ` that instance alone. `--strict`,
-//! anywhere in the arguments, turns automatic selection off (B-05), so only
-//! the exact remembered instance is shown.
+//! any mpv and `watch mpv.instance-XYZ` that instance while it runs.
+//! `--strict`, anywhere in the arguments, turns automatic selection off
+//! (B-05), so only the exact remembered instance is shown, never a fallback.
 
 use std::thread;
 use std::time::{Duration, Instant};
