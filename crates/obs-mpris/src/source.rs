@@ -16,6 +16,7 @@ use libobs_sys::{
 };
 use mpris_core::color::solid_fill;
 use mpris_core::model::{Rgba, Settings};
+use render::layout::layout;
 
 use crate::locale::obs_module_text;
 use crate::{guard, settings, snapshot};
@@ -131,14 +132,14 @@ unsafe extern "C" fn get_properties(data: *mut c_void) -> *mut obs_properties_t 
 unsafe extern "C" fn get_width(data: *mut c_void) -> u32 {
     guard("get_width", 0, || {
         // SAFETY: OBS passes what `create` returned.
-        unsafe { source(data) }.map_or(0, |s| s.settings().width)
+        unsafe { source(data) }.map_or(0, |s| layout(&s.settings()).width)
     })
 }
 
 unsafe extern "C" fn get_height(data: *mut c_void) -> u32 {
     guard("get_height", 0, || {
         // SAFETY: OBS passes what `create` returned.
-        unsafe { source(data) }.map_or(0, |s| s.settings().height)
+        unsafe { source(data) }.map_or(0, |s| layout(&s.settings()).height)
     })
 }
 
@@ -150,7 +151,8 @@ unsafe extern "C" fn video_render(data: *mut c_void, _effect: *mut gs_effect_t) 
         };
         let (color, width, height) = {
             let settings = source.settings();
-            (settings.color_background, settings.width, settings.height)
+            let layout = layout(&settings);
+            (settings.color_background, layout.width, layout.height)
         };
         // SAFETY: OBS calls `video_render` on its graphics thread, inside
         // the graphics context.

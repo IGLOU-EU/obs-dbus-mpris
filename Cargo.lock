@@ -532,6 +532,7 @@ dependencies = [
  "libobs-sys",
  "log",
  "mpris-core",
+ "render",
 ]
 
 [[package]]

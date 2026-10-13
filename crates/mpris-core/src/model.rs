@@ -142,11 +142,14 @@ pub struct Settings {
     pub color_text: Rgba,
     pub color_bar_fill: Rgba,
     pub color_bar_track: Rgba,
+    /// Total width of the source, thumbnail included. The height follows
+    /// from the font sizes and the shown elements (B-33).
     pub width: u32,
-    pub height: u32,
     pub font_size_title: u32,
     pub font_size_subtitle: u32,
     pub font_size_time: u32,
+    /// Corners of the panel and the thumbnail, 0 for square ones (B-38).
+    pub corner_radius: u32,
     /// Shown when nothing plays. Empty means a fully transparent source.
     pub fallback_text: String,
 }

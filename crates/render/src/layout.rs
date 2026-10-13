@@ -3,7 +3,7 @@
 //! whatever plays.
 
 use mpris_core::model::Settings;
-use mpris_core::settings::{MAX_FONT_SIZE, MAX_SIDE};
+use mpris_core::settings::{MAX_CORNER_RADIUS, MAX_FONT_SIZE, MAX_SIDE};
 
 /// A pixel rectangle of the source, origin at its top left corner.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -71,6 +71,9 @@ pub struct Layout {
     /// The fallback message line (B-23), centered in the panel.
     pub message: Rect,
     pub sizes: FontSizes,
+    /// Of the panel and the thumbnail (B-38). Drawing caps it at half the
+    /// shorter side of each block.
+    pub corner_radius: u32,
 }
 
 // Proportions, each relative to a font size so that the whole source scales
@@ -183,6 +186,7 @@ pub fn layout(settings: &Settings) -> Layout {
         pause: title.map(|title| icon.place(title)),
         message: Rect::new(column.x, (height - title_line) / 2, column.w, title_line),
         sizes,
+        corner_radius: settings.corner_radius.min(MAX_CORNER_RADIUS),
     }
 }
 
@@ -699,6 +703,29 @@ mod tests {
             }
         );
         assert!(l.width <= 8192 && l.height <= 8192, "{l:?}");
+    }
+
+    #[test]
+    fn corner_radius_is_kept_within_the_schema_bounds() {
+        assert_eq!(layout(&settings()).corner_radius, 12);
+        assert_eq!(layout(&with(|s| s.corner_radius = 0)).corner_radius, 0);
+        assert_eq!(
+            layout(&with(|s| s.corner_radius = u32::MAX)).corner_radius,
+            256
+        );
+    }
+
+    #[test]
+    fn corner_radius_does_not_move_anything() {
+        let base = layout(&settings());
+        let round = layout(&with(|s| s.corner_radius = 256));
+        assert_eq!(
+            Layout {
+                corner_radius: 12,
+                ..round
+            },
+            base
+        );
     }
 
     #[test]

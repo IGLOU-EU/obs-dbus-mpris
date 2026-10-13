@@ -16,4 +16,5 @@ doctest = false
 [dependencies]
 libobs-sys = { path = "../libobs-sys" }
 mpris-core = { path = "../mpris-core" }
+render = { path = "../render" }
 log = "0.4"

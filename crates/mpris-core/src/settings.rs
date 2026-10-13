@@ -60,10 +60,13 @@ pub enum SettingValue {
 pub const MAX_SIDE: u32 = 8192;
 /// Same purpose as [`MAX_SIDE`], for glyph rasterization.
 pub const MAX_FONT_SIZE: u32 = 512;
+/// Rounder than any real overlay needs.
+pub const MAX_CORNER_RADIUS: u32 = 256;
 
 // Flags, colors and sizes come from the constructor of their kind, so their
-// default fits their kind by construction. `PLAYER` and `FALLBACK_TEXT` are
-// alone of their kind, and a constructor would serve a single call.
+// default fits their kind by construction. `PLAYER`, `CORNER_RADIUS` and
+// `FALLBACK_TEXT` are alone of their kind, and a constructor would serve a
+// single call.
 const PLAYER: Field = Field {
     key: "player",
     kind: Kind::Player,
@@ -84,10 +87,18 @@ const COLOR_TEXT: Field = color("color_text", Rgba::new(0xFF, 0xFF, 0xFF, 255));
 const COLOR_BAR_FILL: Field = color("color_bar_fill", Rgba::new(0xFF, 0xFF, 0xFF, 255));
 const COLOR_BAR_TRACK: Field = color("color_bar_track", Rgba::new(0xFF, 0xFF, 0xFF, 64));
 const WIDTH: Field = size("width", 600, MAX_SIDE);
-const HEIGHT: Field = size("height", 120, MAX_SIDE);
 const FONT_SIZE_TITLE: Field = size("font_size_title", 32, MAX_FONT_SIZE);
 const FONT_SIZE_SUBTITLE: Field = size("font_size_subtitle", 24, MAX_FONT_SIZE);
 const FONT_SIZE_TIME: Field = size("font_size_time", 20, MAX_FONT_SIZE);
+/// Down to 0, which gives square corners (B-38).
+const CORNER_RADIUS: Field = Field {
+    key: "corner_radius",
+    kind: Kind::Int {
+        min: 0,
+        max: MAX_CORNER_RADIUS,
+    },
+    default: DefaultValue::Int(12),
+};
 const FALLBACK_TEXT: Field = Field {
     key: "fallback_text",
     kind: Kind::Text,
@@ -97,7 +108,8 @@ const FALLBACK_TEXT: Field = Field {
     },
 };
 
-/// Every setting, in the order of besoins.md section 5.
+/// Every setting, in the order of besoins.md section 5, but for the corner
+/// radius, which follows the font sizes.
 pub const FIELDS: &[Field] = &[
     PLAYER,
     AUTO_SELECT,
@@ -115,10 +127,10 @@ pub const FIELDS: &[Field] = &[
     COLOR_BAR_FILL,
     COLOR_BAR_TRACK,
     WIDTH,
-    HEIGHT,
     FONT_SIZE_TITLE,
     FONT_SIZE_SUBTITLE,
     FONT_SIZE_TIME,
+    CORNER_RADIUS,
     FALLBACK_TEXT,
 ];
 
@@ -173,10 +185,10 @@ impl Settings {
             color_bar_fill: read_color(&get, &COLOR_BAR_FILL),
             color_bar_track: read_color(&get, &COLOR_BAR_TRACK),
             width: read_size(&get, &WIDTH),
-            height: read_size(&get, &HEIGHT),
             font_size_title: read_size(&get, &FONT_SIZE_TITLE),
             font_size_subtitle: read_size(&get, &FONT_SIZE_SUBTITLE),
             font_size_time: read_size(&get, &FONT_SIZE_TIME),
+            corner_radius: read_size(&get, &CORNER_RADIUS),
             fallback_text: read_text(&get, &FALLBACK_TEXT),
         }
     }
@@ -203,10 +215,11 @@ impl Rgba {
 
 // The `unreachable!` arms below hold because `from_lookup` gives each reader
 // only fields of its kind, and every default matches its field: the
-// constructors ensure it for flags, colors and sizes, and the literals
-// `PLAYER` and `FALLBACK_TEXT` carry a text default, which `read_text`
-// accepts. A slip panics in `defaults_match_the_table`, which runs every
-// reader on its default.
+// constructors ensure it for flags, colors and sizes, the literals `PLAYER`
+// and `FALLBACK_TEXT` carry a text default, which `read_text` accepts, and
+// the literal `CORNER_RADIUS` an integer one, which `read_size` accepts. A
+// slip panics in `defaults_match_the_table`, which runs every reader on its
+// default.
 
 fn read_bool(get: &impl Fn(&str) -> Option<SettingValue>, field: &Field) -> bool {
     match (get(field.key), field.default) {
@@ -265,10 +278,10 @@ mod tests {
         "color_bar_fill",
         "color_bar_track",
         "width",
-        "height",
         "font_size_title",
         "font_size_subtitle",
         "font_size_time",
+        "corner_radius",
         "fallback_text",
     ];
 
@@ -316,10 +329,10 @@ mod tests {
             color_bar_fill: Rgba::new(0xFF, 0xFF, 0xFF, 255),
             color_bar_track: Rgba::new(0xFF, 0xFF, 0xFF, 64),
             width: 600,
-            height: 120,
             font_size_title: 32,
             font_size_subtitle: 24,
             font_size_time: 20,
+            corner_radius: 12,
             fallback_text: "Nothing playing".to_owned(),
         }
     }
@@ -344,8 +357,8 @@ mod tests {
                 "auto_select" | "fetch_art_online" | "art_right" => "bool",
                 k if k.starts_with("show_") => "bool",
                 k if k.starts_with("color_") => "color",
-                "width" | "height" | "font_size_title" | "font_size_subtitle"
-                | "font_size_time" => "int",
+                "width" | "font_size_title" | "font_size_subtitle" | "font_size_time"
+                | "corner_radius" => "int",
                 "fallback_text" => "text",
                 other => panic!("unexpected key {other}"),
             };
@@ -428,11 +441,23 @@ mod tests {
             .filter(|f| matches!(f.kind, Kind::Int { .. }))
             .collect();
         assert_eq!(ints.len(), 5);
-        for f in ints {
+        for f in ints.into_iter().filter(|f| f.key != "corner_radius") {
             let (min, max) = int_bounds(f.key);
             assert!(min >= 1, "{} allows sizes below 1", f.key);
             assert!((512..=16384).contains(&max), "{} max {max}", f.key);
         }
+    }
+
+    #[test]
+    fn corner_radius_goes_down_to_square_corners() {
+        assert_eq!(int_bounds("corner_radius"), (0, 256));
+        let read = |v: i64| {
+            Settings::from_lookup(|k| (k == "corner_radius").then_some(SettingValue::Int(v)))
+                .corner_radius
+        };
+        assert_eq!(read(0), 0);
+        assert_eq!(read(-5), 0);
+        assert_eq!(read(1000), 256);
     }
 
     #[test]
@@ -456,10 +481,10 @@ mod tests {
                 "color_bar_fill" => Color(Rgba::new(9, 10, 11, 12)),
                 "color_bar_track" => Color(Rgba::new(13, 14, 15, 16)),
                 "width" => Int(800),
-                "height" => Int(200),
                 "font_size_title" => Int(40),
                 "font_size_subtitle" => Int(30),
                 "font_size_time" => Int(10),
+                "corner_radius" => Int(30),
                 "fallback_text" => Text("Aucune lecture".to_owned()),
                 _ => return None,
             })
@@ -481,10 +506,10 @@ mod tests {
             color_bar_fill: Rgba::new(9, 10, 11, 12),
             color_bar_track: Rgba::new(13, 14, 15, 16),
             width: 800,
-            height: 200,
             font_size_title: 40,
             font_size_subtitle: 30,
             font_size_time: 10,
+            corner_radius: 30,
             fallback_text: "Aucune lecture".to_owned(),
         };
         assert_eq!(Settings::from_lookup(stored), expected);
@@ -530,10 +555,10 @@ mod tests {
         type Getter = fn(&Settings) -> u32;
         let sizes: [(&str, Getter); 5] = [
             ("width", |s| s.width),
-            ("height", |s| s.height),
             ("font_size_title", |s| s.font_size_title),
             ("font_size_subtitle", |s| s.font_size_subtitle),
             ("font_size_time", |s| s.font_size_time),
+            ("corner_radius", |s| s.corner_radius),
         ];
         for (key, get) in sizes {
             let (min, max) = int_bounds(key);
