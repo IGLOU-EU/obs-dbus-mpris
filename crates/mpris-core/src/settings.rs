@@ -108,8 +108,7 @@ const FALLBACK_TEXT: Field = Field {
     },
 };
 
-/// Every setting, in the order of besoins.md section 5, but for the corner
-/// radius, which follows the font sizes.
+/// Every setting, in the order of besoins.md section 5.
 pub const FIELDS: &[Field] = &[
     PLAYER,
     AUTO_SELECT,
