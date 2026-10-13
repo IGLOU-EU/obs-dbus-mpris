@@ -1,0 +1,89 @@
+//! Prints, once per second, what a source would show for the players of
+//! the session bus, to check the core against real players without OBS.
+//!
+//! `cargo run --example watch [player-key]`, the key standing for the
+//! player remembered in the source settings (B-03).
+
+use std::thread;
+use std::time::{Duration, Instant};
+
+use mpris_core::content::{Content, content};
+use mpris_core::dbus::Core;
+use mpris_core::model::{PlayerKey, Settings};
+use mpris_core::selection::select_player;
+use mpris_core::time::format_time;
+
+/// Shows the core's own logs, so a missing bus is not mistaken for an
+/// empty one.
+struct StderrLog;
+
+impl log::Log for StderrLog {
+    fn enabled(&self, metadata: &log::Metadata) -> bool {
+        metadata.level() <= log::Level::Info
+    }
+
+    fn log(&self, record: &log::Record) {
+        if self.enabled(record.metadata()) {
+            eprintln!("[{}] {}", record.level(), record.args());
+        }
+    }
+
+    fn flush(&self) {}
+}
+
+fn main() {
+    let _ = log::set_logger(&StderrLog).map(|()| log::set_max_level(log::LevelFilter::Info));
+    let settings = Settings {
+        player: std::env::args().nth(1).map(PlayerKey),
+        ..Settings::default()
+    };
+    let core = Core::start();
+    loop {
+        thread::sleep(Duration::from_secs(1));
+        let snapshot = core.snapshot();
+        let player = select_player(&snapshot.players, settings.player.as_ref());
+        match player {
+            Some(p) => println!(
+                "{} ({}) {:?}, {} player(s) on the bus",
+                p.key.0,
+                p.bus_name,
+                p.status,
+                snapshot.players.len()
+            ),
+            None => println!("no player"),
+        }
+        print_content(&content(player, &settings, Instant::now()));
+    }
+}
+
+fn print_content(content: &Content) {
+    match content {
+        Content::Nothing => println!("  (transparent)"),
+        Content::Message(text) => println!("  {text}"),
+        Content::Track(track) => {
+            let line = |label: &str, value: &Option<String>| {
+                if let Some(value) = value {
+                    println!("  {label:<8}{value}");
+                }
+            };
+            line("title", &track.title);
+            line("artist", &track.artist);
+            line("album", &track.album);
+            let position = track.position.map(format_time).unwrap_or_default();
+            let duration = track
+                .duration
+                .map(|d| format!(" / {}", format_time(d)))
+                .unwrap_or_default();
+            let progress = track
+                .progress
+                .map(|p| format!(" ({:.0}%)", p * 100.0))
+                .unwrap_or_default();
+            let paused = if track.paused { " [paused]" } else { "" };
+            println!("  time    {position}{duration}{progress}{paused}");
+            match &track.art {
+                Some(art) => println!("  art     {}x{}", art.width, art.height),
+                None => println!("  art     none"),
+            }
+        }
+    }
+}

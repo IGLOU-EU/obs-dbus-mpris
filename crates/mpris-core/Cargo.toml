@@ -11,3 +11,8 @@ zbus = "5"
 image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
 base64 = "0.22"
 percent-encoding = "2"
+log = "0.4"
+futures-lite = "2"
+async-io = "2"
+async-channel = "2"
+serde = "1"
