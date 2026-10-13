@@ -24,7 +24,9 @@ const ID: &CStr = c"mpris_now_playing";
 
 /// What OBS keeps for each source it creates.
 struct Source {
-    /// Written by `update` on the UI thread, read on the graphics thread.
+    /// Shared by the threads OBS calls a source from: `create` and
+    /// `get_properties` run on the UI thread, while OBS defers `update` of a
+    /// video source to the graphics thread, where `video_render` runs.
     settings: Mutex<Settings>,
 }
 
@@ -101,8 +103,7 @@ unsafe extern "C" fn destroy(data: *mut c_void) {
 
 unsafe extern "C" fn update(data: *mut c_void, obs_settings: *mut obs_data_t) {
     guard("update", (), || {
-        // Read before taking the lock, so the graphics thread never waits
-        // on OBS reading its settings.
+        // Read before taking the lock, so it is held only for the swap.
         // SAFETY: OBS passes what `create` returned and the live settings of
         // that source.
         let (source, settings) = unsafe { (source(data), settings::read(obs_settings)) };
