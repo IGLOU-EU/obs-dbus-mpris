@@ -59,8 +59,9 @@ pub enum Event {
 /// Every player present on the bus.
 #[derive(Debug, Default)]
 pub struct Store {
-    /// Keyed by well-known name, the identity of a player on the bus (B-04).
-    /// Ordered, so the same state always gives the same snapshot.
+    /// Keyed by well-known name, since every instance of a player shares its
+    /// key (B-04) and still needs its own entry. Ordered, so the same state
+    /// always gives the same snapshot.
     players: BTreeMap<String, Player>,
 }
 
@@ -134,8 +135,10 @@ impl Store {
         }
     }
 
-    /// Immutable copy of every player, ordered by bus name. Images are
-    /// shared, not copied, so taking one on every change stays cheap.
+    /// Immutable copy of every player, ordered by bus name. Decoded images
+    /// are shared, but each `art_url` is copied, and mpv puts its whole
+    /// cover there as a base64 `data:` URI. One such string copy per
+    /// published change is acceptable at the rate bus events arrive.
     pub fn snapshot(&self) -> Snapshot {
         Snapshot {
             players: self.players.values().cloned().collect(),
