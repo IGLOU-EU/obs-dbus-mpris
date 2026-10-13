@@ -6,26 +6,27 @@ Chaque exigence porte un identifiant B-xx, repris par la feuille de route et par
 
 **B-01 Découverte.** La source détecte en continu les lecteurs présents sur le bus de session (noms `org.mpris.MediaPlayer2.*`), apparitions et disparitions comprises, sans redémarrer OBS.
 
-**B-02 Sélecteur.** Les propriétés de la source proposent une liste des lecteurs disponibles, libellés par leur nom lisible (propriété MPRIS `Identity`, par exemple « mpv » ou « Google Chrome »). La liste est triée selon l'ordre défini en B-05.
+**B-02 Sélecteur.** Les propriétés de la source proposent une entrée par instance de lecteur présente sur le bus, libellée par le titre de ce qu'elle joue (`xesam:title`), à défaut par le nom lisible du lecteur (`Identity`). Plusieurs instances d'un même lecteur, plusieurs mpv par exemple, se distinguent ainsi. La liste est triée selon l'ordre défini en B-05.
 
-**B-03 Mémorisation.** Le lecteur choisi dans le sélecteur est mémorisé dans les réglages de la source, donc propre à chaque source et sauvegardé avec la collection de scènes. Si le lecteur mémorisé est absent à l'ouverture des propriétés, il reste dans la liste, marqué « (indisponible) », pour que le choix ne se perde pas.
+**B-03 Mémorisation.** L'instance choisie dans le sélecteur est mémorisée dans les réglages de la source par son nom de bus complet (`org.mpris.MediaPlayer2.mpv.instance-mWyyJbmA`), donc propre à chaque source et sauvegardée avec la collection de scènes. Si elle est absente à l'ouverture des propriétés, elle reste dans la liste, libellée par la clé de son lecteur (B-04) et marquée « (indisponible) », pour que le choix ne se perde pas.
 
-**B-04 Identité stable.** Un lecteur est identifié par le premier segment qui suit `org.mpris.MediaPlayer2.` dans son nom de bus. La spécification MPRIS réserve les segments suivants aux instances multiples, et ils changent à chaque lancement : `org.mpris.MediaPlayer2.mpv.instance-mWyyJbmA` a pour clé `mpv`. Si plusieurs instances d'un même lecteur sont présentes, on retient celle qui est en lecture, sinon la première.
+**B-04 Clé de lecteur.** La clé d'un lecteur est le premier segment qui suit `org.mpris.MediaPlayer2.` dans son nom de bus. La spécification MPRIS réserve les segments suivants aux instances multiples, et ils changent à chaque lancement : `org.mpris.MediaPlayer2.mpv.instance-mWyyJbmA` a pour clé `mpv`. La clé se déduit du nom de bus mémorisé, elle n'est jamais stockée, et sert à retrouver le lecteur quand l'instance mémorisée a disparu (B-06).
 
 **B-05 Règle de sélection.** Le lecteur effectif est réévalué en continu, dans cet ordre :
 
-1. le lecteur mémorisé, s'il est présent, quel que soit son état,
-2. sinon le premier lecteur en lecture (`PlaybackStatus` = `Playing`),
-3. sinon le premier lecteur disponible,
-4. sinon aucun, et la source affiche le message de repli (B-23).
+1. l'instance mémorisée, si elle est présente, quel que soit son état,
+2. sinon une instance du même lecteur (même clé), celle qui est en lecture de préférence, sinon la première,
+3. sinon le premier lecteur en lecture (`PlaybackStatus` = `Playing`),
+4. sinon le premier lecteur disponible,
+5. sinon aucun, et la source affiche le message de repli (B-23).
 
-« Premier » s'entend dans l'ordre alphabétique des clés (B-04), pour un résultat stable d'une session à l'autre.
+« Premier » s'entend dans l'ordre alphabétique des clés (B-04), puis des noms de bus, pour un résultat stable tant que les lecteurs tournent.
 
-Conséquence voulue de l'étape 1 : si le lecteur mémorisé est présent mais arrêté pendant qu'un autre joue, la source affiche le message de repli. Le choix explicite prime sur l'activité des autres lecteurs.
+Conséquence voulue de l'étape 1 : si l'instance mémorisée est présente mais arrêtée pendant qu'un autre lecteur joue, la source affiche le message de repli. Le choix explicite prime sur l'activité des autres lecteurs.
 
-**B-06 Retour automatique.** Le repli ne modifie jamais le choix mémorisé. Quand le lecteur mémorisé réapparaît (relance de mpv avec un nouveau suffixe d'instance, par exemple), la source y revient d'elle-même.
+**B-06 Retour automatique.** Le repli ne modifie jamais le choix mémorisé. Quand l'instance mémorisée a disparu et qu'un lecteur de même clé apparaît (relance de mpv avec un nouveau suffixe d'instance, par exemple), la source le suit d'elle-même (étape 2).
 
-**B-07 Nouvelle source.** Une source sans choix mémorisé applique la règle B-05 à partir de l'étape 2.
+**B-07 Nouvelle source.** Une source sans choix mémorisé applique la règle B-05 à partir de l'étape 3.
 
 ## 2. Contenu affiché
 
@@ -94,7 +95,7 @@ Récapitulatif des réglages d'une source. Les valeurs par défaut des couleurs 
 
 | Clé | Type | Défaut proposé | Besoin |
 |-----|------|----------------|--------|
-| `player` | liste | vide (aucun choix mémorisé) | B-02 à B-07 |
+| `player` | liste (nom de bus de l'instance) | vide (aucun choix mémorisé) | B-02 à B-07 |
 | `show_art` | case | oui | B-10 |
 | `fetch_art_online` | case | non | B-18 |
 | `show_title` | case | oui | B-11 |
@@ -151,6 +152,7 @@ La version 1.0 est acceptée quand ces scénarios passent dans OBS Flatpak. Le b
 6. Chaque case masque son élément. Le flip déplace la miniature. Des couleurs à alpha nul rendent les zones concernées transparentes. Largeur, hauteur et tailles de police sont respectées.
 7. Un titre très long, ou en japonais, s'affiche lisiblement et ne déborde pas du cadre.
 8. Deux sources réglées sur deux lecteurs différents vivent côte à côte sans interférer.
+10. Trois instances de mpv jouent : le sélecteur propose trois entrées, chacune libellée par son titre, et la source affiche exactement l'instance choisie.
 9. Une piste dont la miniature locale est illisible : option B-18 décochée, emplacement vide et aucune requête réseau. Option cochée, une pochette trouvée en ligne s'affiche, et changer de piste puis revenir ne relance pas de requête.
 
 ## 8. Questions ouvertes

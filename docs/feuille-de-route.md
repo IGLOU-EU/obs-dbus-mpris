@@ -55,7 +55,7 @@ Validé le 2026-10-13 sur mpv (pochette en `data:`, album japonais) et sur Libre
 
 Puis avec quatre lecteurs en même temps, tous en lecture : AudioTube (pochette WebP), Chrome (artiste vide, pochette dans son `/tmp` privé), LibreWolf et VLC (pochette JPEG en 16:9, durée au-delà d'une heure). Sans lecteur mémorisé, la règle B-05 choisit bien le premier en lecture par ordre alphabétique. Cinq flux ouverts n'ont donné que quatre lecteurs MPRIS : une application qui joue plusieurs flux n'en expose apparemment qu'un.
 
-Enfin, trois instances de mpv en lecture, chacune avec sa pochette en `data:` : elles partagent la clé `mpv` (B-04). Comme toutes jouent, la source suit la première par nom de bus, dont le suffixe est aléatoire. Le choix est stable tant qu'elles tournent, mais arbitraire. Accepté : écouter plusieurs morceaux à la fois n'est pas un usage réel, et une instance en lecture l'emporte déjà sur une instance en pause.
+Enfin, trois instances de mpv en lecture, chacune avec sa pochette en `data:` : elles partageaient une seule entrée `mpv` dans le sélecteur, et la source suivait l'une d'elles, arbitrairement. Plusieurs mpv en même temps étant un usage réel, le sélecteur propose désormais une entrée par instance, libellée par son titre (B-02, B-03, B-05). FreeTube n'expose pas MPRIS et n'apparaît donc pas, ce qui reste hors périmètre.
 
 Besoins couverts : B-01, B-04 à B-07, B-10 (décodage), B-11 à B-13, B-17, B-22, B-42.
 
