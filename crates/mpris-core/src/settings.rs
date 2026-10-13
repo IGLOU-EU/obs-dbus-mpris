@@ -57,9 +57,9 @@ pub enum SettingValue {
 
 /// Far beyond any real overlay. The bound only stops a typo from asking
 /// for a gigantic texture.
-const MAX_SIDE: u32 = 8192;
+pub const MAX_SIDE: u32 = 8192;
 /// Same purpose as [`MAX_SIDE`], for glyph rasterization.
-const MAX_FONT_SIZE: u32 = 512;
+pub const MAX_FONT_SIZE: u32 = 512;
 
 // Flags, colors and sizes come from the constructor of their kind, so their
 // default fits their kind by construction. `PLAYER` and `FALLBACK_TEXT` are
