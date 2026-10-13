@@ -8,6 +8,7 @@ publish = false
 
 [dependencies]
 cosmic-text = "0.17"
+log = "0.4"
 mpris-core = { path = "../mpris-core" }
 
 [dev-dependencies]
