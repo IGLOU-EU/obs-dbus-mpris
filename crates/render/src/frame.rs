@@ -3,7 +3,7 @@
 
 use mpris_core::model::Rgba;
 
-use crate::color::{Linear, decode, encode};
+use crate::color::{Linear, decode, encode, nearest};
 use crate::layout::Rect;
 
 /// RGBA8, row-major, premultiplied in linear light then sRGB-encoded: the
@@ -57,15 +57,17 @@ impl Frame {
             return;
         };
         let radius = f64::from(radius.min(shape.w / 2).min(shape.h / 2));
+        let mut memo = Memo::default();
         for y in area.y..area.bottom() {
             let dy = inset(y, shape.y, shape.bottom());
             for x in area.x..area.right() {
                 let dx = inset(x, shape.x, shape.right());
                 let i = self.index(x, y);
-                self.blend(i, paint(x, y).scaled(coverage(dx, dy, radius)));
+                self.blend(i, paint(x, y).scaled(coverage(dx, dy, radius)), &mut memo);
             }
         }
     }
+
     /// Blends `color` through an 8-bit coverage `mask` of `width` columns
     /// whose top left corner lands on `(x, y)`, only within `clip`.
     pub(crate) fn blend_mask(
@@ -82,13 +84,14 @@ impl Frame {
         if width == 0 {
             return;
         }
+        let mut memo = Memo::default();
         let rows = mask.chunks(width as usize).zip(i64::from(y)..);
         for (line, py) in rows.filter(|(_, py)| area.holds_row(*py)) {
             let columns = line.iter().zip(i64::from(x)..);
             for (&m, px) in columns.filter(|(m, px)| **m > 0 && area.holds_column(*px)) {
                 // Both fit in u32: they lie within the area.
                 let i = self.index(px as u32, py as u32);
-                self.blend(i, color.scaled(f32::from(m) / 255.0));
+                self.blend(i, color.scaled(f32::from(m) / 255.0), &mut memo);
             }
         }
     }
@@ -110,6 +113,7 @@ impl Frame {
         if width == 0 {
             return;
         }
+        let mut memo = Memo::default();
         let rows = rgba.chunks(width as usize * 4).zip(i64::from(y)..);
         for (line, py) in rows.filter(|(_, py)| area.holds_row(*py)) {
             let columns = line.chunks_exact(4).zip(i64::from(x)..);
@@ -117,7 +121,7 @@ impl Frame {
                 // Both fit in u32: they lie within the area.
                 let i = self.index(px as u32, py as u32);
                 let color = Linear::from(Rgba::new(p[0], p[1], p[2], p[3]));
-                self.blend(i, color.scaled(opacity));
+                self.blend(i, color.scaled(opacity), &mut memo);
             }
         }
     }
@@ -145,14 +149,14 @@ impl Frame {
     }
 
     /// Lays `src`, already scaled by its coverage, over the pixel at `i`.
-    fn blend(&mut self, i: usize, src: Linear) {
+    fn blend(&mut self, i: usize, src: Linear, memo: &mut Memo) {
         if src.a <= 0.0 {
             return;
         }
         let pixel = &mut self.pixels[i..i + 4];
-        if src.a >= 1.0 {
-            pixel[..3].copy_from_slice(&src.rgb.map(encode));
-            pixel[3] = u8::MAX;
+        // Over nothing, or opaque, the color replaces the pixel.
+        if src.a >= 1.0 || pixel[3] == 0 {
+            pixel.copy_from_slice(&memo.encode(src));
             return;
         }
         let keep = 1.0 - src.a;
@@ -160,7 +164,26 @@ impl Frame {
             *channel = encode(light + decode(*channel) * keep);
         }
         let a = src.a + f32::from(pixel[3]) / 255.0 * keep;
-        pixel[3] = (a.clamp(0.0, 1.0) * 255.0).round() as u8;
+        pixel[3] = nearest(a.clamp(0.0, 1.0) * 255.0) as u8;
+    }
+}
+
+/// The last color encoded and its bytes. A shape paints long runs of one
+/// color, and encoding is most of the cost of painting a pixel.
+#[derive(Default)]
+struct Memo(Option<(Linear, [u8; 4])>);
+
+impl Memo {
+    fn encode(&mut self, color: Linear) -> [u8; 4] {
+        match self.0 {
+            Some((last, bytes)) if last == color => bytes,
+            _ => {
+                let [r, g, b] = color.rgb.map(encode);
+                let bytes = [r, g, b, nearest(color.a.clamp(0.0, 1.0) * 255.0) as u8];
+                self.0 = Some((color, bytes));
+                bytes
+            }
+        }
     }
 }
 

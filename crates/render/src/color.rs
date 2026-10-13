@@ -76,7 +76,14 @@ pub(crate) fn decode(channel: u8) -> f32 {
 pub(crate) fn encode(linear: f32) -> u8 {
     let last = (ENCODE_STEPS - 1) as f32;
     // A NaN casts to 0.
-    ENCODE[(linear.clamp(0.0, 1.0) * last).round() as usize]
+    ENCODE[nearest(linear.clamp(0.0, 1.0) * last) as usize]
+}
+
+/// `value` rounded to the nearest integer, for a value that is not
+/// negative. `f32::round` is a call into libm on x86-64, too slow for a
+/// function that runs for every pixel drawn.
+pub(crate) fn nearest(value: f32) -> f32 {
+    (value + 0.5).trunc()
 }
 
 /// A color in linear light, premultiplied by its alpha: the form in which
