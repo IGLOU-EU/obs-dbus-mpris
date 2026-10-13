@@ -516,6 +516,32 @@ fn drop_returns_quickly_while_an_art_load_hangs() {
 }
 
 #[test]
+fn a_hung_art_load_gives_up_and_the_loop_moves_on() {
+    let bus = PrivateBus::start();
+    let mut cover = HungFile::new();
+    let fake = FakePlayer::start(
+        &bus,
+        FAKE,
+        Fake::new(
+            "Fake Player",
+            "Paused",
+            track("/fake/1", "Title one", Some(&cover.url())),
+        ),
+    );
+    let core = Core::start_at(&bus.address);
+    wait_until("the core to open the cover", || cover.has_waiting_open());
+
+    wait_for(&core, "the hung cover to count as missing", |s| {
+        find(s, FAKE).is_some_and(|p| p.art == Art::Failed)
+    });
+    fake.set_status("Playing");
+    wait_for(&core, "the player to keep updating", |s| {
+        find(s, FAKE).is_some_and(|p| p.status == PlaybackStatus::Playing)
+    });
+    cover.release();
+}
+
+#[test]
 fn invalid_addresses_give_an_empty_snapshot() {
     for address in [
         "",

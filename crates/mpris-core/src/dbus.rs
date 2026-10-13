@@ -58,6 +58,11 @@ const CALL_TIMEOUT: Duration = Duration::from_secs(1);
 /// Players that omit `Seeked` drift by at most this much (D-05, B-17).
 const POLL_INTERVAL: Duration = Duration::from_secs(1);
 
+/// A cover slower than this counts as missing (B-10): every player's
+/// snapshot waits on the load, and a source without its thumbnail is better
+/// than one frozen behind a hung network mount.
+const ART_TIMEOUT: Duration = Duration::from_secs(2);
+
 /// The one slot shared between threads: replaced whole, held only to clone.
 type Shared = Arc<Mutex<Arc<Snapshot>>>;
 
@@ -445,18 +450,34 @@ impl<'a> Watcher<'a> {
     /// changed. Loading never runs on a render thread (B-41). It runs on
     /// the `blocking` pool, awaited within the loop that races the stop
     /// signal, because a cover on a hung network mount can block its reader
-    /// for good: a stop abandons such a load instead of waiting for it.
+    /// for good: a stop abandons such a load instead of waiting for it, and
+    /// [`ART_TIMEOUT`] gives up on it so the other players keep updating.
+    /// The abandoned read keeps its pool thread until the kernel returns,
+    /// at most one per track since a failed cover is not retried.
     async fn commit(&mut self, changed: bool) {
         if !changed {
             return;
         }
         for (owner, url) in self.store.pending_art() {
             let loading = url.clone();
-            let image = blocking::unblock(move || load_art(&loading))
-                .await
-                .inspect_err(|error| log::debug!("MPRIS: no art for {owner}: {error}"))
-                .ok()
-                .map(Arc::new);
+            let load = blocking::unblock(move || load_art(&loading));
+            let give_up = async {
+                Timer::after(ART_TIMEOUT).await;
+                None
+            };
+            let image = match async { Some(load.await) }.or(give_up).await {
+                Some(Ok(image)) => Some(Arc::new(image)),
+                Some(Err(error)) => {
+                    log::debug!("MPRIS: no art for {owner}: {error}");
+                    None
+                }
+                None => {
+                    log::warn!(
+                        "MPRIS: art for {owner} took over {ART_TIMEOUT:?}, shown without it"
+                    );
+                    None
+                }
+            };
             self.store.apply(Event::ArtLoaded {
                 unique_name: owner,
                 url,
