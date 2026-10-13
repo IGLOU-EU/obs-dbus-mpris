@@ -87,6 +87,9 @@ impl Store {
                 position,
                 at,
             } => {
+                let art = self
+                    .art_of_process(&unique_name, &track)
+                    .unwrap_or_else(|| art_for(&track));
                 let player = Player {
                     unique_name,
                     bus_name,
@@ -94,7 +97,7 @@ impl Store {
                     identity,
                     status,
                     rate: finite(rate).unwrap_or(1.0),
-                    art: art_for(&track),
+                    art,
                     track,
                     anchor: PositionAnchor { position, at },
                 };
@@ -160,6 +163,21 @@ impl Store {
         pending.sort();
         pending.dedup();
         pending
+    }
+
+    /// Art another name of the process already holds for `track`, so a
+    /// process taking a new name (VLC hands `vlc` to its next instance)
+    /// neither decodes its cover again nor keeps a second copy. A new track
+    /// under the same url does not count, as in [`set_track`].
+    fn art_of_process(&self, unique_name: &str, track: &Track) -> Option<Art> {
+        self.players
+            .values()
+            .find(|player| {
+                player.unique_name == unique_name
+                    && player.track.art_url == track.art_url
+                    && !is_new_track(&player.track, track)
+            })
+            .map(|player| player.art.clone())
     }
 
     /// Edits every player owned by `unique_name`, since signals come from
@@ -1080,11 +1098,13 @@ mod tests {
 
     // One process owning several MPRIS names.
 
+    const SECOND: &str = "org.mpris.MediaPlayer2.mpv.instance2";
+
     fn store_with_two_names(t0: Instant) -> Store {
         let mut store = store_playing(t0);
         let second = appeared(
             UNIQUE,
-            "org.mpris.MediaPlayer2.mpv.instance2",
+            SECOND,
             PlaybackStatus::Playing,
             track("a", Some("file:///a.png")),
             secs(10),
@@ -1146,6 +1166,105 @@ mod tests {
     }
 
     #[test]
+    fn a_name_moving_to_a_watched_process_shares_its_decoded_art() {
+        let t0 = Instant::now();
+        let cover = track("a", Some("file:///a.png"));
+        let mut store = Store::new();
+        let first = appeared(
+            ":1.10",
+            BUS,
+            PlaybackStatus::Paused,
+            track("x", None),
+            secs(0),
+            t0,
+        );
+        store.apply(first);
+        let second = appeared(
+            UNIQUE,
+            SECOND,
+            PlaybackStatus::Playing,
+            cover.clone(),
+            secs(5),
+            t0,
+        );
+        store.apply(second);
+        let image = image();
+        store.apply(art_loaded("file:///a.png", Some(image.clone())));
+
+        // The first instance quits and its name moves to the second one.
+        store.apply(Event::Vanished {
+            bus_name: BUS.into(),
+        });
+        let moved = appeared(
+            UNIQUE,
+            BUS,
+            PlaybackStatus::Playing,
+            cover,
+            secs(6),
+            t0 + secs(1),
+        );
+        assert!(store.apply(moved));
+        match player(&store, BUS).art {
+            Art::Ready(shared) => assert!(Arc::ptr_eq(&shared, &image)),
+            other => panic!("expected Ready, got {other:?}"),
+        }
+        assert!(store.pending_art().is_empty());
+    }
+
+    #[test]
+    fn another_name_of_the_process_keeps_a_failed_art() {
+        let t0 = Instant::now();
+        let mut store = store_playing(t0);
+        store.apply(art_loaded("file:///a.png", None));
+        let event = appeared(
+            UNIQUE,
+            SECOND,
+            PlaybackStatus::Playing,
+            track("a", Some("file:///a.png")),
+            secs(10),
+            t0,
+        );
+        store.apply(event);
+        assert_eq!(player(&store, SECOND).art, Art::Failed);
+        assert!(store.pending_art().is_empty());
+    }
+
+    #[test]
+    fn art_is_loaded_again_unless_the_same_process_shows_the_same_cover() {
+        let t0 = Instant::now();
+        let cases = [
+            (
+                ":1.99",
+                track("a", Some("file:///a.png")),
+                "another process",
+            ),
+            (UNIQUE, track("a", Some("file:///b.png")), "another url"),
+            // Some players write every cover to one fixed path.
+            (UNIQUE, track("b", Some("file:///a.png")), "another track"),
+        ];
+        for (unique_name, shown, case) in cases {
+            let mut store = store_playing(t0);
+            store.apply(art_loaded("file:///a.png", Some(image())));
+            let event = appeared(
+                unique_name,
+                SECOND,
+                PlaybackStatus::Playing,
+                shown.clone(),
+                secs(10),
+                t0,
+            );
+            store.apply(event);
+            assert_eq!(player(&store, SECOND).art, Art::Pending, "{case}");
+            let url = shown.art_url.expect("a cover");
+            assert_eq!(
+                store.pending_art(),
+                [(unique_name.to_string(), url)],
+                "{case}"
+            );
+        }
+    }
+
+    #[test]
     fn vanishing_one_name_keeps_the_others_of_the_process() {
         let t0 = Instant::now();
         let mut store = store_with_two_names(t0);
@@ -1154,10 +1273,7 @@ mod tests {
         });
         let snapshot = store.snapshot();
         assert_eq!(snapshot.players.len(), 1);
-        assert_eq!(
-            snapshot.players[0].bus_name,
-            "org.mpris.MediaPlayer2.mpv.instance2"
-        );
+        assert_eq!(snapshot.players[0].bus_name, SECOND);
         assert!(store.apply(status_changed(PlaybackStatus::Paused, t0 + secs(1))));
     }
 }
