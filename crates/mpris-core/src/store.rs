@@ -22,6 +22,7 @@ pub enum Event {
         unique_name: String,
         bus_name: String,
         key: PlayerKey,
+        /// Never blank, see [`Player::identity`].
         identity: String,
         status: PlaybackStatus,
         rate: f64,
@@ -37,6 +38,7 @@ pub enum Event {
         status: Option<PlaybackStatus>,
         rate: Option<f64>,
         track: Option<Track>,
+        /// Never blank, see [`Player::identity`].
         identity: Option<String>,
         at: Instant,
     },

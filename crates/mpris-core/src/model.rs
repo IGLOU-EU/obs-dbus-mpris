@@ -96,7 +96,10 @@ pub struct Player {
     /// Well-known name, `org.mpris.MediaPlayer2.<key>[.<instance>]`.
     pub bus_name: String,
     pub key: PlayerKey,
-    /// `Identity`, the human-readable name shown in the selector.
+    /// `Identity`, the human-readable name shown in the selector (B-02).
+    /// Never blank: the adapter reads it with
+    /// [`crate::player::read_identity`] and falls back to the key when the
+    /// player gives none.
     pub identity: String,
     pub status: PlaybackStatus,
     /// `Rate`, 1.0 when the player does not report it.
