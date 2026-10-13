@@ -69,7 +69,7 @@ Le service se choisit par un essai sur des pistes réelles, japonaises comprises
 
 **B-20 Lecture.** Affichage complet selon les cases cochées.
 
-**B-21 Pause.** Affichage complet, temps et barre figés, et un indicateur de pause. La forme de l'indicateur relève de l'organisation visuelle.
+**B-21 Pause.** Affichage complet, temps et barre figés, et un indicateur de pause. L'indicateur est un pictogramme pause (deux barres verticales) à la couleur du texte, au bout de la ligne de titre.
 
 **B-22 Arrêt ou absence.** Lecteur effectif arrêté (`Stopped`), aucun lecteur, ou bus de session injoignable : la source affiche le message de repli seul.
 
@@ -83,13 +83,58 @@ Le service se choisit par un essai sur des pistes réelles, japonaises comprises
 
 **B-32 Une couleur de texte** commune au titre, au sous-titre et aux temps.
 
-**B-33 Taille de la source.** Largeur et hauteur en pixels, puisqu'OBS n'offre ni positionnement relatif ni mise en page adaptative. La miniature est carrée, de côté égal à la hauteur.
+**B-33 Taille de la source.** La largeur se règle en pixels, puisqu'OBS n'offre ni positionnement relatif ni mise en page adaptative. La hauteur se calcule d'après les tailles de police et les éléments cochés, jamais d'après la piste en cours : la source garde ainsi la même taille quoi qu'il joue, et ne fait pas sauter la scène. La miniature est carrée, de côté égal à cette hauteur, et compte dans la largeur.
+
+**B-37 Disposition.** Quatre blocs visuels : titre, sous-titre, progression (barre puis temps), image. Le panneau de texte et l'image sont deux blocs collés, chacun avec ses coins arrondis, sans fond derrière l'image. Une miniature non carrée est recadrée au centre. Le sous-titre s'écrit « Album - Artiste », ou l'un des deux seul s'il manque l'autre. Sous la barre, la position est alignée à gauche et la durée à droite. Les marges et les écarts sont proportionnels aux tailles de police, sans réglage dédié. Maquette de référence, des éléments les plus réduits à la disposition complète, miniature à gauche puis à droite :
+
+```
+╭───────────────────────────────────────────────────╮
+│                                                   │
+│  TITRE                                            │
+│                                                   │
+╰───────────────────────────────────────────────────╯
+╭───────────────────────────────────────────────────╮
+│                                                   │
+│  TITRE                                            │
+│  Nom Album - Artist                               │
+│                                                   │
+╰───────────────────────────────────────────────────╯
+╭───────────────────────────────────────────────────╮
+│                                                   │
+│  TITRE                                            │
+│  Nom Album - Artist                               │
+│                                                   │
+│  ════════════════════════════════───────────────  │
+│  1:21                                       1:56  │
+│                                                   │
+╰───────────────────────────────────────────────────╯
+╭──────────────────╮╭───────────────────────────────────────────────────╮
+│                  ││                                                   │
+│                  ││  Titre                                            │
+│                  ││  Nom Album - Artist                               │
+│       IMAGE      ││                                                   │
+│                  ││  ════════════════════════════════───────────────  │
+│                  ││  1:21                                       1:56  │
+│                  ││                                                   │
+╰──────────────────╯╰───────────────────────────────────────────────────╯
+╭───────────────────────────────────────────────────╮╭──────────────────╮
+│                                                   ││                  │
+│  Titre                                            ││                  │
+│  Nom Album - Artist                               ││                  │
+│                                                   ││       IMAGE      │
+│  ════════════════════════════════───────────────  ││                  │
+│  1:21                                       1:56  ││                  │
+│                                                   ││                  │
+╰───────────────────────────────────────────────────╯╰──────────────────╯
+```
+
+**B-38 Coins arrondis.** Un rayon en pixels, appliqué au panneau et à l'image. 0 donne des coins carrés.
 
 **B-34 Tailles de police.** Trois tailles en pixels : titre, sous-titre, temps.
 
 **B-35 Police.** Police sans empattement par défaut du système, sans choix de police dans les propriétés. Le rendu doit se replier sur une police capable d'afficher les écritures non latines : le cas est réel, mpv expose aujourd'hui un album au titre japonais.
 
-**B-36 Débordement.** Aucun élément ne déborde du cadre de la source, quelle que soit la longueur des textes. Le traitement des textes trop longs (points de suspension ou défilement) relève de l'organisation visuelle.
+**B-36 Débordement.** Aucun élément ne déborde du cadre de la source, quelle que soit la longueur des textes. Un texte trop long est tronqué par des points de suspension. Le défilement reste une option pour plus tard.
 
 ## 5. Propriétés de la source
 
@@ -113,7 +158,7 @@ Récapitulatif des réglages d'une source. Les valeurs par défaut des couleurs 
 | `color_bar_fill` | couleur RGBA | `#FFFFFF`, alpha 100 % | B-31 |
 | `color_bar_track` | couleur RGBA | `#FFFFFF`, alpha 25 % | B-31 |
 | `width` | entier (px) | 600 | B-33 |
-| `height` | entier (px) | 120 | B-33 |
+| `corner_radius` | entier (px) | 12 | B-38 |
 | `font_size_title` | entier (px) | 32 | B-34 |
 | `font_size_subtitle` | entier (px) | 24 | B-34 |
 | `font_size_time` | entier (px) | 20 | B-34 |

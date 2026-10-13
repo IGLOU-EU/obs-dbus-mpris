@@ -13,7 +13,7 @@ Les validations se font dans OBS Flatpak. Le build natif est produit à chaque p
 | 0 | Cadrage | fait |
 | 1 | Squelette marchant, natif et Flatpak | fait, essai dans OBS en attente |
 | 2 | Cœur MPRIS, hors OBS | fait, lecteur local (Strawberry ou Elisa) à vérifier à l'occasion |
-| 3 | Primitives de rendu | à faire |
+| 3 | Rendu et disposition | en cours |
 | 4 | Source complète | à faire |
 | 5 | Pochette en ligne, en option | à faire |
 | 6 | Organisation visuelle | à faire |
@@ -58,19 +58,18 @@ Enfin, trois instances de mpv en lecture, chacune avec sa pochette en `data:` : 
 
 Besoins couverts : B-01, B-04 à B-07, B-10 (décodage), B-11 à B-13, B-17, B-22, B-42.
 
-## Phase 3. Primitives de rendu
+## Phase 3. Rendu et disposition
 
-Savoir dessiner chaque brique dans la source, avec un contenu encore fixe.
+Dessiner les quatre blocs selon la maquette de B-37, à partir du contenu réel du lecteur suivi. La disposition, prévue au départ en phase 6, a été fixée le 2026-10-14 et rejoint cette phase.
 
-- Essai comparatif du rendu de texte et décision consignée dans [architecture.md](architecture.md) (D-04).
-- Texture de texte, avec repli sur les caractères japonais.
-- Texture de miniature depuis l'image décodée.
-- Barre de progression (piste et remplissage).
-- Cache de textures qui ne régénère que ce qui change (B-43).
+- Essai du rendu de texte dans le bac à sable d'OBS Flatpak, avec repli sur les caractères japonais, et décision consignée (D-04).
+- Calcul pur de la disposition à partir des réglages, puis dessin de la source entière en une image, testés hors d'OBS.
+- Miniature recadrée au carré, barre, temps, pictogramme pause, message de repli, coins arrondis, flip.
+- Image régénérée seulement quand ce qu'elle montre change (B-43).
 
-**Fini quand** la source du squelette affiche un titre japonais, une miniature et une barre, aux couleurs et tailles réglées, sans débordement.
+**Fini quand** la source affiche dans OBS la piste suivie selon la maquette, japonais compris, sans débordement, et suit chaque réglage.
 
-Besoins couverts : B-31, B-32, B-34, B-35, B-36, B-43.
+Besoins couverts : B-10, B-20 à B-23, B-30 à B-38, B-43.
 
 ## Phase 4. Source complète
 
@@ -97,14 +96,9 @@ Besoins couverts : B-18, B-48.
 
 ## Phase 6. Organisation visuelle
 
-La disposition laissée de côté au cadrage. Elle se définit ensemble avant d'être codée.
+Retouches de la disposition livrée en phase 3, une fois vue sur une vraie scène : proportions des marges, défilement des textes longs si les points de suspension gênent.
 
-- Placement et alignement des éléments, marges.
-- Disposition du sous-titre (artiste et album).
-- Forme de l'indicateur de pause, rendu sans miniature.
-- Textes trop longs : points de suspension ou défilement.
-
-**Fini quand** le scénario d'acceptation 7 passe et que la disposition est validée à l'œil sur une vraie scène.
+**Fini quand** la disposition est validée à l'œil sur une vraie scène.
 
 ## Phase 7. Distribution
 
