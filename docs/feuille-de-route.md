@@ -12,7 +12,7 @@ Les validations se font dans OBS Flatpak. Le build natif est produit à chaque p
 |-------|-------|------|
 | 0 | Cadrage | fait |
 | 1 | Squelette marchant, natif et Flatpak | à faire |
-| 2 | Cœur MPRIS, hors OBS | en cours : écrit et testé, reste la validation sur Chrome et Strawberry ou Elisa |
+| 2 | Cœur MPRIS, hors OBS | fait, lecteur local (Strawberry ou Elisa) à vérifier à l'occasion |
 | 3 | Primitives de rendu | à faire |
 | 4 | Source complète | à faire |
 | 5 | Pochette en ligne, en option | à faire |
@@ -50,6 +50,8 @@ Tout le modèle et toutes les règles, testés sans OBS.
 - Un exemple `cargo run --example watch` qui affiche en continu le lecteur effectif et son contenu, pour valider sur les vrais lecteurs (mpv, Chrome, Strawberry ou Elisa).
 
 **Fini quand** les tests unitaires et d'intégration passent, et que `watch` donne un état juste sur les lecteurs réels.
+
+Validé le 2026-10-13 sur mpv (pochette en `data:`, album japonais) et sur LibreWolf avec YouTube, qui tient lieu de navigateur : aucune pochette, `mpris:trackid` constant, durée et position publiées seulement une fois que la page les fournit (avant, la durée est inconnue et la position reste à 0).
 
 Besoins couverts : B-01, B-04 à B-07, B-10 (décodage), B-11 à B-13, B-17, B-22, B-42.
 

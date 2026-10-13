@@ -33,7 +33,7 @@ Données lues : dans `Metadata`, les clés `xesam:title`, `xesam:artist`, `xesam
 
 Chaque élément s'affiche ou se masque par une case à cocher indépendante.
 
-**B-10 Miniature.** Image tirée de `mpris:artUrl`. Formats pris en charge : `data:` encodé en base64 (cas réel de mpv, qui fournit `data:image/jpeg;base64,…`) et `file://`. Les URL `http(s)://` sont hors du but actuel, aucun lecteur utilisé ne les impose. Une miniature absente, illisible ou dans un format non pris en charge laisse l'emplacement vide, sans erreur visible.
+**B-10 Miniature.** Image tirée de `mpris:artUrl`. Formats pris en charge : `data:` encodé en base64 (cas réel de mpv, qui fournit `data:image/jpeg;base64,…`) et `file://`. Les URL `http(s)://` sont hors du but actuel, aucun lecteur utilisé ne les impose. Une miniature absente, illisible, dans un format non pris en charge ou qui met plus de deux secondes à charger laisse l'emplacement vide, sans erreur visible.
 
 **B-11 Titre.** `xesam:title`.
 
