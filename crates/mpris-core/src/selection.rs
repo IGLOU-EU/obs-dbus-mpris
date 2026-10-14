@@ -105,7 +105,7 @@ fn shown<'a>(
         (Phase::Settled, Some(followed)) => itself_or_relaunch(players, followed),
         _ => remembered
             .and_then(|name| itself_or_relaunch(players, name))
-            .or_else(|| preferred(players.iter())),
+            .or_else(|| preferred(players.iter().filter(|p| !is_stopped(p)))),
     }
 }
 
@@ -162,6 +162,13 @@ fn ignoring_case(a: &str, b: &str) -> Ordering {
 
 fn is_playing(player: &Player) -> bool {
     player.status == PlaybackStatus::Playing
+}
+
+/// A stopped player only shows the fallback message (B-22), so another
+/// player taken while stopped would be followed with nothing to show, and
+/// would keep a player that starts later from being taken.
+fn is_stopped(player: &Player) -> bool {
+    player.status == PlaybackStatus::Stopped
 }
 
 /// One entry of the player selector (B-02).
@@ -704,7 +711,7 @@ mod tests {
             ),
             (
                 vec![player("vlc", Paused), player("audacious", Stopped)],
-                bus("audacious"),
+                bus("vlc"),
             ),
         ];
         for (appearing, expected) in cases {
@@ -851,6 +858,46 @@ mod tests {
                 None,
                 bus("mpv.instance-a")
             ]
+        );
+    }
+
+    #[test]
+    fn a_stopped_player_through_the_grace_period_leaves_the_next_one_free() {
+        let moments = [
+            Frame(Duration::ZERO, vec![player("vlc", Stopped)]),
+            Frame(minutes(4), vec![player("vlc", Stopped)]),
+            Frame(
+                minutes(6),
+                vec![player("vlc", Stopped), player("chromium", Playing)],
+            ),
+            Frame(
+                minutes(7),
+                vec![player("vlc", Playing), player("chromium", Paused)],
+            ),
+        ];
+        assert_eq!(
+            shown_over(&moments, bus("mpv.instance-a").as_deref(), true),
+            [None, None, bus("chromium"), bus("chromium")]
+        );
+    }
+
+    #[test]
+    fn a_stopped_player_that_starts_after_the_grace_period_is_kept() {
+        let moments = [
+            Frame(Duration::ZERO, vec![player("vlc", Stopped)]),
+            Frame(minutes(6), vec![player("vlc", Playing)]),
+            Frame(
+                minutes(7),
+                vec![player("vlc", Paused), player("chromium", Playing)],
+            ),
+            Frame(
+                minutes(8),
+                vec![player("vlc", Stopped), player("chromium", Playing)],
+            ),
+        ];
+        assert_eq!(
+            shown_over(&moments, bus("mpv.instance-a").as_deref(), true),
+            [None, bus("vlc"), bus("vlc"), bus("vlc")]
         );
     }
 
@@ -1124,12 +1171,12 @@ mod tests {
     }
 
     #[test]
-    fn without_a_playing_player_the_first_present_shows() {
+    fn without_a_playing_player_the_first_paused_shows() {
         let players = [player("vlc", Paused), player("chromium", Stopped)];
         for order in orders(&players) {
             assert_eq!(
                 in_grace(&order, Some("org.mpris.MediaPlayer2.mpv.instance-a")),
-                Some("org.mpris.MediaPlayer2.chromium"),
+                Some("org.mpris.MediaPlayer2.vlc"),
                 "{order:?}"
             );
         }
@@ -1141,9 +1188,25 @@ mod tests {
         for order in orders(&players) {
             assert_eq!(
                 in_grace(&order, None),
-                Some("org.mpris.MediaPlayer2.audacious"),
+                Some("org.mpris.MediaPlayer2.mpv"),
                 "{order:?}"
             );
+        }
+    }
+
+    #[test]
+    fn a_stopped_player_is_neither_shown_nor_followed_by_step_three() {
+        let players = [player("vlc", Stopped), player("audacious", Stopped)];
+        for phase in [Grace, Settled] {
+            for remembered in [None, Some("org.mpris.MediaPlayer2.mpv.instance-a")] {
+                for order in orders(&players) {
+                    assert_eq!(
+                        step(&order, remembered, true, None, phase),
+                        (None, None),
+                        "{phase:?} {remembered:?} {order:?}"
+                    );
+                }
+            }
         }
     }
 
@@ -1385,8 +1448,9 @@ mod tests {
             ),
             (
                 vec![player("vlc", Paused), player("chromium", Stopped)],
-                Some("org.mpris.MediaPlayer2.chromium"),
+                Some("org.mpris.MediaPlayer2.vlc"),
             ),
+            (vec![player("chromium", Stopped)], None),
             (vec![], None),
         ];
         for (players, expected) in &cases {
@@ -1432,8 +1496,8 @@ mod tests {
     }
 
     #[test]
-    fn first_present_ignores_case() {
-        let players = [player("VLC", Paused), player("mpv", Stopped)];
+    fn first_paused_ignores_case() {
+        let players = [player("VLC", Paused), player("mpv", Paused)];
         for order in orders(&players) {
             assert_eq!(
                 in_grace(&order, None),
