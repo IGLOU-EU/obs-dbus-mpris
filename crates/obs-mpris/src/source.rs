@@ -21,7 +21,7 @@ use mpris_core::content::content;
 use mpris_core::dbus::ArtWish;
 use mpris_core::model::Settings;
 use mpris_core::online::wish;
-use mpris_core::selection::{choice_changed, select};
+use mpris_core::selection::{choice_changed, followed_after_choice, phase, select};
 use render::draw::{Picture, RedrawKey, redraw_key};
 use render::frame::Frame;
 use render::layout::layout;
@@ -50,12 +50,17 @@ struct Source {
 }
 
 /// What the source last asked the worker for, and what it shows.
-#[derive(Default)]
 struct View {
     /// Bus name of the player the source keeps to (B-08), `None` until one
-    /// shows. Held in memory only, so it starts over with OBS, and when the
-    /// choice of player changes.
+    /// shows or is chosen by hand. This and the two below live in memory
+    /// only, never in the settings, so that each start of OBS gives the
+    /// remembered player a new grace period.
     followed: Option<String>,
+    /// When the source was created, which opens its grace period (B-05).
+    started: Instant,
+    /// Whether a player was chosen by hand in the properties, which ends
+    /// the grace period for good (B-05).
+    chosen_by_hand: bool,
     /// Tells the core which online cover the source wants, if any (B-18).
     /// `None` without a core. Dropped with the source, which withdraws it.
     art_wish: Option<ArtWish>,
@@ -180,8 +185,14 @@ unsafe extern "C" fn create(data: *mut obs_data_t, _source: *mut obs_source_t) -
         // SAFETY: OBS passes the live settings of the new source.
         let settings = unsafe { settings::read(data) };
         let view = View {
+            followed: None,
+            started: Instant::now(),
+            chosen_by_hand: false,
             art_wish: art_wish(),
-            ..View::default()
+            asked: None,
+            texture: None,
+            strips: Vec::new(),
+            cycle: Cycle::default(),
         };
         let source = Box::new(Source {
             settings: Mutex::new(settings),
@@ -230,6 +241,7 @@ unsafe extern "C" fn update(data: *mut c_void, obs_settings: *mut obs_data_t) {
         let Some(source) = source else {
             return;
         };
+        let followed = followed_after_choice(&settings);
         let rechosen = {
             let mut current = source.settings();
             let rechosen = choice_changed(&current, &settings);
@@ -237,7 +249,9 @@ unsafe extern "C" fn update(data: *mut c_void, obs_settings: *mut obs_data_t) {
             rechosen
         };
         if rechosen {
-            source.view().followed = None;
+            let mut view = source.view();
+            view.chosen_by_hand = true;
+            view.followed = followed;
         }
     });
 }
@@ -285,13 +299,20 @@ unsafe extern "C" fn video_tick(data: *mut c_void, _seconds: f32) {
         };
         let settings = source.settings().clone();
         let snapshot = snapshot();
+        let now = Instant::now();
         let mut view = source.view();
-        let selection = select(&snapshot.players, &settings, view.followed.as_deref());
+        let phase = phase(view.started, view.chosen_by_hand, now);
+        let selection = select(
+            &snapshot.players,
+            &settings,
+            view.followed.as_deref(),
+            phase,
+        );
         view.followed = selection.followed;
         if let Some(art_wish) = &mut view.art_wish {
             art_wish.set(wish(selection.player, &settings));
         }
-        let shown = content(selection.player, &settings, Instant::now());
+        let shown = content(selection.player, &settings, now);
         let layout = layout(&settings);
         let key = redraw_key(&layout, &shown, &settings);
         view.cycle

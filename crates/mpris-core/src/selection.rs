@@ -2,9 +2,39 @@
 //! (B-02, B-03).
 
 use std::cmp::Ordering;
+use std::time::{Duration, Instant};
 
 use crate::model::{PlaybackStatus, Player, Settings};
 use crate::player::{key_str, player_key};
+
+/// How long after its start a source keeps choosing its player afresh
+/// (B-05). Fixed (B-08).
+pub const GRACE: Duration = Duration::from_secs(5 * 60);
+
+/// Whether a source may still change its player of itself (B-05).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Phase {
+    /// The first minutes of a source: every frame runs the whole rule
+    /// again, which leaves time to launch the usual player, and shows it
+    /// in place of whatever stood in for it.
+    Grace,
+    /// After the grace period, or once a player is chosen by hand: the
+    /// source keeps to its followed player, so that nothing changes by
+    /// itself in the middle of a live show.
+    Settled,
+}
+
+/// The phase of a source started at `started`, at `now` (B-05). Derived on
+/// every frame rather than stored, so it never needs updating. A choice by
+/// hand settles the source for good, since it says which player the user
+/// means.
+pub fn phase(started: Instant, chosen_by_hand: bool, now: Instant) -> Phase {
+    if chosen_by_hand || now.saturating_duration_since(started) >= GRACE {
+        Phase::Settled
+    } else {
+        Phase::Grace
+    }
+}
 
 /// What a source shows on one frame, and the player it follows from then on.
 #[derive(Debug, Clone, PartialEq)]
@@ -16,26 +46,29 @@ pub struct Selection<'a> {
 }
 
 /// What a source shows on this frame (B-05), given `followed`, what the
-/// previous frame returned, `None` for a new source or one whose choice
-/// just changed (B-08). The shown player is never stored: callers
-/// re-evaluate it on every frame, which is what lets a source find its
-/// player again once it comes back under a new instance name (B-06).
+/// previous frame returned, and `phase`. The shown player is never stored:
+/// callers re-evaluate it on every frame, which is what lets a source find
+/// its player again once it comes back under a new instance name (B-06).
 ///
-/// Automatic selection serves the start, when nothing is chosen yet or the
-/// chosen player is not launched yet. Once a player shows, the source keeps
-/// to it, so that another player starting to play, a video opened by
-/// accident for one, never takes over the overlay. The remembered instance
-/// wins whatever its status, because an explicit choice outranks the
-/// activity of other players. With automatic selection off it is the only
-/// candidate, so a source dedicated to one player never shows another.
+/// In the grace period the rule runs whole on every frame, so the usual
+/// player takes over as soon as it is launched. Settled, the source keeps
+/// to its followed player, or the relaunch of it, and to no other: in the
+/// middle of a live show, another player starting to play, or even the
+/// remembered one coming back, may be a mistake, while the shown player was
+/// right. A settled source that has shown nothing yet still runs the rule,
+/// so that it does not stay empty for good. The remembered instance wins
+/// whatever its status, because an explicit choice outranks the activity of
+/// other players. With automatic selection off it is the only candidate, so
+/// a source dedicated to one player never shows another.
 pub fn select<'a>(
     players: &'a [Player],
     settings: &Settings,
     followed: Option<&str>,
+    phase: Phase,
 ) -> Selection<'a> {
-    let player = shown(players, settings, followed);
-    // Kept while nothing shows, so that the relaunch of the followed player
-    // is found (step 3), and no other player is latched meanwhile (step 4).
+    let player = shown(players, settings, followed, phase);
+    // Kept while nothing shows, so that a settled source waits for the
+    // relaunch of its player rather than taking the first other one.
     let followed = player.map(|p| p.bus_name.as_str()).or(followed);
     Selection {
         player,
@@ -44,9 +77,17 @@ pub fn select<'a>(
 }
 
 /// Whether going from `before` to `after` changes the choice of player,
-/// which starts the followed player over, as for a new source (B-08).
+/// which is a choice by hand (B-05).
 pub fn choice_changed(before: &Settings, after: &Settings) -> bool {
     (&before.player, before.auto_select) != (&after.player, after.auto_select)
+}
+
+/// The followed player once `settings` were chosen by hand (B-05): the
+/// chosen instance at once, so that the source keeps to it from the first
+/// frame, present or not. "No choice" follows nothing, which leaves the
+/// next player to appear to the rule.
+pub fn followed_after_choice(settings: &Settings) -> Option<String> {
+    settings.player.clone()
 }
 
 /// The steps of B-05, in their order.
@@ -54,17 +95,17 @@ fn shown<'a>(
     players: &'a [Player],
     settings: &Settings,
     followed: Option<&str>,
+    phase: Phase,
 ) -> Option<&'a Player> {
     let remembered = settings.player.as_deref();
     if !settings.auto_select {
         return remembered.and_then(|name| exact(players, name));
     }
-    let chosen = remembered.and_then(|name| itself_or_relaunch(players, name));
-    match followed {
-        Some(followed) => chosen.or_else(|| itself_or_relaunch(players, followed)),
-        // A paused or stopped player is never latched: only playing tells
-        // which player the user means.
-        None => chosen.or_else(|| first(players.iter().filter(|p| is_playing(p)))),
+    match (phase, followed) {
+        (Phase::Settled, Some(followed)) => itself_or_relaunch(players, followed),
+        _ => remembered
+            .and_then(|name| itself_or_relaunch(players, name))
+            .or_else(|| preferred(players.iter())),
     }
 }
 
@@ -73,13 +114,19 @@ fn exact<'a>(players: &'a [Player], bus_name: &str) -> Option<&'a Player> {
 }
 
 /// The instance named `bus_name`, or once it is gone, the instance that
-/// stands for it: one of the same key, playing preferably (B-06).
+/// stands for it: one of the same key (B-06).
 fn itself_or_relaunch<'a>(players: &'a [Player], bus_name: &str) -> Option<&'a Player> {
     exact(players, bus_name).or_else(|| {
         let key = key_str(bus_name)?;
-        let same_key = players.iter().filter(|p| p.key.0 == key);
-        first(same_key.clone().filter(|p| is_playing(p))).or_else(|| first(same_key))
+        preferred(players.iter().filter(|p| p.key.0 == key))
     })
+}
+
+/// The first playing player, else the first one. Playing tells best which
+/// player the user means, but a paused one still beats the fallback
+/// message.
+fn preferred<'a>(players: impl Iterator<Item = &'a Player> + Clone) -> Option<&'a Player> {
+    first(players.clone().filter(|p| is_playing(p))).or_else(|| first(players))
 }
 
 fn first<'a>(players: impl Iterator<Item = &'a Player>) -> Option<&'a Player> {
@@ -154,8 +201,8 @@ pub fn player_choices(players: &[Player], remembered: Option<&str>) -> Vec<Choic
 mod tests {
     use super::*;
     use crate::model::{Art, PlaybackStatus, PlayerKey, PositionAnchor, Track};
-    use std::time::{Duration, Instant};
 
+    use Phase::{Grace, Settled};
     use PlaybackStatus::{Paused, Playing, Stopped};
 
     fn key(k: &str) -> PlayerKey {
@@ -195,69 +242,66 @@ mod tests {
         Some(format!("org.mpris.MediaPlayer2.{name}"))
     }
 
-    /// What a source shows for `players`, and the player it follows next.
+    fn minutes(n: u64) -> Duration {
+        Duration::from_secs(n * 60)
+    }
+
+    fn settings(remembered: Option<&str>, auto_select: bool) -> Settings {
+        Settings {
+            player: remembered.map(str::to_owned),
+            auto_select,
+            ..Settings::default()
+        }
+    }
+
+    /// What a source shows for `players` in `phase`, and the player it
+    /// follows next.
     fn step<'a>(
         players: &'a [Player],
         remembered: Option<&str>,
         auto_select: bool,
         followed: Option<&str>,
+        phase: Phase,
     ) -> (Option<&'a str>, Option<String>) {
-        let settings = Settings {
-            player: remembered.map(str::to_owned),
-            auto_select,
-            ..Settings::default()
-        };
-        let selection = select(players, &settings, followed);
+        let selection = select(players, &settings(remembered, auto_select), followed, phase);
         (
             selection.player.map(|p| p.bus_name.as_str()),
             selection.followed,
         )
     }
 
-    /// What a source that follows nothing yet shows, automatic selection on.
-    fn selected<'a>(players: &'a [Player], remembered: Option<&str>) -> Option<&'a str> {
-        step(players, remembered, true, None).0
+    /// What a source in its grace period shows, automatic selection on.
+    fn in_grace<'a>(players: &'a [Player], remembered: Option<&str>) -> Option<&'a str> {
+        step(players, remembered, true, None, Grace).0
     }
 
-    /// What a source that follows `followed` shows, automatic selection on.
-    fn selected_following<'a>(
+    /// What a settled source that follows `followed` shows, automatic
+    /// selection on.
+    fn settled<'a>(
         players: &'a [Player],
         remembered: Option<&str>,
-        followed: &str,
+        followed: Option<&str>,
     ) -> Option<&'a str> {
-        step(players, remembered, true, Some(followed)).0
+        step(players, remembered, true, followed, Settled).0
     }
 
-    /// Selection with automatic selection off.
-    fn selected_strictly<'a>(players: &'a [Player], remembered: Option<&str>) -> Option<&'a str> {
-        step(players, remembered, false, None).0
-    }
-
-    /// What a source shows at each of `frames`, the players on the bus at
-    /// successive moments, handing the followed player from one frame to
-    /// the next as the OBS glue does. Every frame is also read reversed, so
-    /// a result that leaks the input order shows up.
-    fn shown_over(
-        frames: &[Vec<Player>],
-        remembered: Option<&str>,
-        auto_select: bool,
-    ) -> Vec<Option<String>> {
-        let run = |reversed: bool| {
-            let mut followed: Option<String> = None;
-            let mut shown = Vec::new();
-            for frame in frames {
-                let mut players = frame.clone();
-                if reversed {
-                    players.reverse();
-                }
-                let (player, next) = step(&players, remembered, auto_select, followed.as_deref());
-                shown.push(player.map(str::to_owned));
-                followed = next;
+    /// What a source shows with automatic selection off, checked to be the
+    /// same in both phases whatever it follows.
+    fn strictly<'a>(players: &'a [Player], remembered: Option<&str>) -> Option<&'a str> {
+        let shown = step(players, remembered, false, None, Grace).0;
+        for phase in [Grace, Settled] {
+            for followed in [
+                None,
+                Some("org.mpris.MediaPlayer2.vlc"),
+                Some("org.mpris.MediaPlayer2.vlc.gone"),
+            ] {
+                assert_eq!(
+                    step(players, remembered, false, followed, phase).0,
+                    shown,
+                    "{phase:?} {followed:?}"
+                );
             }
-            shown
-        };
-        let shown = run(false);
-        assert_eq!(run(true), shown, "the order of the players matters");
+        }
         shown
     }
 
@@ -267,7 +311,7 @@ mod tests {
         let reversed: Vec<Player> = players.iter().rev().cloned().collect();
         let mut all = Vec::new();
         for base in [players.to_vec(), reversed] {
-            for shift in 0..base.len() {
+            for shift in 0..base.len().max(1) {
                 let mut order = base.clone();
                 order.rotate_left(shift);
                 all.push(order);
@@ -276,136 +320,537 @@ mod tests {
         all
     }
 
-    // A source keeps to what it shows (B-05)
+    /// One moment in the life of a source.
+    enum Moment {
+        /// The players on the bus, this long after the source started.
+        Frame(Duration, Vec<Player>),
+        /// The player and the automatic selection set in the properties, as
+        /// `update` receives them.
+        Choose(Option<String>, bool),
+    }
+
+    use Moment::{Choose, Frame};
+
+    /// A source as the OBS glue drives it, its start instant, its choice
+    /// by hand and its followed player held beside its settings (B-08).
+    struct Source {
+        settings: Settings,
+        started: Instant,
+        chosen_by_hand: bool,
+        followed: Option<String>,
+    }
+
+    impl Source {
+        fn choose(&mut self, settings: Settings) {
+            if choice_changed(&self.settings, &settings) {
+                self.chosen_by_hand = true;
+                self.followed = followed_after_choice(&settings);
+            }
+            self.settings = settings;
+        }
+
+        fn frame(&mut self, players: &[Player], now: Instant) -> Option<String> {
+            let phase = phase(self.started, self.chosen_by_hand, now);
+            let selection = select(players, &self.settings, self.followed.as_deref(), phase);
+            self.followed = selection.followed;
+            selection.player.map(|p| p.bus_name.clone())
+        }
+    }
+
+    /// What a source started with `remembered` and `auto_select` shows at
+    /// each frame of `moments`. Its whole life is lived again with the
+    /// players of every frame in each rotation and its reverse, so a result
+    /// that leaks the input order shows up.
+    fn shown_over(
+        moments: &[Moment],
+        remembered: Option<&str>,
+        auto_select: bool,
+    ) -> Vec<Option<String>> {
+        let live = |reversed: bool, shift: usize| {
+            let started = Instant::now();
+            let mut source = Source {
+                settings: settings(remembered, auto_select),
+                started,
+                chosen_by_hand: false,
+                followed: None,
+            };
+            let mut shown = Vec::new();
+            for moment in moments {
+                match moment {
+                    Frame(after, players) => {
+                        let mut order = players.clone();
+                        if reversed {
+                            order.reverse();
+                        }
+                        let len = order.len().max(1);
+                        order.rotate_left(shift % len);
+                        shown.push(source.frame(&order, started + *after));
+                    }
+                    Choose(player, auto) => source.choose(settings(player.as_deref(), *auto)),
+                }
+            }
+            shown
+        };
+        let shown = live(false, 0);
+        let most = moments
+            .iter()
+            .map(|moment| match moment {
+                Frame(_, players) => players.len(),
+                Choose(..) => 0,
+            })
+            .max()
+            .unwrap_or(0);
+        for reversed in [false, true] {
+            for shift in 0..most.max(1) {
+                assert_eq!(
+                    live(reversed, shift),
+                    shown,
+                    "reversed {reversed}, shifted {shift}"
+                );
+            }
+        }
+        shown
+    }
+
+    // The grace period (B-05, B-08)
 
     #[test]
-    fn a_player_that_starts_playing_never_takes_over_the_shown_one() {
-        // Music in mpv, then a video started in Chromium, which ranks first.
-        let mpv = |status| instance("mpv", "instance-a", status);
-        let frames = [
-            vec![mpv(Playing)],
-            vec![mpv(Playing), player("chromium", Playing)],
-            vec![mpv(Paused), player("chromium", Playing)],
-            vec![mpv(Stopped), player("chromium", Playing)],
-        ];
-        for remembered in [bus("mpv.instance-a"), None] {
+    fn the_grace_period_lasts_five_minutes() {
+        assert_eq!(GRACE, Duration::from_secs(300));
+    }
+
+    #[test]
+    fn a_source_is_in_grace_until_five_minutes_after_its_start() {
+        let started = Instant::now();
+        for after in [Duration::ZERO, minutes(1), GRACE - Duration::from_nanos(1)] {
+            assert_eq!(phase(started, false, started + after), Grace, "{after:?}");
+        }
+        for after in [GRACE, GRACE + Duration::from_nanos(1), minutes(24 * 60)] {
+            assert_eq!(phase(started, false, started + after), Settled, "{after:?}");
+        }
+    }
+
+    #[test]
+    fn a_choice_by_hand_settles_the_source_at_once() {
+        let started = Instant::now();
+        for after in [Duration::ZERO, minutes(1), GRACE, minutes(24 * 60)] {
+            assert_eq!(phase(started, true, started + after), Settled, "{after:?}");
+        }
+    }
+
+    #[test]
+    fn a_clock_read_before_the_start_counts_as_the_start() {
+        let now = Instant::now();
+        assert_eq!(phase(now + minutes(1), false, now), Grace);
+        assert_eq!(phase(now + minutes(1), true, now), Settled);
+    }
+
+    #[test]
+    fn a_player_chosen_by_hand_is_followed_at_once() {
+        for remembered in [bus("mpv.instance-a"), bus("vlc")] {
+            for auto_select in [true, false] {
+                assert_eq!(
+                    followed_after_choice(&settings(remembered.as_deref(), auto_select)),
+                    remembered,
+                    "{auto_select}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn choosing_no_player_by_hand_follows_nothing() {
+        for auto_select in [true, false] {
             assert_eq!(
-                shown_over(&frames, remembered.as_deref(), true),
-                vec![bus("mpv.instance-a"); 4],
-                "{remembered:?}"
+                followed_after_choice(&settings(None, auto_select)),
+                None,
+                "{auto_select}"
+            );
+        }
+    }
+
+    // Scenario 13 (besoins.md, section 7)
+
+    #[test]
+    fn scenario_13_the_usual_player_launched_in_grace_takes_over_then_is_followed() {
+        let chrome = || instance("chromium", "instance1234", Playing);
+        let video = || player("vlc", Playing);
+        let mpv = |suffix, status| instance("mpv", suffix, status);
+        let moments = [
+            Frame(Duration::ZERO, vec![chrome()]),
+            Frame(minutes(2), vec![chrome(), mpv("instance-b", Playing)]),
+            // Past the grace period, a video started in another player.
+            Frame(
+                minutes(6),
+                vec![chrome(), mpv("instance-b", Playing), video()],
+            ),
+            Frame(
+                minutes(7),
+                vec![chrome(), mpv("instance-b", Paused), video()],
+            ),
+            // The followed player closed, then relaunched.
+            Frame(minutes(8), vec![chrome(), video()]),
+            Frame(
+                minutes(9),
+                vec![chrome(), video(), mpv("instance-c", Stopped)],
+            ),
+            Frame(
+                minutes(10),
+                vec![chrome(), video(), mpv("instance-c", Playing)],
+            ),
+            // Closed for good.
+            Frame(minutes(11), vec![chrome(), video()]),
+            Frame(minutes(60), vec![chrome(), video()]),
+        ];
+        assert_eq!(
+            shown_over(&moments, bus("mpv.instance-a").as_deref(), true),
+            [
+                bus("chromium.instance1234"),
+                bus("mpv.instance-b"),
+                bus("mpv.instance-b"),
+                bus("mpv.instance-b"),
+                None,
+                bus("mpv.instance-c"),
+                bus("mpv.instance-c"),
+                None,
+                None,
+            ]
+        );
+    }
+
+    #[test]
+    fn scenario_13_the_usual_player_launched_after_grace_changes_nothing() {
+        let chrome = |suffix, status| instance("chromium", suffix, status);
+        let usual = || instance("mpv", "instance-a", Playing);
+        let moments = [
+            Frame(Duration::ZERO, vec![chrome("instance1234", Playing)]),
+            Frame(minutes(6), vec![chrome("instance1234", Playing), usual()]),
+            Frame(minutes(7), vec![chrome("instance1234", Paused), usual()]),
+            // Chrome closed: not even the remembered instance stands in.
+            Frame(minutes(8), vec![usual(), player("vlc", Playing)]),
+            // Chrome relaunched.
+            Frame(
+                minutes(9),
+                vec![
+                    usual(),
+                    player("vlc", Playing),
+                    chrome("instance5678", Paused),
+                ],
+            ),
+        ];
+        assert_eq!(
+            shown_over(&moments, bus("mpv.instance-a").as_deref(), true),
+            [
+                bus("chromium.instance1234"),
+                bus("chromium.instance1234"),
+                bus("chromium.instance1234"),
+                None,
+                bus("chromium.instance5678"),
+            ]
+        );
+    }
+
+    #[test]
+    fn scenario_13_a_player_chosen_by_hand_in_grace_is_final() {
+        let chrome = || instance("chromium", "instance1234", Playing);
+        let usual = || instance("mpv", "instance-a", Playing);
+        let moments = [
+            Frame(Duration::ZERO, vec![chrome(), player("vlc", Paused)]),
+            Choose(bus("vlc"), true),
+            Frame(minutes(1), vec![chrome(), player("vlc", Paused)]),
+            // The usual player, launched well within the grace period.
+            Frame(minutes(2), vec![chrome(), player("vlc", Paused), usual()]),
+            // The chosen player closed, then relaunched.
+            Frame(minutes(3), vec![chrome(), usual()]),
+            Frame(minutes(4), vec![chrome(), usual(), player("vlc", Stopped)]),
+        ];
+        assert_eq!(
+            shown_over(&moments, bus("mpv.instance-a").as_deref(), true),
+            [
+                bus("chromium.instance1234"),
+                bus("vlc"),
+                bus("vlc"),
+                None,
+                bus("vlc"),
+            ]
+        );
+    }
+
+    // The rest of the rule over time
+
+    #[test]
+    fn in_grace_the_rule_runs_afresh_on_every_frame() {
+        let mpv = |suffix, status| instance("mpv", suffix, status);
+        let moments = [
+            // Nothing plays: a paused player beats the fallback message.
+            Frame(
+                Duration::ZERO,
+                vec![player("vlc", Paused), player("chromium", Paused)],
+            ),
+            // A player starting to play takes over (step 3).
+            Frame(
+                minutes(1),
+                vec![player("vlc", Playing), player("chromium", Paused)],
+            ),
+            // An instance of the usual player takes over (step 2).
+            Frame(
+                minutes(2),
+                vec![player("vlc", Playing), mpv("instance-b", Paused)],
+            ),
+            // The remembered instance itself takes over (step 1).
+            Frame(
+                minutes(3),
+                vec![
+                    player("vlc", Playing),
+                    mpv("instance-b", Playing),
+                    mpv("instance-a", Stopped),
+                ],
+            ),
+            // Both gone: back to step 3, then step 4.
+            Frame(
+                minutes(4),
+                vec![player("vlc", Paused), player("audacious", Paused)],
+            ),
+            Frame(minutes(4) + Duration::from_secs(30), vec![]),
+        ];
+        assert_eq!(
+            shown_over(&moments, bus("mpv.instance-a").as_deref(), true),
+            [
+                bus("chromium"),
+                bus("vlc"),
+                bus("mpv.instance-b"),
+                bus("mpv.instance-a"),
+                bus("audacious"),
+                None,
+            ]
+        );
+    }
+
+    #[test]
+    fn the_grace_period_ends_at_exactly_five_minutes() {
+        let chrome = || player("chromium", Playing);
+        let usual = || instance("mpv", "instance-a", Paused);
+        for (launched, expected) in [
+            (GRACE - Duration::from_millis(1), bus("mpv.instance-a")),
+            (GRACE, bus("chromium")),
+        ] {
+            let moments = [
+                Frame(Duration::ZERO, vec![chrome()]),
+                Frame(launched, vec![chrome(), usual()]),
+                Frame(launched + minutes(1), vec![chrome(), usual()]),
+            ];
+            assert_eq!(
+                shown_over(&moments, bus("mpv.instance-a").as_deref(), true),
+                [bus("chromium"), expected.clone(), expected],
+                "{launched:?}"
             );
         }
     }
 
     #[test]
-    fn a_gone_remembered_player_leaves_the_fallback_until_it_is_relaunched() {
-        let frames = [
-            vec![
-                instance("mpv", "instance-a", Playing),
-                player("chromium", Paused),
-            ],
-            vec![player("chromium", Playing)],
-            vec![player("chromium", Playing), player("vlc", Playing)],
-            vec![
-                player("chromium", Playing),
-                instance("mpv", "instance-b", Stopped),
-            ],
-            vec![
-                player("chromium", Playing),
-                instance("mpv", "instance-b", Playing),
-            ],
+    fn a_player_shown_in_grace_then_gone_stays_the_followed_one() {
+        let usual = || instance("mpv", "instance-a", Playing);
+        let moments = [
+            Frame(Duration::ZERO, vec![player("chromium", Playing)]),
+            Frame(minutes(2), vec![]),
+            Frame(minutes(6), vec![usual(), player("vlc", Playing)]),
+            Frame(minutes(7), vec![usual(), player("chromium", Paused)]),
         ];
         assert_eq!(
-            shown_over(&frames, bus("mpv.instance-a").as_deref(), true),
-            [
+            shown_over(&moments, bus("mpv.instance-a").as_deref(), true),
+            [bus("chromium"), None, None, bus("chromium")]
+        );
+    }
+
+    #[test]
+    fn after_grace_with_nothing_shown_yet_the_first_player_to_appear_is_kept() {
+        let usual = || instance("mpv", "instance-a", Playing);
+        let moments = [
+            Frame(Duration::ZERO, vec![]),
+            Frame(minutes(4), vec![]),
+            Frame(minutes(6), vec![player("vlc", Paused)]),
+            Frame(
+                minutes(7),
+                vec![player("vlc", Paused), usual(), player("audacious", Playing)],
+            ),
+            Frame(minutes(8), vec![usual(), player("audacious", Playing)]),
+        ];
+        assert_eq!(
+            shown_over(&moments, bus("mpv.instance-a").as_deref(), true),
+            [None, None, bus("vlc"), bus("vlc"), None]
+        );
+    }
+
+    #[test]
+    fn after_grace_with_nothing_shown_yet_steps_one_to_three_rank_the_first_players() {
+        let cases = [
+            (
+                vec![
+                    player("audacious", Playing),
+                    instance("mpv", "instance-b", Paused),
+                ],
+                bus("mpv.instance-b"),
+            ),
+            (
+                vec![
+                    instance("mpv", "instance-b", Playing),
+                    instance("mpv", "instance-a", Stopped),
+                ],
                 bus("mpv.instance-a"),
-                None,
-                None,
-                bus("mpv.instance-b"),
-                bus("mpv.instance-b"),
-            ]
+            ),
+            (
+                vec![player("vlc", Paused), player("audacious", Playing)],
+                bus("audacious"),
+            ),
+            (
+                vec![player("vlc", Paused), player("audacious", Stopped)],
+                bus("audacious"),
+            ),
+        ];
+        for (appearing, expected) in cases {
+            let moments = [
+                Frame(Duration::ZERO, vec![]),
+                Frame(minutes(6), appearing.clone()),
+                Frame(minutes(7), appearing.clone()),
+            ];
+            assert_eq!(
+                shown_over(&moments, bus("mpv.instance-a").as_deref(), true),
+                [None, expected.clone(), expected],
+                "{appearing:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn choosing_no_player_by_hand_keeps_the_first_player_to_appear() {
+        let moments = [
+            Frame(Duration::ZERO, vec![]),
+            Choose(None, true),
+            Frame(minutes(1), vec![]),
+            Frame(minutes(2), vec![player("vlc", Paused)]),
+            Frame(
+                minutes(3),
+                vec![player("vlc", Paused), player("audacious", Playing)],
+            ),
+            Frame(minutes(4), vec![player("audacious", Playing)]),
+        ];
+        assert_eq!(
+            shown_over(&moments, bus("mpv.instance-a").as_deref(), true),
+            [None, None, bus("vlc"), bus("vlc"), None]
         );
     }
 
     #[test]
-    fn without_a_remembered_player_the_first_to_play_is_kept() {
-        let frames = [
-            vec![player("vlc", Playing)],
-            vec![player("vlc", Playing), player("audacious", Playing)],
-            vec![player("vlc", Paused), player("audacious", Playing)],
-            vec![player("vlc", Stopped), player("audacious", Playing)],
-        ];
-        assert_eq!(shown_over(&frames, None, true), vec![bus("vlc"); 4]);
-    }
-
-    #[test]
-    fn a_vanished_followed_player_leaves_the_fallback_until_it_is_relaunched() {
-        let frames = [
-            vec![instance("vlc", "instance-a", Playing)],
-            vec![player("chromium", Playing)],
-            vec![
-                player("chromium", Playing),
-                instance("vlc", "instance-b", Paused),
-            ],
-            vec![
-                player("chromium", Playing),
-                instance("vlc", "instance-b", Playing),
-            ],
+    fn choosing_no_player_by_hand_lets_go_of_the_shown_one() {
+        let moments = [
+            Frame(Duration::ZERO, vec![player("chromium", Playing)]),
+            Choose(None, true),
+            Frame(
+                minutes(1),
+                vec![player("chromium", Paused), player("vlc", Playing)],
+            ),
+            Frame(
+                minutes(2),
+                vec![player("chromium", Playing), player("vlc", Paused)],
+            ),
         ];
         assert_eq!(
-            shown_over(&frames, None, true),
-            [
-                bus("vlc.instance-a"),
-                None,
-                bus("vlc.instance-b"),
-                bus("vlc.instance-b"),
-            ]
+            shown_over(&moments, bus("mpv.instance-a").as_deref(), true),
+            [bus("chromium"), bus("vlc"), bus("vlc")]
         );
     }
 
     #[test]
-    fn a_paused_or_stopped_player_is_never_latched_at_start() {
-        let frames = [
-            vec![player("mpv", Paused), player("vlc", Stopped)],
-            vec![player("mpv", Paused), player("vlc", Stopped)],
-            vec![player("mpv", Paused), player("vlc", Playing)],
-            vec![player("mpv", Playing), player("vlc", Paused)],
+    fn a_player_chosen_by_hand_while_closed_waits_for_its_launch() {
+        let moments = [
+            Frame(Duration::ZERO, vec![player("chromium", Playing)]),
+            // Another entry, then back to the remembered one, listed as
+            // unavailable.
+            Choose(bus("chromium"), true),
+            Choose(bus("mpv.instance-a"), true),
+            Frame(minutes(1), vec![player("chromium", Playing)]),
+            Frame(
+                minutes(2),
+                vec![
+                    player("chromium", Playing),
+                    instance("mpv", "instance-b", Paused),
+                ],
+            ),
         ];
         assert_eq!(
-            shown_over(&frames, None, true),
-            [None, None, bus("vlc"), bus("vlc")]
+            shown_over(&moments, bus("mpv.instance-a").as_deref(), true),
+            [bus("chromium"), None, bus("mpv.instance-b")]
         );
     }
 
     #[test]
-    fn a_player_standing_in_for_the_remembered_one_gives_way_on_its_return() {
-        let frames = [
-            vec![player("chromium", Playing), player("vlc", Paused)],
-            vec![
-                player("chromium", Playing),
-                instance("mpv", "instance-b", Paused),
-            ],
-            vec![player("chromium", Playing)],
+    fn checking_automatic_selection_by_hand_opens_no_grace_period() {
+        let moments = [
+            Frame(Duration::ZERO, vec![player("chromium", Playing)]),
+            Choose(None, false),
+            Frame(minutes(1), vec![player("chromium", Playing)]),
+            Choose(None, true),
+            Frame(minutes(2), vec![player("chromium", Playing)]),
+            Frame(
+                minutes(3),
+                vec![player("chromium", Paused), player("audacious", Playing)],
+            ),
         ];
         assert_eq!(
-            shown_over(&frames, bus("mpv.instance-a").as_deref(), true),
-            [bus("chromium"), bus("mpv.instance-b"), None]
+            shown_over(&moments, None, true),
+            [bus("chromium"), None, bus("chromium"), bus("chromium")]
+        );
+    }
+
+    #[test]
+    fn setting_the_same_choice_again_keeps_the_grace_period() {
+        let moments = [
+            Frame(Duration::ZERO, vec![player("chromium", Playing)]),
+            Choose(bus("mpv.instance-a"), true),
+            Frame(
+                minutes(1),
+                vec![
+                    player("chromium", Playing),
+                    instance("mpv", "instance-b", Paused),
+                ],
+            ),
+        ];
+        assert_eq!(
+            shown_over(&moments, bus("mpv.instance-a").as_deref(), true),
+            [bus("chromium"), bus("mpv.instance-b")]
         );
     }
 
     #[test]
     fn strict_never_goes_back_to_a_relaunched_player() {
-        let frames = [
-            vec![instance("mpv", "instance-a", Playing)],
-            vec![player("chromium", Playing)],
-            vec![
-                player("chromium", Playing),
-                instance("mpv", "instance-b", Playing),
-            ],
+        let moments = [
+            Frame(Duration::ZERO, vec![instance("mpv", "instance-a", Playing)]),
+            Frame(minutes(1), vec![player("chromium", Playing)]),
+            Frame(
+                minutes(2),
+                vec![
+                    player("chromium", Playing),
+                    instance("mpv", "instance-b", Playing),
+                ],
+            ),
+            Frame(
+                minutes(6),
+                vec![
+                    player("chromium", Playing),
+                    instance("mpv", "instance-b", Playing),
+                ],
+            ),
+            Frame(minutes(7), vec![instance("mpv", "instance-a", Paused)]),
         ];
         assert_eq!(
-            shown_over(&frames, bus("mpv.instance-a").as_deref(), false),
-            [bus("mpv.instance-a"), None, None]
+            shown_over(&moments, bus("mpv.instance-a").as_deref(), false),
+            [
+                bus("mpv.instance-a"),
+                None,
+                None,
+                None,
+                bus("mpv.instance-a")
+            ]
         );
     }
 
@@ -417,17 +862,32 @@ mod tests {
             instance("mpv", "instance-a", Paused),
             player("vlc", Playing),
         ];
+        let remembered = bus("mpv.instance-a");
         for order in orders(&players) {
-            let remembered = bus("mpv.instance-a");
+            for phase in [Grace, Settled] {
+                for (remembered, auto_select, followed, expected) in [
+                    (remembered.as_deref(), true, None, &remembered),
+                    (None, true, None, &bus("vlc")),
+                    (remembered.as_deref(), false, None, &remembered),
+                    (None, true, bus("vlc"), &bus("vlc")),
+                ] {
+                    assert_eq!(
+                        &step(&order, remembered, auto_select, followed.as_deref(), phase).1,
+                        expected,
+                        "{phase:?} {remembered:?} {auto_select} {followed:?} {order:?}"
+                    );
+                }
+            }
             assert_eq!(
-                step(&order, remembered.as_deref(), true, bus("vlc").as_deref()).1,
-                bus("mpv.instance-a"),
-                "{order:?}"
-            );
-            assert_eq!(step(&order, None, true, None).1, bus("vlc"), "{order:?}");
-            assert_eq!(
-                step(&order, remembered.as_deref(), false, None).1,
-                bus("mpv.instance-a"),
+                step(
+                    &order,
+                    remembered.as_deref(),
+                    true,
+                    bus("vlc").as_deref(),
+                    Grace
+                )
+                .1,
+                remembered,
                 "{order:?}"
             );
         }
@@ -435,15 +895,32 @@ mod tests {
 
     #[test]
     fn while_nothing_shows_the_followed_player_is_kept() {
-        let players = [player("chromium", Playing)];
+        for phase in [Grace, Settled] {
+            assert_eq!(
+                step(&[], None, true, bus("vlc").as_deref(), phase),
+                (None, bus("vlc")),
+                "{phase:?}"
+            );
+            assert_eq!(
+                step(&[], None, true, None, phase),
+                (None, None),
+                "{phase:?}"
+            );
+        }
+        let others = [player("chromium", Playing)];
         assert_eq!(
-            step(&players, None, true, bus("vlc").as_deref()),
+            step(&others, None, true, bus("vlc").as_deref(), Settled),
             (None, bus("vlc"))
         );
-        assert_eq!(step(&[], None, true, None), (None, None));
         assert_eq!(
-            step(&[player("vlc", Paused)], None, true, None),
-            (None, None)
+            step(
+                &others,
+                bus("mpv.instance-a").as_deref(),
+                false,
+                bus("vlc").as_deref(),
+                Grace
+            ),
+            (None, bus("vlc"))
         );
     }
 
@@ -494,7 +971,7 @@ mod tests {
     // Step 1: the remembered instance
 
     #[test]
-    fn remembered_instance_wins_whatever_its_status() {
+    fn in_grace_the_remembered_instance_wins_whatever_its_status() {
         for status in [Stopped, Paused] {
             let players = [
                 player("chromium", Playing),
@@ -504,16 +981,20 @@ mod tests {
             ];
             let remembered = bus("mpv.instance-b");
             for order in orders(&players) {
-                assert_eq!(
-                    selected(&order, remembered.as_deref()),
-                    remembered.as_deref(),
-                    "{status:?} {order:?}"
-                );
-                assert_eq!(
-                    selected_following(&order, remembered.as_deref(), "org.mpris.MediaPlayer2.vlc"),
-                    remembered.as_deref(),
-                    "{status:?} {order:?}"
-                );
+                for followed in [None, bus("vlc"), bus("mpv.instance-a")] {
+                    assert_eq!(
+                        step(
+                            &order,
+                            remembered.as_deref(),
+                            true,
+                            followed.as_deref(),
+                            Grace
+                        )
+                        .0,
+                        remembered.as_deref(),
+                        "{status:?} {followed:?} {order:?}"
+                    );
+                }
             }
         }
     }
@@ -523,7 +1004,7 @@ mod tests {
         let players = [player("chromium", Playing), player("mpv", Stopped)];
         for order in orders(&players) {
             assert_eq!(
-                selected(&order, Some("org.mpris.MediaPlayer2.mpv")),
+                in_grace(&order, Some("org.mpris.MediaPlayer2.mpv")),
                 Some("org.mpris.MediaPlayer2.mpv"),
                 "{order:?}"
             );
@@ -542,7 +1023,7 @@ mod tests {
         ];
         for order in orders(&players) {
             assert_eq!(
-                selected(&order, Some("org.mpris.MediaPlayer2.mpv.instance-gone")),
+                in_grace(&order, Some("org.mpris.MediaPlayer2.mpv.instance-gone")),
                 Some("org.mpris.MediaPlayer2.mpv.instance-b"),
                 "{order:?}"
             );
@@ -559,7 +1040,7 @@ mod tests {
         ];
         for order in orders(&players) {
             assert_eq!(
-                selected(&order, Some("org.mpris.MediaPlayer2.mpv.instance-a")),
+                in_grace(&order, Some("org.mpris.MediaPlayer2.mpv.instance-a")),
                 Some("org.mpris.MediaPlayer2.mpv.instance-b"),
                 "{order:?}"
             );
@@ -573,7 +1054,7 @@ mod tests {
             instance("mpv", "instance-Qx81bZcd", Stopped),
         ];
         assert_eq!(
-            selected(
+            in_grace(
                 &players,
                 Some("org.mpris.MediaPlayer2.mpv.instance-mWyyJbmA")
             ),
@@ -588,24 +1069,27 @@ mod tests {
             instance("mpv", "instance-a", Paused),
         ];
         assert_eq!(
-            selected(&players, Some("org.mpris.MediaPlayer2.mpv")),
+            in_grace(&players, Some("org.mpris.MediaPlayer2.mpv")),
             Some("org.mpris.MediaPlayer2.mpv.instance-a")
         );
     }
 
     #[test]
-    fn an_instance_of_the_remembered_player_outranks_the_followed_one() {
+    fn in_grace_an_instance_of_the_remembered_player_outranks_the_followed_one() {
         let players = [
             player("chromium", Playing),
             instance("mpv", "instance-b", Paused),
         ];
         for order in orders(&players) {
             assert_eq!(
-                selected_following(
+                step(
                     &order,
                     Some("org.mpris.MediaPlayer2.mpv.instance-a"),
-                    "org.mpris.MediaPlayer2.chromium"
-                ),
+                    true,
+                    Some("org.mpris.MediaPlayer2.chromium"),
+                    Grace
+                )
+                .0,
                 Some("org.mpris.MediaPlayer2.mpv.instance-b"),
                 "{order:?}"
             );
@@ -616,91 +1100,12 @@ mod tests {
     fn a_key_that_merely_starts_like_the_remembered_one_is_another_player() {
         let players = [player("mpvx", Paused), player("vlc", Playing)];
         assert_eq!(
-            selected(&players, Some("org.mpris.MediaPlayer2.mpv.instance-a")),
+            in_grace(&players, Some("org.mpris.MediaPlayer2.mpv.instance-a")),
             Some("org.mpris.MediaPlayer2.vlc")
         );
     }
 
-    // Step 3: the followed player, or its relaunch
-
-    #[test]
-    fn the_followed_player_stays_whatever_its_status_while_others_play() {
-        for status in [Playing, Paused, Stopped] {
-            let players = [
-                player("audacious", Playing),
-                player("vlc", status),
-                player("chromium", Playing),
-            ];
-            for remembered in [None, Some("org.mpris.MediaPlayer2.mpv.instance-gone")] {
-                for order in orders(&players) {
-                    assert_eq!(
-                        selected_following(&order, remembered, "org.mpris.MediaPlayer2.vlc"),
-                        Some("org.mpris.MediaPlayer2.vlc"),
-                        "{status:?} {remembered:?} {order:?}"
-                    );
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn gone_followed_instance_gives_way_to_a_playing_instance_of_its_key() {
-        let players = [
-            player("audacious", Playing),
-            instance("mpv", "instance-a", Paused),
-            instance("mpv", "instance-b", Playing),
-            instance("mpv", "instance-c", Stopped),
-        ];
-        for order in orders(&players) {
-            assert_eq!(
-                selected_following(&order, None, "org.mpris.MediaPlayer2.mpv.instance-gone"),
-                Some("org.mpris.MediaPlayer2.mpv.instance-b"),
-                "{order:?}"
-            );
-        }
-    }
-
-    #[test]
-    fn gone_followed_instance_gives_way_to_the_first_instance_of_its_key() {
-        let players = [
-            player("audacious", Playing),
-            instance("mpv", "instance-c", Paused),
-            instance("mpv", "instance-b", Stopped),
-            instance("mpv", "instance-d", Paused),
-        ];
-        for order in orders(&players) {
-            assert_eq!(
-                selected_following(&order, None, "org.mpris.MediaPlayer2.mpv.instance-a"),
-                Some("org.mpris.MediaPlayer2.mpv.instance-b"),
-                "{order:?}"
-            );
-        }
-    }
-
-    #[test]
-    fn gone_followed_player_without_relaunch_shows_nothing_though_others_play() {
-        let players = [player("audacious", Playing), player("chromium", Playing)];
-        for remembered in [None, Some("org.mpris.MediaPlayer2.mpv.instance-gone")] {
-            for order in orders(&players) {
-                assert_eq!(
-                    selected_following(&order, remembered, "org.mpris.MediaPlayer2.vlc"),
-                    None,
-                    "{remembered:?} {order:?}"
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn a_key_that_merely_starts_like_the_followed_one_is_another_player() {
-        let players = [player("mpvx", Playing)];
-        assert_eq!(
-            selected_following(&players, None, "org.mpris.MediaPlayer2.mpv.instance-a"),
-            None
-        );
-    }
-
-    // Step 4: the first playing player, while nothing is followed
+    // Step 3: another player, playing preferably
 
     #[test]
     fn without_an_instance_of_the_remembered_key_the_first_playing_wins() {
@@ -711,7 +1116,7 @@ mod tests {
         ];
         for order in orders(&players) {
             assert_eq!(
-                selected(&order, Some("org.mpris.MediaPlayer2.mpv.instance-a")),
+                in_grace(&order, Some("org.mpris.MediaPlayer2.mpv.instance-a")),
                 Some("org.mpris.MediaPlayer2.audacious"),
                 "{order:?}"
             );
@@ -719,28 +1124,39 @@ mod tests {
     }
 
     #[test]
-    fn without_an_instance_of_the_remembered_key_nor_a_playing_one_nothing_shows() {
+    fn without_a_playing_player_the_first_present_shows() {
         let players = [player("vlc", Paused), player("chromium", Stopped)];
         for order in orders(&players) {
             assert_eq!(
-                selected(&order, Some("org.mpris.MediaPlayer2.mpv.instance-a")),
-                None,
+                in_grace(&order, Some("org.mpris.MediaPlayer2.mpv.instance-a")),
+                Some("org.mpris.MediaPlayer2.chromium"),
+                "{order:?}"
+            );
+        }
+        let players = [
+            player("vlc", Paused),
+            player("audacious", Stopped),
+            player("mpv", Paused),
+        ];
+        for order in orders(&players) {
+            assert_eq!(
+                in_grace(&order, None),
+                Some("org.mpris.MediaPlayer2.audacious"),
                 "{order:?}"
             );
         }
     }
 
     #[test]
-    fn no_player_selects_nothing() {
-        assert_eq!(selected(&[], None), None);
-        assert_eq!(
-            selected(&[], Some("org.mpris.MediaPlayer2.mpv.instance-a")),
-            None
-        );
-        assert_eq!(
-            selected_following(&[], None, "org.mpris.MediaPlayer2.mpv.instance-a"),
-            None
-        );
+    fn in_grace_a_playing_player_takes_over_the_followed_one() {
+        let players = [player("vlc", Paused), player("chromium", Playing)];
+        for order in orders(&players) {
+            assert_eq!(
+                step(&order, None, true, bus("vlc").as_deref(), Grace).0,
+                Some("org.mpris.MediaPlayer2.chromium"),
+                "{order:?}"
+            );
+        }
     }
 
     #[test]
@@ -761,12 +1177,16 @@ mod tests {
             "org.mpris.MediaPlayer2Extra.mpv",
         ] {
             assert_eq!(
-                selected(&one_playing, Some(text)),
+                in_grace(&one_playing, Some(text)),
                 Some("org.mpris.MediaPlayer2.vlc"),
                 "{text:?}"
             );
-            assert_eq!(selected(&none_playing, Some(text)), None, "{text:?}");
-            assert_eq!(selected(&[], Some(text)), None, "{text:?}");
+            assert_eq!(
+                in_grace(&none_playing, Some(text)),
+                Some("org.mpris.MediaPlayer2.mpv.instance-a"),
+                "{text:?}"
+            );
+            assert_eq!(in_grace(&[], Some(text)), None, "{text:?}");
         }
     }
 
@@ -779,7 +1199,7 @@ mod tests {
         ];
         for order in orders(&players) {
             assert_eq!(
-                selected(&order, None),
+                in_grace(&order, None),
                 Some("org.mpris.MediaPlayer2.mpv"),
                 "{order:?}"
             );
@@ -787,21 +1207,9 @@ mod tests {
     }
 
     #[test]
-    fn a_new_source_latches_no_paused_or_stopped_player() {
-        let players = [
-            player("vlc", Paused),
-            player("audacious", Stopped),
-            player("mpv", Paused),
-        ];
-        for order in orders(&players) {
-            assert_eq!(selected(&order, None), None, "{order:?}");
-        }
-    }
-
-    #[test]
     fn a_paused_player_is_not_taken_for_a_playing_one() {
         let players = [player("audacious", Paused), player("vlc", Playing)];
-        assert_eq!(selected(&players, None), Some("org.mpris.MediaPlayer2.vlc"));
+        assert_eq!(in_grace(&players, None), Some("org.mpris.MediaPlayer2.vlc"));
     }
 
     #[test]
@@ -813,7 +1221,7 @@ mod tests {
         ];
         for order in orders(&players) {
             assert_eq!(
-                selected(&order, None),
+                in_grace(&order, None),
                 Some("org.mpris.MediaPlayer2.mpv.instance-a"),
                 "{order:?}"
             );
@@ -829,10 +1237,162 @@ mod tests {
         ];
         for order in orders(&players) {
             assert_eq!(
-                selected(&order, None),
+                in_grace(&order, None),
                 Some("org.mpris.MediaPlayer2.mpv.instance-b"),
                 "{order:?}"
             );
+        }
+    }
+
+    // Step 4: no player at all
+
+    #[test]
+    fn no_player_selects_nothing() {
+        for phase in [Grace, Settled] {
+            for remembered in [None, Some("org.mpris.MediaPlayer2.mpv.instance-a")] {
+                for followed in [None, Some("org.mpris.MediaPlayer2.mpv.instance-a")] {
+                    assert_eq!(
+                        step(&[], remembered, true, followed, phase).0,
+                        None,
+                        "{phase:?} {remembered:?} {followed:?}"
+                    );
+                }
+            }
+        }
+    }
+
+    // Settled: the followed player, or its relaunch
+
+    #[test]
+    fn settled_the_followed_player_stays_whatever_its_status_while_others_play() {
+        for status in [Playing, Paused, Stopped] {
+            let players = [
+                player("audacious", Playing),
+                player("vlc", status),
+                player("chromium", Playing),
+                instance("mpv", "instance-a", Playing),
+            ];
+            for remembered in [
+                None,
+                Some("org.mpris.MediaPlayer2.mpv.instance-gone"),
+                Some("org.mpris.MediaPlayer2.mpv.instance-a"),
+            ] {
+                for order in orders(&players) {
+                    assert_eq!(
+                        settled(&order, remembered, Some("org.mpris.MediaPlayer2.vlc")),
+                        Some("org.mpris.MediaPlayer2.vlc"),
+                        "{status:?} {remembered:?} {order:?}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn gone_followed_instance_gives_way_to_a_playing_instance_of_its_key() {
+        let players = [
+            player("audacious", Playing),
+            instance("mpv", "instance-a", Paused),
+            instance("mpv", "instance-b", Playing),
+            instance("mpv", "instance-c", Stopped),
+        ];
+        for order in orders(&players) {
+            assert_eq!(
+                settled(
+                    &order,
+                    None,
+                    Some("org.mpris.MediaPlayer2.mpv.instance-gone")
+                ),
+                Some("org.mpris.MediaPlayer2.mpv.instance-b"),
+                "{order:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn gone_followed_instance_gives_way_to_the_first_instance_of_its_key() {
+        let players = [
+            player("audacious", Playing),
+            instance("mpv", "instance-c", Paused),
+            instance("mpv", "instance-b", Stopped),
+            instance("mpv", "instance-d", Paused),
+        ];
+        for order in orders(&players) {
+            assert_eq!(
+                settled(&order, None, Some("org.mpris.MediaPlayer2.mpv.instance-a")),
+                Some("org.mpris.MediaPlayer2.mpv.instance-b"),
+                "{order:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn settled_a_gone_followed_player_without_relaunch_shows_nothing_though_others_play() {
+        let players = [
+            player("audacious", Playing),
+            player("chromium", Playing),
+            instance("mpv", "instance-a", Playing),
+        ];
+        for remembered in [
+            None,
+            Some("org.mpris.MediaPlayer2.mpv.instance-gone"),
+            Some("org.mpris.MediaPlayer2.mpv.instance-a"),
+        ] {
+            for order in orders(&players) {
+                assert_eq!(
+                    settled(&order, remembered, Some("org.mpris.MediaPlayer2.vlc")),
+                    None,
+                    "{remembered:?} {order:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn a_key_that_merely_starts_like_the_followed_one_is_another_player() {
+        let players = [player("mpvx", Playing)];
+        assert_eq!(
+            settled(
+                &players,
+                None,
+                Some("org.mpris.MediaPlayer2.mpv.instance-a")
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn settled_with_nothing_followed_yet_the_steps_pick_the_player() {
+        let remembered = Some("org.mpris.MediaPlayer2.mpv.instance-a");
+        let cases = [
+            (
+                vec![
+                    player("chromium", Playing),
+                    instance("mpv", "instance-a", Stopped),
+                ],
+                Some("org.mpris.MediaPlayer2.mpv.instance-a"),
+            ),
+            (
+                vec![
+                    player("chromium", Playing),
+                    instance("mpv", "instance-b", Paused),
+                ],
+                Some("org.mpris.MediaPlayer2.mpv.instance-b"),
+            ),
+            (
+                vec![player("vlc", Paused), player("chromium", Playing)],
+                Some("org.mpris.MediaPlayer2.chromium"),
+            ),
+            (
+                vec![player("vlc", Paused), player("chromium", Stopped)],
+                Some("org.mpris.MediaPlayer2.chromium"),
+            ),
+            (vec![], None),
+        ];
+        for (players, expected) in &cases {
+            for order in orders(players) {
+                assert_eq!(settled(&order, remembered, None), *expected, "{order:?}");
+            }
         }
     }
 
@@ -847,7 +1407,7 @@ mod tests {
         ];
         for order in orders(&players) {
             assert_eq!(
-                selected(&order, None),
+                in_grace(&order, None),
                 Some("org.mpris.MediaPlayer2.mpv.instance-a"),
                 "{order:?}"
             );
@@ -864,7 +1424,19 @@ mod tests {
         ];
         for order in orders(&players) {
             assert_eq!(
-                selected(&order, None),
+                in_grace(&order, None),
+                Some("org.mpris.MediaPlayer2.mpv"),
+                "{order:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn first_present_ignores_case() {
+        let players = [player("VLC", Paused), player("mpv", Stopped)];
+        for order in orders(&players) {
+            assert_eq!(
+                in_grace(&order, None),
                 Some("org.mpris.MediaPlayer2.mpv"),
                 "{order:?}"
             );
@@ -879,7 +1451,11 @@ mod tests {
         ];
         for order in orders(&players) {
             assert_eq!(
-                selected_following(&order, None, "org.mpris.MediaPlayer2.mpv.instance-gone"),
+                settled(
+                    &order,
+                    None,
+                    Some("org.mpris.MediaPlayer2.mpv.instance-gone")
+                ),
                 Some("org.mpris.MediaPlayer2.mpv.instance-a"),
                 "{order:?}"
             );
@@ -894,7 +1470,7 @@ mod tests {
         ];
         for order in orders(&players) {
             assert_eq!(
-                selected(&order, None),
+                in_grace(&order, None),
                 Some("org.mpris.MediaPlayer2.mpv.instance-a"),
                 "{order:?}"
             );
@@ -910,14 +1486,14 @@ mod tests {
         ];
         for order in orders(&players) {
             assert_eq!(
-                selected(&order, None),
+                in_grace(&order, None),
                 Some("org.mpris.MediaPlayer2.MPV"),
                 "{order:?}"
             );
         }
     }
 
-    // Automatic selection off: step 1 alone
+    // Automatic selection off: the exact remembered instance alone
 
     #[test]
     fn strict_shows_the_remembered_instance_whatever_its_status() {
@@ -929,7 +1505,7 @@ mod tests {
             ];
             for order in orders(&players) {
                 assert_eq!(
-                    selected_strictly(&order, Some("org.mpris.MediaPlayer2.mpv.instance-b")),
+                    strictly(&order, Some("org.mpris.MediaPlayer2.mpv.instance-b")),
                     Some("org.mpris.MediaPlayer2.mpv.instance-b"),
                     "{status:?} {order:?}"
                 );
@@ -949,7 +1525,7 @@ mod tests {
         ] {
             for order in orders(&players) {
                 assert_eq!(
-                    selected_strictly(&order, Some(remembered)),
+                    strictly(&order, Some(remembered)),
                     None,
                     "{remembered} {order:?}"
                 );
@@ -962,7 +1538,7 @@ mod tests {
         let players = [player("chromium", Playing), player("vlc", Paused)];
         for order in orders(&players) {
             assert_eq!(
-                selected_strictly(&order, Some("org.mpris.MediaPlayer2.mpv.instance-a")),
+                strictly(&order, Some("org.mpris.MediaPlayer2.mpv.instance-a")),
                 None,
                 "{order:?}"
             );
@@ -973,17 +1549,12 @@ mod tests {
     fn strict_ignores_the_followed_player() {
         let players = [player("vlc", Playing), player("chromium", Playing)];
         for remembered in [None, Some("org.mpris.MediaPlayer2.mpv.instance-gone")] {
-            for followed in [
-                "org.mpris.MediaPlayer2.vlc",
-                "org.mpris.MediaPlayer2.vlc.gone",
-            ] {
-                for order in orders(&players) {
-                    assert_eq!(
-                        step(&order, remembered, false, Some(followed)).0,
-                        None,
-                        "{remembered:?} {followed} {order:?}"
-                    );
-                }
+            for order in orders(&players) {
+                assert_eq!(
+                    strictly(&order, remembered),
+                    None,
+                    "{remembered:?} {order:?}"
+                );
             }
         }
     }
@@ -991,20 +1562,17 @@ mod tests {
     #[test]
     fn strict_without_a_remembered_instance_selects_nothing() {
         let players = [player("chromium", Playing), player("vlc", Paused)];
-        assert_eq!(selected_strictly(&players, None), None);
-        assert_eq!(selected_strictly(&[], None), None);
+        assert_eq!(strictly(&players, None), None);
+        assert_eq!(strictly(&[], None), None);
         for text in ["mpv", "", ":1.42", "org.mpris.MediaPlayer2."] {
-            assert_eq!(selected_strictly(&players, Some(text)), None, "{text:?}");
+            assert_eq!(strictly(&players, Some(text)), None, "{text:?}");
         }
     }
 
     #[test]
     fn strict_matches_the_bus_name_with_its_case() {
         let players = [player("mpv", Playing)];
-        assert_eq!(
-            selected_strictly(&players, Some("org.mpris.MediaPlayer2.MPV")),
-            None
-        );
+        assert_eq!(strictly(&players, Some("org.mpris.MediaPlayer2.MPV")), None);
     }
 
     // player_choices

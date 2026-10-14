@@ -10,8 +10,8 @@
 //! automatic selection off (B-05), so only the exact remembered instance is
 //! shown, never a fallback. `--online` looks a missing cover up with
 //! `musicbrainz`, `wikipedia` or `youtube` (B-18), and prints each request.
-//! Like a source, it keeps to the player it shows (B-08) for as long as it
-//! runs.
+//! Like a source, it starts in its grace period, then keeps to the player
+//! it follows (B-05, B-08).
 
 use std::thread;
 use std::time::{Duration, Instant};
@@ -21,7 +21,7 @@ use mpris_core::dbus::Core;
 use mpris_core::model::{Art, Settings};
 use mpris_core::online::wish;
 use mpris_core::player::MPRIS_PREFIX;
-use mpris_core::selection::{player_choices, select};
+use mpris_core::selection::{phase, player_choices, select};
 use mpris_core::settings::SettingValue;
 use mpris_core::time::format_time;
 
@@ -67,11 +67,14 @@ fn main() {
     let _ = log::set_logger(logger).map(|()| log::set_max_level(log::LevelFilter::Debug));
     let core = Core::start();
     let mut art_wish = core.art_wish();
+    let started = Instant::now();
     let mut followed = None;
     loop {
         thread::sleep(Duration::from_secs(1));
         let snapshot = core.snapshot();
-        let selection = select(&snapshot.players, &settings, followed.as_deref());
+        let now = Instant::now();
+        let phase = phase(started, false, now);
+        let selection = select(&snapshot.players, &settings, followed.as_deref(), phase);
         let player = selection.player;
         followed = selection.followed;
         art_wish.set(wish(player, &settings));
@@ -89,7 +92,7 @@ fn main() {
             println!("  page    {url}");
         }
         let own_art = player.is_some_and(|p| matches!(p.art, Art::Ready(_)));
-        print_content(&content(player, &settings, Instant::now()), own_art);
+        print_content(&content(player, &settings, now), own_art);
         for choice in player_choices(&snapshot.players, settings.player.as_deref()) {
             let unavailable = if choice.available {
                 ""
