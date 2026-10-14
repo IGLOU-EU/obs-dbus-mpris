@@ -195,9 +195,27 @@ Les propriétés sont rangées dans des groupes titrés d'OBS (`obs_properties_a
 
 La clé de traduction d'une propriété est sa clé de réglage, celle du titre d'un groupe son nom, et un test vérifie que chaque fichier de langue contient exactement les clés utilisées. Le schéma dit quels réglages portent un texte d'aide (B-52), et la clé de ce texte se dérive de la clé du réglage : `<clé>.Help`, comme `scroll_speed.Help`. Le point la tient à l'écart de toute clé de réglage. La glue le passe à `obs_property_set_long_description`, qu'OBS montre en infobulle. Chaque phrase y tient sa ligne (`\n` dans le fichier de langue, qu'OBS convertit), puisqu'une infobulle en texte brut ne revient jamais à la ligne d'elle-même.
 
+**Contrôle avant chargement.** `scripts/lib/plugin.sh` réunit ce que partagent les scripts qui construisent le plugin : le build release, la disposition du module (`bin/64bit`, `data/locale`) et le contrôle de la bibliothèque contre sa cible. Ce contrôle refuse une bibliothèque qui exige une glibc plus récente que celle de la cible, qui appelle un symbole absent de la `libobs` de la cible, ou à laquelle manque un point d'entrée qu'OBS exige (`obs_module_load`, `obs_module_ver`, `obs_module_set_pointer`). Sans `libobs` sur la machine de build, comme en CI pour l'archive native, seul le contrôle des symboles `libobs` est sauté : il est fait sur la même bibliothèque par le build Flatpak.
+
 **Développement avec OBS Flatpak.** `scripts/install-dev.sh [--native]` construit le plugin en release et le copie (par défaut dans le dossier Flatpak, avec `--native` dans `~/.config/obs-studio/plugins`). Le même `.so` natif est copié dans `~/.var/app/com.obsproject.Studio/config/obs-studio/plugins/obs-dbus-mpris/` (mêmes sous-dossiers `bin/64bit` et `data/locale`), qu'OBS Flatpak charge directement. Il tourne alors avec la glibc du runtime (2.42), plus ancienne que celle de l'hôte : le script d'installation vérifie qu'aucun symbole plus récent n'est requis, et que chaque symbole `libobs` attendu existe dans la `libobs` d'OBS Flatpak. La seule référence trop récente, `acosf@GLIBC_2.43` venue du rastériseur de glyphes, est enveloppée à l'édition de liens (D-04).
 
-**Flatpak.** Un manifeste `com.obsproject.Studio.Plugin.DbusMpris` construit une extension de l'application OBS. Disposition relevée sur l'extension Tuna installée et dans les métadonnées d'OBS (`directory=plugins`, `merge-dirs=lib/obs-plugins;share/obs/obs-plugins`) :
+**Version et journal des changements.** La version se fixe en un seul endroit, la table `[workspace.package]` du `Cargo.toml` racine, dont les quatre crates héritent. Elle nomme les fichiers de la release et entre dans le User-Agent (D-08). Les changements de chaque version sont dans `CHANGELOG.md`, au format Keep a Changelog, et une release se marque par un tag `v<version>`.
+
+**Archive native.** `scripts/package-native.sh [dossier]` produit `obs-dbus-mpris-<version>-x86_64-linux.tar.gz`, dans `target/dist` par défaut. Elle se décompresse dans `~/.config/obs-studio/plugins/` et y dépose le dossier `obs-dbus-mpris/` : `bin/64bit/obs-dbus-mpris.so`, `data/locale/*.ini` et `LICENSE`. Une bibliothèque se lie à la glibc de son système de build : la release se construit donc en CI sur Debian 12 (image `rust:1.87-bookworm`, glibc 2.36), et se charge sur Debian 12, Ubuntu 24.04 et toute distribution plus récente (construite ainsi le 2026-10-14, elle n'exige pas plus que GLIBC_2.35). Le script refuse une bibliothèque qui exige plus que `GLIBC_MAX`, 2.36 par défaut. Construite sur le poste de développement (glibc 2.43), elle exige 2.39, à cause des références faibles de la bibliothèque standard de Rust à `pidfd_spawnp` et `pidfd_getpid` : une archive locale demande alors `GLIBC_MAX=2.39`, et ne vaut que pour des systèmes aussi récents.
+
+**Intégration continue.** `.gitlab-ci.yml`, trois étapes :
+
+| Étape | Job | Image | Ce qu'il fait |
+|-------|-----|-------|---------------|
+| test | `test` | `rust:1.87-bookworm` | `cargo fmt --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace`, avec `dbus-daemon` pour les tests d'intégration et DejaVu Sans pour les tests de texte |
+| build | `native` | `rust:1.87-bookworm` | `scripts/package-native.sh`, l'archive en artefact |
+| build | `flatpak` | `ghcr.io/flathub-infra/flatpak-github-actions:freedesktop-25.08` | installe OBS Flatpak stable et l'extension `rust-stable`, puis `scripts/build-flatpak.sh`, le bundle en artefact |
+| release | `upload` | `alpine:3.22` | sur un tag `v*` seulement : dépose l'archive et le bundle dans le registre de paquets générique du projet, et tire du journal des changements la section de la version |
+| release | `release` | `registry.gitlab.com/gitlab-org/cli:latest` | sur un tag `v*` seulement : crée la release GitLab par le mot-clé `release`, avec cette section pour description et des liens vers les deux fichiers du registre |
+
+Les fichiers de la release vivent dans le registre de paquets générique, et non en artefacts de job, qui expirent. Le job `upload` échoue si le tag ne correspond pas à la version du workspace, puisque les fichiers construits portent cette dernière. Le job `flatpak` suppose un conteneur privilégié, que bubblewrap demande pour isoler chaque étape du build : c'est le cas des runners hébergés de GitLab.com (`saas-linux-*`), pas forcément d'un runner auto-hébergé.
+
+**Flatpak.** Le manifeste `packaging/flatpak/com.obsproject.Studio.Plugin.DbusMpris.yml` construit une extension de l'application OBS. Disposition relevée sur l'extension Tuna installée et dans les métadonnées d'OBS (`directory=plugins`, `merge-dirs=lib/obs-plugins;share/obs/obs-plugins`) :
 
 ```
 runtime          com.obsproject.Studio, branche stable
@@ -207,9 +225,28 @@ build-extension  true
 préfixe          /app/plugins/DbusMpris
 fichiers         lib/obs-plugins/obs-dbus-mpris.so
                  share/obs/obs-plugins/obs-dbus-mpris/locale/*.ini
+                 share/licenses/com.obsproject.Studio.Plugin.DbusMpris/obs-dbus-mpris/LICENSE
+                 share/metainfo/com.obsproject.Studio.Plugin.DbusMpris.metainfo.xml
 ```
 
-Le build Flatpak se fait hors ligne : les dépendances Cargo sont fournies au manifeste par `flatpak-cargo-generator`. La permission D-Bus passe par un override (B-45). L'accès réseau nécessaire à B-18 est déjà accordé à OBS Flatpak (`shared=network`).
+La licence est copiée d'office par flatpak-builder, qui installe le `LICENSE` de la racine des sources d'un module. Le fichier AppStream décrit l'extension comme un module complémentaire (`type="addon"`, `<extends>com.obsproject.Studio</extends>`), comme les extensions d'OBS publiées sur Flathub, pour que les logithèques la rattachent à OBS.
+
+Le build se fait hors ligne. `packaging/flatpak/cargo-sources.json` décrit chaque crate de `Cargo.lock` comme une archive de crates.io, vérifiée par la somme de contrôle du lockfile, et ajoute une configuration Cargo qui remplace crates.io par ces crates déposées dans les sources. flatpak-builder les télécharge avant le build, qui tourne ensuite sans réseau (`cargo --offline --locked`). Ce fichier se régénère à chaque changement de `Cargo.lock`, avec `flatpak-cargo-generator.py` du dépôt flatpak-builder-tools (dossier `cargo`), qui demande les modules Python `aiohttp` et `tomlkit`, dans un environnement virtuel au besoin :
+
+```sh
+python3 -m venv /tmp/fcg && /tmp/fcg/bin/pip install aiohttp tomlkit
+/tmp/fcg/bin/python flatpak-cargo-generator.py Cargo.lock -o packaging/flatpak/cargo-sources.json
+```
+
+Le générateur ne contacte le réseau que pour des dépendances tirées d'un dépôt git, que le workspace n'a pas. `ring` compile du C et de l'assembleur avec le gcc du SDK, `webpki-roots` n'est qu'un crate de données : ni l'un ni l'autre ne demande rien de plus au SDK.
+
+L'extension `rust-stable` fournit le Rust stable du moment (1.98.1 au 2026-10-14), et non la 1.87 de `rust-toolchain.toml`, que seul rustup lit. Le workspace, en édition 2024 et `rust-version` 1.87, se construit avec toute version plus récente, et le build sur l'hôte garde la 1.87.
+
+`scripts/build-flatpak.sh [dossier]` (`target/flatpak` par défaut) lance flatpak-builder, contrôle la bibliothèque construite contre la glibc du runtime (2.42) et la `libobs` d'OBS Flatpak, puis produit le bundle `obs-dbus-mpris-<version>-x86_64.flatpak` (`flatpak build-bundle --runtime`). Il n'installe rien : OBS Flatpak, `org.freedesktop.Sdk//25.08` et son extension `rust-stable//25.08` doivent être là. Le bundle s'installe par `flatpak install --user <bundle>`. Il n'est pas signé : Flatpak lui crée un dépôt d'origine sans vérification GPG, comme pour Tuna, et une nouvelle version s'installe par un nouveau bundle. L'extension et une copie dans le dossier de plugins utilisateur d'OBS Flatpak (`install-dev.sh`) ne doivent pas coexister : OBS chargerait le module deux fois.
+
+Vérifié le 2026-10-14, dans une installation Flatpak à part : le bundle s'installe (dépôt d'origine `dbusmpris-origin`), le bac à sable d'OBS 32.2.2 montre la bibliothèque dans `/app/plugins/lib/obs-plugins` et les traductions dans `/app/plugins/share/obs/obs-plugins/obs-dbus-mpris/locale`, et la bibliothèque s'y charge en `RTLD_NOW` après la `libobs` d'OBS, tous ses symboles résolus. Le build de l'extension n'exige pas plus que GLIBC_2.39 (les mêmes références faibles à `pidfd_*`), sous les 2.42 du runtime.
+
+La permission D-Bus passe par un override (B-45). L'accès réseau nécessaire à B-18 est déjà accordé à OBS Flatpak (`shared=network`).
 
 ## Tests
 
@@ -223,7 +260,7 @@ Le build Flatpak se fait hors ligne : les dépendances Cargo sont fournies au ma
 
 | Risque | Traitement |
 |--------|------------|
-| Build Rust hors ligne en Flatpak | reporté en phase 7 avec le manifeste, le développement passant par le dossier de plugins utilisateur |
+| Build Rust hors ligne en Flatpak | résolu en phase 7 : crates fournies par `cargo-sources.json`, build de l'extension vérifié le 2026-10-14 |
 | Rendu du texte et repli CJK | résolu par l'essai de la phase 3 (D-04) : le bac à sable voit les polices de l'hôte sous `/run/host/fonts`, mais le runtime seul n'a aucune police CJK. La documentation d'installation demandera donc une police CJK sur l'hôte |
 | Miniatures hors du bac à sable d'OBS Flatpak (Chrome en Flatpak) | option de pochette en ligne (B-18) |
 | Pochette en ligne fausse ou introuvable (titres de vidéos non normalisés) | accepté : l'option est sur « Aucune » par défaut, le score minimal écarte les candidats douteux, un échec laisse l'image par défaut |
