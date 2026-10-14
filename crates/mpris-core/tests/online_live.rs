@@ -2,16 +2,26 @@
 //!
 //! `cargo test -p mpris-core --test online_live -- --ignored --nocapture`
 //!
-//! Some twenty requests, paced as the plugin paces them. The answers follow
-//! what the services hold that day, so a failure here calls for a look at
-//! what they answered, which the run prints, before any change of code.
+//! Some twenty requests, paced as the plugin paces them, then one lookup
+//! through the core, as the plugin runs it. The answers follow what the
+//! services hold that day, so a failure here calls for a look at what they
+//! answered, which the run prints, before any change of code.
+
+mod common;
 
 use std::sync::atomic::AtomicBool;
-use std::time::Instant;
+use std::thread;
+use std::time::{Duration, Instant};
 
-use mpris_core::model::{Service, Track};
+use common::{Fake, FakePlayer, PrivateBus, find, metadata};
+use mpris_core::content::{Content, content};
+use mpris_core::dbus::Core;
+use mpris_core::model::{Service, Settings, Track};
 use mpris_core::network::look_up_online;
-use mpris_core::online::{decode, request};
+use mpris_core::online::{Wish, decode, request};
+use zbus::zvariant::Value;
+
+const PLAYER: &str = "org.mpris.MediaPlayer2.fake.instance1";
 
 /// Prints the requests of the network module.
 struct StderrLog;
@@ -97,4 +107,54 @@ fn the_study_tracks_against_the_real_services() {
         }
     }
     assert!(surprises.is_empty(), "unexpected outcomes: {surprises:?}");
+    shown_through_the_core();
+}
+
+/// A player without a cover of its own, on a private bus, and a source
+/// that picked MusicBrainz: the cover reaches what the source draws.
+fn shown_through_the_core() {
+    // The core's network thread paces its requests on its own.
+    thread::sleep(Duration::from_millis(1100));
+    let bus = PrivateBus::start();
+    let school = metadata(vec![
+        ("xesam:title", Value::from("School")),
+        ("xesam:artist", Value::from(vec!["Supertramp"])),
+        (
+            "xesam:album",
+            Value::from("Crime Of The Century (Remastered)"),
+        ),
+    ]);
+    let _player = FakePlayer::start(&bus, PLAYER, Fake::new("Player", "Playing", school));
+    let core = Core::start_at(&bus.address);
+    let settings = Settings {
+        art_online: Some(Service::MusicBrainz),
+        ..Settings::default()
+    };
+    let mut wish = core.art_wish();
+    eprintln!("Through the core, MusicBrainz \"School\"");
+    let started = Instant::now();
+    let deadline = started + Duration::from_secs(20);
+    loop {
+        let snapshot = core.snapshot();
+        let player = find(&snapshot, PLAYER);
+        if player.is_some() {
+            wish.set(Some(Wish {
+                bus_name: PLAYER.into(),
+                service: Service::MusicBrainz,
+            }));
+        }
+        if let Content::Track(track) = content(player, &settings, Instant::now()) {
+            if let Some(art) = track.art {
+                eprintln!(
+                    "  => a {}x{} cover drawn in {:?}",
+                    art.width,
+                    art.height,
+                    started.elapsed()
+                );
+                return;
+            }
+        }
+        assert!(Instant::now() < deadline, "no cover drawn through the core");
+        thread::sleep(Duration::from_millis(50));
+    }
 }
