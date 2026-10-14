@@ -14,14 +14,15 @@ Chaque donnée a un seul propriétaire et un seul endroit où elle s'écrit. Tou
 | Schéma des réglages (clés, types, valeurs par défaut) | une table unique dans le code | | la déclaration des propriétés, les valeurs par défaut, la conversion en `Settings` |
 | Lecteur effectif | personne | jamais stocké, recalculé à chaque image par une fonction pure | |
 | Position affichée | personne | jamais stockée, dérivée de la position de référence, de son horodatage, de `Rate` et de l'heure courante | |
-| Image d'une source | la source, qui n'en garde qu'une texture | le fil de rendu, qui dessine la source entière en une image quand sa clé de redessin change, puis le fil graphique, qui la charge en une seule texture | `video_render`, qui dessine cette texture |
+| Image d'une source | la source, qui en garde une texture pour l'image et une par texte qui défile | le fil de rendu, qui dessine la source entière en une image quand sa clé de redessin change, les textes trop longs à part dans des bandes, puis le fil graphique, qui charge l'image en texture, et les bandes seulement quand elles changent | `video_render`, qui dessine l'image puis une fenêtre de chaque bande |
+| Décalage d'un texte qui défile | personne | jamais stocké, dérivé à chaque image du temps écoulé depuis le début du cycle, de la vitesse, de la pause et des périodes des bandes | |
 
 Une miniature décodée vit une seule fois dans le `Store`, partagée par toutes les sources qui suivent le même lecteur. Chaque source n'en garde que sa version mise à l'échelle, dérivée et refaite seulement quand l'image, le côté de l'emplacement ou le rayon des coins change.
 
 ### Data oriented
 
 - Des structures de données simples, sans hiérarchie d'objets ni trait object pour le domaine. Les lecteurs sont désignés par leur clé, pas par des pointeurs.
-- La logique s'écrit en fonctions pures qui transforment des données : `select_player(&Snapshot, &Settings)`, `display_position(&Player, now)`, `format_time(Duration)`, `layout(&Settings)`, `redraw_key(&Layout, &Content, &Settings)`.
+- La logique s'écrit en fonctions pures qui transforment des données : `select_player(&Snapshot, &Settings)`, `display_position(&Player, now)`, `format_time(Duration)`, `layout(&Settings)`, `redraw_key(&Layout, &Content, &Settings)`, `Scroll::offset(elapsed, period)`.
 - Les effets de bord restent aux bords : l'adaptateur D-Bus en entrée, la colle OBS en sortie. Le cœur se teste sans OBS et sans bus, le rendu sans OBS.
 
 ## Flux de données
@@ -40,16 +41,23 @@ video_tick, par source (fil graphique d'OBS)
   ├─ content(player, settings, now) → Content    fonction pure : textes, temps, état
   ├─ layout(settings) → Layout                   fonction pure : taille et rectangles
   ├─ redraw_key(layout, content, settings)       fonction pure : ce que l'image montre
-  └─ si la clé a changé : demande une image au fil de rendu, sans l'attendre
+  ├─ si la clé a changé : demande une image au fil de rendu, sans l'attendre
+  └─ si la vitesse ou la pause du défilement a changé : relance le cycle
            ▼
 fil de rendu mpris-render, un seul pour tout le plugin
-  └─ draw(layout, content, settings) → image RGBA de la source entière
+  └─ draw(layout, content, settings) → Picture
+       ├─ image RGBA de la source entière, sans les textes trop longs
+       └─ une bande par texte trop long (B-36), dessinée une fois
+          et rendue telle quelle tant qu'elle montre la même chose
      (une demande plus récente remplace celle qui attend encore)
            ▼
 video_render, par source (fil graphique d'OBS)
   ├─ prend la dernière image finie, s'il y en a une
   ├─ la charge en texture, à la place de la précédente
-  └─ dessine la texture
+  ├─ charge les bandes en textures si elles ont changé, et relance alors le cycle
+  ├─ dessine la texture de l'image
+  └─ pour chaque bande : Scroll::offset(écoulé, période)   fonction pure
+     puis dessine la fenêtre de la bande à ce décalage, sur sa ligne
 ```
 
 Le `Store` indexe les lecteurs par nom connu (`org.mpris.MediaPlayer2.mpv.instance-…`) et rattache les signaux par nom unique D-Bus (`:1.42`), puisque c'est de ce nom qu'ils arrivent. Un même processus peut posséder plusieurs noms MPRIS, un signal touche alors chacun d'eux.
@@ -84,7 +92,7 @@ La séparation entre `mpris-core` et `obs-mpris` a une raison concrète : les te
 - **Fil du cœur** : un seul pour tout le plugin, démarré par `obs_module_load` et arrêté par `obs_module_unload`. Une boucle d'événements asynchrone unique qui reçoit les signaux D-Bus, le minuteur de relecture et les messages des autres fils. L'exécuteur de zbus tourne dans ce fil (`internal_executor(false)`), ce qui permet à l'arrêt d'interrompre même un appel en attente sur un lecteur figé. Les miniatures se lisent et se décodent sur le pool de `blocking`, attendues dans cette même boucle, si bien que l'arrêt abandonne aussi une lecture bloquée sur un montage réseau figé. Ce pool, par lequel zbus se connecte aussi, et le fil global `async-io` sont partagés par tout le processus et survivent à l'arrêt du cœur, sans aucun état de lecteur. Un bus injoignable n'empêche pas le chargement du module, il est journalisé et la source affiche le message de repli.
 - **Fil réseau** : démarré à la première demande de pochette en ligne, jamais sinon (B-48). Il ne touche pas au `Store`, il renvoie ses résultats au fil du cœur.
 - **Fil de rendu** (`mpris-render`) : un seul pour tout le plugin, démarré par `obs_module_load` et arrêté par `obs_module_unload`, qui attend la fin de l'image ou du chargement de polices en cours. Il charge d'abord les polices du système, ce qui prend jusqu'à quelques secondes à froid, puis dessine les images que les sources demandent. Pour chaque source, il ne garde qu'une demande en attente, qu'une plus récente remplace, et qu'une image finie, que le fil graphique vient prendre. Un dessin qui panique est journalisé sans arrêter le fil, un échec du chargement des polices laisse le texte non dessiné, et un fil qui ne démarre pas laisse les sources vides sans empêcher le chargement du module.
-- **Fil graphique d'OBS** (`video_tick`, `video_render`, et `update`, qu'OBS 32 diffère au tick graphique pour une source vidéo) : lit l'instantané courant sans attendre le fil du cœur, demande une image au fil de rendu sans l'attendre, et charge en texture la dernière image finie.
+- **Fil graphique d'OBS** (`video_tick`, `video_render`, et `update`, qu'OBS 32 diffère au tick graphique pour une source vidéo) : lit l'instantané courant sans attendre le fil du cœur, demande une image au fil de rendu sans l'attendre, et charge en texture la dernière image finie et ses bandes nouvelles. À chaque image, il ne fait que calculer le décalage de chaque bande et la dessiner : le défilement ne redessine rien sur le processeur.
 - **Fil d'interface d'OBS** (`create`, `get_defaults`, `get_properties`) : lit l'instantané pour construire la liste des lecteurs.
 
 Les réglages d'une source sont écrits et lus depuis ces deux fils : ils sont protégés par un `Mutex`, tenu le temps d'une copie.
@@ -135,6 +143,8 @@ Critères de choix : repli correct sur les caractères japonais (cas réel de mp
 
 Critères de choix : couverture sur des pistes réelles (japonaises comprises), justesse du résultat, conditions d'utilisation compatibles avec un plugin distribué.
 
+**D-10 Défilement par bandes** (B-36). Un texte trop long pour sa ligne, titre, sous-titre ou message de repli, n'est pas dessiné dans l'image de la source. Le fil de rendu le dessine une fois dans une bande à part : le texte, un écart de deux fois sa taille de police, puis assez de sa propre copie pour couvrir la ligne. La période de la bande, largeur du texte arrondie au pixel supérieur plus l'écart, est un nombre entier de pixels, si bien que la copie tombe sur la même fraction de pixel que le texte et que la fenêtre décalée d'une période montre exactement le début. Chaque bande devient une texture, que `video_render` dessine à chaque image par `gs_draw_sprite_subregion`, une fenêtre de la taille de la ligne, à un décalage en pixels entiers : rien ne sort de la ligne, et le texte reste net. Le décalage vient de `Scroll::offset`, calcul pur en nanosecondes entières, sans dérive au fil des heures : le cycle commence par la pause, puis tous les textes partent ensemble à la même vitesse jusqu'à ce que le plus long ait parcouru sa période, le plus court attendant à sa période, qui se dessine comme son début. Le cycle repart quand les bandes changent (texte, taille, ligne, couleur, pictogramme pause qui raccourcit la ligne du titre) ou quand la vitesse ou la pause change. À vitesse nulle, ou pour une bande qui dépasserait 8 192 pixels de large, le texte est coupé par des points de suspension dans l'image, comme avant.
+
 ## Builds
 
 **Natif.** `cargo build --release` produit la cdylib, installée sous le nom `obs-dbus-mpris.so` :
@@ -167,9 +177,9 @@ Le build Flatpak se fait hors ligne : les dépendances Cargo sont fournies au ma
 
 ## Tests
 
-- **Unitaires, test d'abord, dans `mpris-core`** : règle de sélection (dont lecteur mémorisé présent mais arrêté), extraction de la clé, extrapolation de la position, lecture des métadonnées (manquantes, mal typées), décodage des miniatures (`data:`, `file://`, format non pris en charge, données corrompues), format des temps, conversion des réglages et valeurs par défaut, pochette en ligne (construction de la recherche, lecture des réponses du service à partir de réponses enregistrées, cache et dédoublonnage, échecs compris). Aucun test n'appelle le vrai service.
-- **Unitaires dans `render`**, sans OBS : disposition (largeur totale, hauteur tirée des polices et des éléments cochés, marges proportionnelles, flip, bornes du schéma, aucun rectangle hors du cadre), dessin (couleurs et alpha en lumière linéaire, coins arrondis, barre au pixel près, pictogramme pause, chaque texte dans sa rangée), miniature (recadrage central, mise à l'échelle, cache), troncature par points de suspension, clé de redessin (deux clés égales donnent la même image, une progression de moins d'un pixel garde la clé), fil de rendu (seule la dernière demande est dessinée, l'arrêt n'attend pas que les sources disparaissent). Les tests de texte chargent un seul fichier de police connu, DejaVu Sans ou Noto Sans, ou celui que nomme `RENDER_TEST_FONT`, et se sautent sans lui.
-- **Contrôle visuel du rendu** : l'exemple `cargo run --release -p render --example render_png -- <dossier>` dessine en PNG chaque variante de la maquette de B-37, titre japonais et titre trop long compris, et mesure le temps de dessin. Le même exécutable se lance dans le bac à sable d'OBS Flatpak (`flatpak run --command=<chemin absolu de l'exemple> com.obsproject.Studio <dossier>`), pour voir le rendu avec les polices que voit OBS.
+- **Unitaires, test d'abord, dans `mpris-core`** : règle de sélection (dont lecteur mémorisé présent mais arrêté), extraction de la clé, extrapolation de la position, lecture des métadonnées (manquantes, mal typées), décodage des miniatures (`data:`, `file://`, format non pris en charge, données corrompues), format des temps, temps restant (nul en fin de piste et au-delà, compté sur les secondes affichées), conversion des réglages et valeurs par défaut, pochette en ligne (construction de la recherche, lecture des réponses du service à partir de réponses enregistrées, cache et dédoublonnage, échecs compris). Aucun test n'appelle le vrai service.
+- **Unitaires dans `render`**, sans OBS : disposition (largeur totale, hauteur tirée des polices et des éléments cochés, marges proportionnelles, flip, bornes du schéma, aucun rectangle hors du cadre), dessin (couleurs et alpha en lumière linéaire, coins arrondis, barre au pixel près, pictogramme pause, chaque texte dans sa rangée), miniature (recadrage central, mise à l'échelle, cache), troncature par points de suspension, clé de redessin (deux clés égales donnent la même image, une progression de moins d'un pixel garde la clé), fil de rendu (seule la dernière demande est dessinée, l'arrêt n'attend pas que les sources disparaissent), défilement (pause d'abord, vitesse constante, texte court qui attend le long, pause commune, boucle sans dérive sur des durées énormes, vitesse et pause nulles), bandes (période, fenêtre à la période identique au début, écart vide, couleur, repli sur les points de suspension, bandes gardées d'une seconde à l'autre). Les tests de texte chargent un seul fichier de police connu, DejaVu Sans ou Noto Sans, ou celui que nomme `RENDER_TEST_FONT`, et se sautent sans lui.
+- **Contrôle visuel du rendu** : l'exemple `cargo run --release -p render --example render_png -- <dossier>` dessine en PNG chaque variante de la maquette de B-37, titre japonais et titre trop long compris, ainsi que l'écart, l'image ronde et le temps restant, et mesure le temps de dessin. Pour une variante dont des textes défilent, il écrit aussi l'image seule, chaque bande, et la source composée à quelques instants du cycle, comme OBS la dessine. Le même exécutable se lance dans le bac à sable d'OBS Flatpak (`flatpak run --command=<chemin absolu de l'exemple> com.obsproject.Studio <dossier>`), pour voir le rendu avec les polices que voit OBS.
 - **Intégration D-Bus** : un faux lecteur MPRIS servi par zbus sur un bus privé (`dbus-run-session -- cargo test`). Scénarios : apparition, disparition, changement de métadonnées, `Seeked`, relance avec un nouveau suffixe d'instance.
 - **Colle OBS** : scénarios d'acceptation manuels ([besoins.md](besoins.md), section 7) dans OBS Flatpak.
 
