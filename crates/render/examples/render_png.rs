@@ -1,6 +1,12 @@
 //! Renders the source in each variant of the mockup (besoins.md, B-37) to
 //! PNG files, to check the drawing by eye, and times the drawing.
 //!
+//! Each PNG shows the source as OBS shows it at the start of the scroll
+//! cycle, strips laid over the frame. A variant with scrolling texts also
+//! gets its frame alone (`-frame`), each strip (`-strip-<n>`), and the
+//! source at a few instants of the cycle (`-at-<ms>ms`), as OBS draws it at
+//! that time (B-36).
+//!
 //! Usage: `cargo run --release -p render --example render_png -- <out-dir>`
 //!
 //! The fonts OBS Flatpak sees may differ, so run the built example there too:
@@ -21,9 +27,10 @@ use mpris_core::model::{
     Art, ArtImage, PlaybackStatus, Player, PlayerKey, PositionAnchor, Rgba, Settings, Track,
 };
 use render::art::ArtCache;
-use render::draw::draw;
+use render::draw::{Picture, draw};
 use render::frame::Frame;
-use render::layout::layout;
+use render::layout::{Rect, layout};
+use render::scroll::Scroll;
 use render::strip::StripCache;
 use render::text::Fonts;
 
@@ -59,27 +66,120 @@ fn main() -> ExitCode {
     for variant in variants(now) {
         let layout = layout(&variant.settings);
         let shown = content(variant.player.as_ref(), &variant.settings, now);
-        let frame = draw(
+        let picture = draw(
             &layout,
             &shown,
             &variant.settings,
             &mut fonts,
             &mut ArtCache::new(),
             &mut StripCache::new(),
-        )
-        .frame;
-        let path = out.join(format!("{}.png", variant.name));
-        match save(&frame, &path) {
-            Ok(()) => println!("{} ({}x{})", path.display(), frame.width(), frame.height()),
-            Err(error) => {
-                eprintln!("cannot write {}: {error}", path.display());
-                return ExitCode::FAILURE;
-            }
+        );
+        if let Err(error) = save_variant(&out, variant.name, &picture, &variant.settings) {
+            eprintln!("{error}");
+            return ExitCode::FAILURE;
         }
     }
 
     time_full_panel(&mut fonts, now);
+    time_strips(&mut fonts, now);
     ExitCode::SUCCESS
+}
+
+/// The source at the start of the cycle, then, when texts scroll, its parts
+/// and a few instants of the cycle.
+fn save_variant(
+    out: &Path,
+    name: &str,
+    picture: &Picture,
+    settings: &Settings,
+) -> Result<(), String> {
+    let write = |suffix: &str, frame: &Frame| {
+        let path = out.join(format!("{name}{suffix}.png"));
+        save(frame, &path).map_err(|error| format!("cannot write {}: {error}", path.display()))?;
+        println!("{} ({}x{})", path.display(), frame.width(), frame.height());
+        Ok::<(), String>(())
+    };
+    write("", &composed(picture, settings, Duration::ZERO))?;
+    if picture.strips.is_empty() {
+        return Ok(());
+    }
+    write("-frame", &picture.frame)?;
+    for (i, strip) in picture.strips.iter().enumerate() {
+        println!(
+            "  strip {i}: period {} px, line {:?}",
+            strip.period, strip.line
+        );
+        write(&format!("-strip-{i}"), &strip.image)?;
+    }
+    for at in instants(picture, settings) {
+        write(
+            &format!("-at-{}ms", at.as_millis()),
+            &composed(picture, settings, at),
+        )?;
+    }
+    Ok(())
+}
+
+/// The frame with each strip laid over its line at the offset that OBS
+/// draws `elapsed` after the cycle started.
+fn composed(picture: &Picture, settings: &Settings, elapsed: Duration) -> Frame {
+    let periods = picture.strips.iter().map(|strip| strip.period);
+    let scroll = Scroll::new(periods, settings.scroll_speed, settings.scroll_pause);
+    let mut frame = picture.frame.clone();
+    for strip in &picture.strips {
+        let offset = scroll.offset(elapsed, strip.period);
+        let window = Rect::new(offset, 0, strip.line.w, strip.line.h);
+        frame.over((strip.line.x, strip.line.y), &strip.image, window);
+    }
+    frame
+}
+
+/// Moments that tell the cycle: in the pause, under way, the shorter text
+/// waiting at its start, the longer near its end, and the next pause.
+fn instants(picture: &Picture, settings: &Settings) -> Vec<Duration> {
+    let speed = f64::from(settings.scroll_speed.max(1));
+    let travel = |period: u32| Duration::from_secs_f64(f64::from(period) / speed);
+    let periods = picture.strips.iter().map(|strip| strip.period);
+    let (shortest, longest) = (periods.clone().min(), periods.max());
+    let (Some(shortest), Some(longest)) = (shortest, longest) else {
+        return Vec::new();
+    };
+    let pause = settings.scroll_pause;
+    let mut at = vec![
+        Duration::from_millis(500),
+        pause + Duration::from_millis(1500),
+        pause + travel(longest) - Duration::from_millis(250),
+        pause + travel(longest) + Duration::from_millis(100),
+    ];
+    if shortest < longest {
+        at.push(pause + travel(shortest) + Duration::from_millis(500));
+    }
+    at.sort();
+    at
+}
+
+/// The cost of the strips: the first draw of two long texts, which
+/// rasterizes them, then a new second, which finds them drawn.
+fn time_strips(fonts: &mut Fonts, now: Instant) {
+    let settings = Settings::default();
+    let layout = layout(&settings);
+    let player = long_player(now);
+    let (mut art, mut strips) = (ArtCache::new(), StripCache::new());
+    let started = Instant::now();
+    let shown = content(Some(&player), &settings, now);
+    let picture = draw(&layout, &shown, &settings, fonts, &mut art, &mut strips);
+    println!(
+        "first draw with {} strips: {:?}",
+        picture.strips.len(),
+        started.elapsed()
+    );
+    let started = Instant::now();
+    let shown = content(Some(&player), &settings, now + Duration::from_secs(1));
+    draw(&layout, &shown, &settings, fonts, &mut art, &mut strips);
+    println!(
+        "redraw of a new second, strips kept: {:?}",
+        started.elapsed()
+    );
 }
 
 /// The cost of a redraw of the full panel with its cover: the first one,
@@ -129,21 +229,17 @@ fn variants(now: Instant) -> Vec<Variant> {
         p.track.album = None;
         p
     };
-    let long = {
-        let mut p = player(PlaybackStatus::Playing, now);
-        p.track.title = Some(
-            "🎵 Une vidéo au titre interminable, bien trop long pour tenir sur une seule ligne"
-                .into(),
-        );
-        p.track.album = Some("Un album au nom tout aussi long que le titre".into());
-        p.track.artists = vec!["Premier artiste".into(), "Second artiste".into()];
-        p
+    let long = long_player(now);
+    let long_paused = Player {
+        status: PlaybackStatus::Paused,
+        ..long_player(now)
     };
     let pending = {
         let mut p = player(PlaybackStatus::Playing, now);
         p.art = Art::Pending;
         p
     };
+    let pending_round = pending.clone();
     vec![
         Variant {
             name: "01-title-only",
@@ -245,7 +341,92 @@ fn variants(now: Instant) -> Vec<Variant> {
             },
             player: playing(),
         },
+        Variant {
+            name: "15-gap-24",
+            settings: Settings {
+                art_gap: 24,
+                ..Settings::default()
+            },
+            player: playing(),
+        },
+        Variant {
+            name: "16-gap-24-art-right",
+            settings: Settings {
+                art_gap: 24,
+                art_right: true,
+                ..Settings::default()
+            },
+            player: playing(),
+        },
+        Variant {
+            name: "17-round-art",
+            settings: Settings {
+                art_round: true,
+                ..Settings::default()
+            },
+            player: playing(),
+        },
+        Variant {
+            name: "18-round-art-no-cover",
+            settings: Settings {
+                art_round: true,
+                ..Settings::default()
+            },
+            player: Some(pending_round),
+        },
+        Variant {
+            name: "19-round-art-gap-radius-0",
+            settings: Settings {
+                art_round: true,
+                art_gap: 24,
+                corner_radius: 0,
+                ..Settings::default()
+            },
+            player: playing(),
+        },
+        Variant {
+            name: "20-remaining-time",
+            settings: Settings {
+                show_remaining: true,
+                ..Settings::default()
+            },
+            player: playing(),
+        },
+        Variant {
+            name: "21-long-title-ellipsis",
+            settings: Settings {
+                scroll_speed: 0,
+                ..Settings::default()
+            },
+            player: Some(long_player(now)),
+        },
+        Variant {
+            name: "22-long-title-paused",
+            settings: Settings::default(),
+            player: Some(long_paused),
+        },
+        Variant {
+            name: "23-long-message",
+            settings: Settings {
+                fallback_text: "Aucune lecture en cours sur aucun des lecteurs du bus de session"
+                    .into(),
+                ..Settings::default()
+            },
+            player: None,
+        },
     ]
+}
+
+/// A title and a subtitle too long for their lines, the subtitle the
+/// shorter of the two.
+fn long_player(now: Instant) -> Player {
+    let mut p = player(PlaybackStatus::Playing, now);
+    p.track.title = Some(
+        "🎵 Une vidéo au titre interminable, bien trop long pour tenir sur une seule ligne".into(),
+    );
+    p.track.album = Some("Un album au nom tout aussi long que le titre".into());
+    p.track.artists = vec!["Premier artiste".into(), "Second artiste".into()];
+    p
 }
 
 /// A player at 1:21 of a 1:56 track, with a 16:9 cover.
