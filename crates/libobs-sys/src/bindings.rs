@@ -234,6 +234,10 @@ pub const OBS_TEXT_PASSWORD: obs_text_type = 1;
 pub const OBS_TEXT_MULTILINE: obs_text_type = 2;
 pub const OBS_TEXT_INFO: obs_text_type = 3;
 pub type obs_text_type = ::std::os::raw::c_uint;
+pub const OBS_COMBO_INVALID: obs_group_type = 0;
+pub const OBS_GROUP_NORMAL: obs_group_type = 1;
+pub const OBS_GROUP_CHECKABLE: obs_group_type = 2;
+pub type obs_group_type = ::std::os::raw::c_uint;
 #[repr(C)]
 #[derive(Debug)]
 pub struct obs_properties {
@@ -288,6 +292,15 @@ unsafe extern "C" {
         props: *mut obs_properties_t,
         name: *const ::std::os::raw::c_char,
         description: *const ::std::os::raw::c_char,
+    ) -> *mut obs_property_t;
+}
+unsafe extern "C" {
+    pub fn obs_properties_add_group(
+        props: *mut obs_properties_t,
+        name: *const ::std::os::raw::c_char,
+        description: *const ::std::os::raw::c_char,
+        type_: obs_group_type,
+        group: *mut obs_properties_t,
     ) -> *mut obs_property_t;
 }
 unsafe extern "C" {
