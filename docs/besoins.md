@@ -12,29 +12,30 @@ Chaque exigence porte un identifiant B-xx, repris par la feuille de route et par
 
 **B-04 Clé de lecteur.** La clé d'un lecteur est le premier segment qui suit `org.mpris.MediaPlayer2.` dans son nom de bus. La spécification MPRIS réserve les segments suivants aux instances multiples, et ils changent à chaque lancement : `org.mpris.MediaPlayer2.mpv.instance-mWyyJbmA` a pour clé `mpv`. La clé se déduit du nom de bus mémorisé, elle n'est jamais stockée, et sert à retrouver le lecteur quand l'instance mémorisée a disparu (B-06).
 
-**B-05 Règle de sélection.** La sélection automatique sert au démarrage : elle laisse le temps de lancer sa source habituelle, puis se fige pour qu'aucun changement automatique ne survienne en plein direct. Un délai de grâce de 5 minutes court à partir de la création de la source (au lancement d'OBS ou à l'ajout de la source), et repart quand le lecteur mémorisé ou la case de sélection automatique changent dans les propriétés. Chaque source retient en mémoire le lecteur qu'elle affiche, son lecteur suivi (B-08).
+**B-05 Règle de sélection.** La sélection automatique sert au démarrage : elle laisse le temps de lancer sa source habituelle, puis se fige pour qu'aucun changement automatique ne survienne en plein direct. Chaque source retient en mémoire le lecteur qu'elle affiche, son lecteur suivi (B-08).
 
-Pendant le délai de grâce, le lecteur affiché est réévalué en continu, dans cet ordre :
+**Délai de grâce.** Pendant les 5 minutes qui suivent le démarrage de la source (lancement d'OBS ou ajout de la source), et tant qu'aucun choix n'a été fait à la main dans les propriétés, le lecteur affiché est réévalué en continu, dans cet ordre :
 
 1. l'instance mémorisée, si elle est présente, quel que soit son état,
 2. sinon une instance du lecteur mémorisé (même clé), celle qui est en lecture de préférence, sinon la première,
-3. sinon le lecteur suivi, s'il est présent, ou une instance de même clé (relance),
-4. sinon le premier lecteur en lecture (`PlaybackStatus` = `Playing`), à défaut le premier lecteur disponible,
-5. sinon aucun, et la source affiche le message de repli (B-23).
+3. sinon un autre lecteur disponible, le premier en lecture (`PlaybackStatus` = `Playing`) de préférence, sinon le premier présent,
+4. sinon aucun, et la source affiche le message de repli (B-23).
 
-Ainsi, lancer sa source habituelle pendant le délai la fait afficher, mais un autre lecteur déjà affiché ne cède pas la place à un troisième.
+Lancer sa source habituelle pendant le délai la fait donc afficher, à la place d'un autre lecteur affiché faute de mieux.
 
-Après le délai de grâce, la source n'en change plus d'elle-même : elle garde le lecteur suivi, ou une instance de même clé s'il est relancé, même si l'instance mémorisée réapparaît (elle pourrait être une erreur de manipulation en plein direct). Si le lecteur suivi disparaît sans relance, elle affiche le message de repli. Seule exception : si la source n'a encore rien affiché depuis le début, elle applique une fois les étapes 1, 2 et 4, puis suit le lecteur retenu.
+**Après le délai.** La source n'en change plus d'elle-même. Elle garde le lecteur suivi, ou une instance de même clé s'il est relancé (mpv quitté puis relancé avec un nouveau suffixe d'instance), même si l'instance mémorisée réapparaît : en plein direct, ce pourrait être une erreur de manipulation, alors que le lecteur affiché était le bon. Si le lecteur suivi disparaît sans relance, elle affiche le message de repli en attendant son retour, et ne bascule jamais sur un autre lecteur. Seule exception : si la source n'a encore rien affiché depuis son démarrage, le premier lecteur qui apparaît est retenu selon les étapes 1 à 3, puis suivi.
+
+**Choix manuel.** Un lecteur choisi à la main dans les propriétés est définitif : il ne rouvre pas de délai de grâce, il devient aussitôt le lecteur suivi, et la source ne le quitte plus d'elle-même. S'il disparaît, elle affiche le message de repli jusqu'à son retour ou sa relance. Choisir « Aucun choix » à la main laisse la source sans lecteur suivi, hors délai : le premier lecteur qui apparaît est retenu puis suivi.
 
 « Premier » s'entend dans l'ordre alphabétique des clés (B-04), puis des noms de bus, sans tenir compte de la casse.
 
-La case « Sélection automatique », cochée par défaut, commande tout ce qui précède. Décochée, seule l'instance mémorisée exacte s'affiche, quel que soit son état : sans elle, même après une relance du même lecteur, la source affiche le message de repli jusqu'à un nouveau choix.
+La case « Sélection automatique », cochée par défaut, commande tout ce qui précède. Décochée, seule l'instance mémorisée exacte s'affiche, quel que soit son état : sans elle, même après une relance du même lecteur, la source affiche le message de repli jusqu'à un nouveau choix. Cocher ou décocher la case compte comme un choix manuel : pas de délai de grâce.
 
-**B-06 Retour automatique.** Le repli ne modifie jamais le choix mémorisé. Pendant le délai de grâce, quand l'instance mémorisée réapparaît ou qu'un lecteur de même clé apparaît (relance de mpv avec un nouveau suffixe d'instance, par exemple), la source y revient d'elle-même (étapes 1 et 2), si la sélection automatique est cochée. Après le délai, seul un nouveau choix dans les propriétés la ramène au lecteur mémorisé.
+**B-06 Retour automatique.** Le repli ne modifie jamais le choix mémorisé dans les réglages : seul un choix manuel le change. Pendant le délai de grâce, quand l'instance mémorisée réapparaît ou qu'un lecteur de même clé apparaît, la source y revient d'elle-même (étapes 1 et 2). Après le délai, ou après un choix manuel, seule la relance du lecteur suivi le ramène.
 
 **B-07 Nouvelle source.** Une source sans choix mémorisé applique la règle B-05 à partir de l'étape 3, ou affiche le message de repli si la sélection automatique est décochée.
 
-**B-08 Lecteur suivi et délai de grâce.** Le lecteur que la source affiche devient son lecteur suivi. Lui et le début du délai de grâce sont retenus en mémoire seulement : ils ne sont pas enregistrés dans les réglages et repartent de zéro au redémarrage d'OBS, ou quand le lecteur mémorisé ou la case de sélection automatique changent dans les propriétés. Le délai de 5 minutes est fixe.
+**B-08 Lecteur suivi et délai de grâce.** Le lecteur suivi, l'instant de démarrage de la source et le fait qu'un choix manuel a eu lieu sont retenus en mémoire seulement : ils ne sont pas enregistrés dans les réglages et repartent de zéro au redémarrage d'OBS. Le choix mémorisé dans les réglages redevient alors la source habituelle, avec un nouveau délai de grâce. Le délai de 5 minutes est fixe.
 
 ## 2. Contenu affiché
 
@@ -231,7 +232,7 @@ La version 1.0 est acceptée quand ces scénarios passent dans OBS Flatpak. Le b
 10. Trois instances de mpv jouent : le sélecteur propose trois entrées, chacune libellée par son titre, et la source affiche exactement l'instance choisie.
 11. Sélection automatique décochée, instance mémorisée fermée alors que d'autres lecteurs jouent : message de repli. Relance du même lecteur : toujours le message de repli, jusqu'à un nouveau choix dans le sélecteur.
 12. Titre et sous-titre trop longs : pause, départ ensemble à la vitesse réglée, le plus court attend au début, pause commune, sans saut. Vitesse de défilement à 0 : points de suspension. Écart image-panneau, image ronde avec et sans pochette, temps restant qui décompte au rythme de la position.
-13. mpv mémorisé, OBS lancé alors que seul Chrome joue : Chrome s'affiche. mpv lancé dans les 5 minutes : la source passe sur mpv. Après 5 minutes, une vidéo démarrée dans Chrome ou un autre mpv qui démarre ne change rien. mpv fermé puis relancé : la source le suit. mpv fermé pour de bon : message de repli.
+13. mpv mémorisé, OBS lancé alors que seul Chrome joue : Chrome s'affiche. mpv lancé dans les 5 minutes : la source passe sur mpv. Variante : mpv lancé après 5 minutes, la source reste sur Chrome. Hors délai, une vidéo démarrée dans un autre lecteur ne change rien. Lecteur suivi fermé puis relancé : la source le suit. Fermé pour de bon : message de repli, sans basculer sur un autre lecteur qui joue. Lecteur choisi à la main dans les propriétés pendant le délai : il s'affiche aussitôt, et un autre lecteur qui démarre ensuite, même l'habituel, ne le remplace pas.
 14. Les propriétés s'affichent en cinq groupes titrés (B-51). L'épaisseur de la barre change la barre et la hauteur de la source, l'image restant carrée (B-50).
 9. Une piste dont la miniature locale est illisible : pochette en ligne sur Aucune, image par défaut et aucune requête réseau. Sur MusicBrainz, une pochette trouvée s'affiche (Supertramp, Crime Of The Century), une piste sans correspondance garde l'image par défaut, et changer de piste puis revenir ne relance pas de requête. Sur YouTube, une vidéo ouverte dans LibreWolf affiche sa miniature.
 
