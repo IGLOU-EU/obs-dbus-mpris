@@ -248,15 +248,18 @@ pub struct Choice {
     pub available: bool,
 }
 
-/// Selector entries, one per instance, in the order of B-05. The title
-/// labels an instance because it is what tells several instances of one
-/// player apart (B-02). A remembered instance missing from the bus keeps
-/// its entry so the user's choice is not lost when the player is closed
-/// (B-03).
+/// Selector entries, one per instance, in the order of B-05. The identity
+/// tells players apart and the title tells several instances of one player
+/// apart, so an instance is labelled by both, as "mpv - Song" (B-02). A
+/// remembered instance missing from the bus keeps its entry so the user's
+/// choice is not lost when the player is closed (B-03).
 pub fn player_choices(players: &[Player], remembered: Option<&str>) -> Vec<Choice> {
     let present = players.iter().map(|p| Choice {
         bus_name: p.bus_name.clone(),
-        label: p.track.title.clone().unwrap_or_else(|| p.identity.clone()),
+        label: match &p.track.title {
+            Some(title) => format!("{} - {title}", p.identity),
+            None => p.identity.clone(),
+        },
         available: true,
     });
     let gone = remembered
@@ -2034,7 +2037,7 @@ mod tests {
     }
 
     #[test]
-    fn one_entry_per_instance_labelled_by_title_and_sorted_by_key_then_bus_name() {
+    fn one_entry_per_instance_labelled_by_identity_and_title_and_sorted_by_key_then_bus_name() {
         let players = [
             titled(player("vlc", Stopped), "Song V"),
             titled(instance("mpv", "instance-c", Stopped), "Song C"),
@@ -2043,11 +2046,27 @@ mod tests {
             titled(player("chromium", Playing), "Video"),
         ];
         let expected = [
-            choice("org.mpris.MediaPlayer2.chromium", "Video", true),
-            choice("org.mpris.MediaPlayer2.mpv.instance-a", "Song A", true),
-            choice("org.mpris.MediaPlayer2.mpv.instance-b", "Song B", true),
-            choice("org.mpris.MediaPlayer2.mpv.instance-c", "Song C", true),
-            choice("org.mpris.MediaPlayer2.vlc", "Song V", true),
+            choice(
+                "org.mpris.MediaPlayer2.chromium",
+                "chromium identity - Video",
+                true,
+            ),
+            choice(
+                "org.mpris.MediaPlayer2.mpv.instance-a",
+                "mpv identity - Song A",
+                true,
+            ),
+            choice(
+                "org.mpris.MediaPlayer2.mpv.instance-b",
+                "mpv identity - Song B",
+                true,
+            ),
+            choice(
+                "org.mpris.MediaPlayer2.mpv.instance-c",
+                "mpv identity - Song C",
+                true,
+            ),
+            choice("org.mpris.MediaPlayer2.vlc", "vlc identity - Song V", true),
         ];
         for order in orders(&players) {
             assert_eq!(player_choices(&order, None), expected, "{order:?}");
@@ -2055,7 +2074,7 @@ mod tests {
     }
 
     #[test]
-    fn an_instance_without_a_title_is_labelled_by_its_identity() {
+    fn an_instance_without_a_title_is_labelled_by_its_identity_alone() {
         let players = [
             titled(instance("mpv", "instance-a", Playing), "Song A"),
             instance("mpv", "instance-b", Stopped),
@@ -2063,7 +2082,11 @@ mod tests {
         assert_eq!(
             player_choices(&players, None),
             [
-                choice("org.mpris.MediaPlayer2.mpv.instance-a", "Song A", true),
+                choice(
+                    "org.mpris.MediaPlayer2.mpv.instance-a",
+                    "mpv identity - Song A",
+                    true
+                ),
                 choice(
                     "org.mpris.MediaPlayer2.mpv.instance-b",
                     "mpv identity",
@@ -2160,9 +2183,21 @@ mod tests {
             titled(instance("mpv", "instance-c", Stopped), "Song C"),
         ];
         let expected = [
-            choice("org.mpris.MediaPlayer2.mpv.instance-a", "Song A", true),
-            choice("org.mpris.MediaPlayer2.mpv.instance-b", "Song B", true),
-            choice("org.mpris.MediaPlayer2.mpv.instance-c", "Song C", true),
+            choice(
+                "org.mpris.MediaPlayer2.mpv.instance-a",
+                "mpv identity - Song A",
+                true,
+            ),
+            choice(
+                "org.mpris.MediaPlayer2.mpv.instance-b",
+                "mpv identity - Song B",
+                true,
+            ),
+            choice(
+                "org.mpris.MediaPlayer2.mpv.instance-c",
+                "mpv identity - Song C",
+                true,
+            ),
         ];
         for order in orders(&players) {
             assert_eq!(
@@ -2183,7 +2218,11 @@ mod tests {
         let expected = [
             choice("org.mpris.MediaPlayer2.chromium", "chromium identity", true),
             choice("org.mpris.MediaPlayer2.mpv.instance-a", "mpv", false),
-            choice("org.mpris.MediaPlayer2.mpv.instance-b", "Song B", true),
+            choice(
+                "org.mpris.MediaPlayer2.mpv.instance-b",
+                "mpv identity - Song B",
+                true,
+            ),
             choice("org.mpris.MediaPlayer2.vlc", "vlc identity", true),
         ];
         for order in orders(&players) {
