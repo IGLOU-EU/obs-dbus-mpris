@@ -197,14 +197,13 @@ const BAR_HEIGHT: Field = size(Group::Layout, "bar_height", 6, MAX_BAR_HEIGHT);
 const FONT_SIZE_TITLE: Field = size(Group::Text, "font_size_title", 32, MAX_FONT_SIZE);
 const FONT_SIZE_SUBTITLE: Field = size(Group::Text, "font_size_subtitle", 24, MAX_FONT_SIZE);
 const FONT_SIZE_TIME: Field = size(Group::Text, "font_size_time", 20, MAX_FONT_SIZE);
-/// Off, a long text ends with an ellipsis instead (B-36).
-const SCROLL_ENABLED: Field = flag(Group::Text, "scroll_enabled", true);
-/// From 1, so that the switch above is the one way to stop the scrolling.
+/// Down to 0, the one way to stop the scrolling: a long text then ends with
+/// an ellipsis (B-36).
 const SCROLL_SPEED: Field = int(
     Group::Text,
     "scroll_speed",
     40,
-    1,
+    0,
     MAX_SCROLL_SPEED,
     Unit::PixelPerSecond,
 );
@@ -253,7 +252,6 @@ pub const FIELDS: &[Field] = &[
     FONT_SIZE_TITLE,
     FONT_SIZE_SUBTITLE,
     FONT_SIZE_TIME,
-    SCROLL_ENABLED,
     SCROLL_SPEED,
     SCROLL_PAUSE,
     FALLBACK_TEXT,
@@ -354,7 +352,6 @@ impl Settings {
             font_size_time: read_int(&get, &FONT_SIZE_TIME),
             corner_radius: read_int(&get, &CORNER_RADIUS),
             bar_height: read_int(&get, &BAR_HEIGHT),
-            scroll_enabled: read_bool(&get, &SCROLL_ENABLED),
             scroll_speed: read_int(&get, &SCROLL_SPEED),
             scroll_pause: Duration::from_millis(read_int(&get, &SCROLL_PAUSE).into()),
             fallback_text: read_text(&get, &FALLBACK_TEXT),
@@ -440,7 +437,7 @@ mod tests {
     use super::*;
 
     /// In the order of the table of besoins.md, section 5.
-    const EXPECTED_KEYS: [&str; 28] = [
+    const EXPECTED_KEYS: [&str; 27] = [
         "player",
         "auto_select",
         "show_art",
@@ -461,7 +458,6 @@ mod tests {
         "font_size_title",
         "font_size_subtitle",
         "font_size_time",
-        "scroll_enabled",
         "scroll_speed",
         "scroll_pause",
         "fallback_text",
@@ -533,7 +529,6 @@ mod tests {
             font_size_time: 20,
             corner_radius: 12,
             bar_height: 6,
-            scroll_enabled: true,
             scroll_speed: 40,
             scroll_pause: Duration::from_millis(2000),
             fallback_text: "Nothing playing".to_owned(),
@@ -622,7 +617,7 @@ mod tests {
         for f in FIELDS {
             let expected = match f.key {
                 "player" => "player",
-                "auto_select" | "art_right" | "art_round" | "scroll_enabled" => "bool",
+                "auto_select" | "art_right" | "art_round" => "bool",
                 "art_online" => "choice",
                 k if k.starts_with("show_") => "bool",
                 k if k.starts_with("color_") => "color",
@@ -810,39 +805,20 @@ mod tests {
         assert_eq!(read(65), 64);
     }
 
+    /// 0 is the one way to stop the scrolling (B-36).
     #[test]
-    fn scroll_speed_starts_at_one_pixel_per_second() {
-        assert_eq!(int_bounds("scroll_speed"), (1, 1000));
+    fn scroll_speed_goes_from_zero_to_1000_pixels_per_second() {
+        assert_eq!(int_bounds("scroll_speed"), (0, 1000));
         let read = |v: i64| {
             Settings::from_lookup(|k| (k == "scroll_speed").then_some(SettingValue::Int(v)))
                 .scroll_speed
         };
-        assert_eq!(read(i64::MIN), 1);
-        assert_eq!(read(-1), 1);
-        assert_eq!(read(0), 1);
+        assert_eq!(read(i64::MIN), 0);
+        assert_eq!(read(-1), 0);
+        assert_eq!(read(0), 0);
         assert_eq!(read(1), 1);
-        assert_eq!(read(2), 2);
         assert_eq!(read(1000), 1000);
         assert_eq!(read(1001), 1000);
-    }
-
-    #[test]
-    fn scrolling_is_on_unless_stored_off() {
-        use SettingValue::{Bool, Color, Int, Text};
-        let read = |stored: Option<SettingValue>| {
-            Settings::from_lookup(|key| (key == "scroll_enabled").then(|| stored.clone()).flatten())
-                .scroll_enabled
-        };
-        assert!(read(None));
-        assert!(read(Some(Bool(true))));
-        assert!(!read(Some(Bool(false))));
-        for wrong in [
-            Int(0),
-            Text("false".to_owned()),
-            Color(Rgba::new(0, 0, 0, 0)),
-        ] {
-            assert!(read(Some(wrong.clone())), "{wrong:?}");
-        }
     }
 
     #[test]
@@ -926,7 +902,6 @@ mod tests {
                 "font_size_time" => Int(10),
                 "corner_radius" => Int(30),
                 "bar_height" => Int(10),
-                "scroll_enabled" => Bool(false),
                 "scroll_speed" => Int(80),
                 "scroll_pause" => Int(500),
                 "fallback_text" => Text("Aucune lecture".to_owned()),
@@ -958,7 +933,6 @@ mod tests {
             font_size_time: 10,
             corner_radius: 30,
             bar_height: 10,
-            scroll_enabled: false,
             scroll_speed: 80,
             scroll_pause: Duration::from_millis(500),
             fallback_text: "Aucune lecture".to_owned(),

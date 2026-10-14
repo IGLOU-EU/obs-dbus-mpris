@@ -180,11 +180,8 @@ pub struct Settings {
     /// Thickness of the progress bar, which the source height follows
     /// (B-50).
     pub bar_height: u32,
-    /// Whether a text too long for its line scrolls, rather than ends with
-    /// an ellipsis (B-36).
-    pub scroll_enabled: bool,
-    /// Pixels per second at which a text too long for its line scrolls
-    /// (B-36).
+    /// Pixels per second at which a text too long for its line scrolls, 0
+    /// for no scrolling, the text then ending with an ellipsis (B-36).
     pub scroll_speed: u32,
     /// The stop of a scrolling text at its start, before each round (B-36).
     pub scroll_pause: Duration,

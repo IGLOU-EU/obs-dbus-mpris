@@ -75,7 +75,7 @@ pub fn draw(
 /// Whether a text too long for its line scrolls, rather than ends with an
 /// ellipsis (B-36).
 fn scrolls(settings: &Settings) -> bool {
-    settings.scroll_enabled
+    settings.scroll_speed > 0
 }
 
 /// Filled part of a bar `width` pixels wide, in whole pixels, so that a
@@ -91,8 +91,9 @@ pub fn bar_fill(width: u32, progress: f32) -> u32 {
 pub struct RedrawKey {
     layout: Layout,
     colors: [Rgba; 4],
-    /// Whether long texts go to strips. Their speed and pause only move
-    /// the strips, which the glue does at each frame.
+    /// Whether long texts go to strips, which a speed of 0 rules out.
+    /// Otherwise their speed and pause only move the strips, which the
+    /// glue does at each frame.
     scrolls: bool,
     /// With its exact progress left out, which `bar_fill` stands for.
     content: Content,
@@ -357,11 +358,12 @@ mod tests {
         with(|s| s.show_progress = false)
     }
 
-    /// Long texts cut with an ellipsis rather than scrolled.
+    /// Long texts cut with an ellipsis rather than scrolled, which a speed
+    /// of 0 asks for (B-36).
     fn no_bar_no_scroll() -> Settings {
         with(|s| {
             s.show_progress = false;
-            s.scroll_enabled = false;
+            s.scroll_speed = 0;
         })
     }
 
@@ -943,7 +945,7 @@ mod tests {
     }
 
     #[test]
-    fn scrolling_off_cuts_a_long_title_with_an_ellipsis_instead() {
+    fn zero_speed_cuts_a_long_title_with_an_ellipsis_instead() {
         let Some(mut fonts) = test_fonts() else {
             return;
         };
@@ -1002,6 +1004,22 @@ mod tests {
         let (layout, picture) = picture_of(&mut fonts, &settings(), &message);
         assert_eq!(lines(&picture), [layout.message]);
         assert_eq!(ink(&picture.frame, layout.panel), Vec::new());
+    }
+
+    #[test]
+    fn zero_speed_draws_every_long_text_in_the_frame() {
+        let Some(mut fonts) = test_fonts() else {
+            return;
+        };
+        let s = no_bar_no_scroll();
+        let track = with_album(texts(LONG, false), LONG);
+        let (layout, picture) = picture_of(&mut fonts, &s, &track);
+        assert!(picture.strips.is_empty());
+        assert!(!ink(&picture.frame, some(layout.title)).is_empty());
+        assert!(!ink(&picture.frame, some(layout.subtitle)).is_empty());
+        let (layout, picture) = picture_of(&mut fonts, &s, &Content::Message(LONG.into()));
+        assert!(picture.strips.is_empty());
+        assert!(!ink(&picture.frame, layout.message).is_empty());
     }
 
     #[test]
@@ -1177,18 +1195,20 @@ mod tests {
     #[test]
     fn turning_the_scrolling_on_or_off_changes_the_key() {
         let base = key(&settings(), &playing(10, 0.5));
-        let still = with(|s| s.scroll_enabled = false);
+        let still = with(|s| s.scroll_speed = 0);
         assert_ne!(key(&still, &playing(10, 0.5)), base);
     }
 
     #[test]
     fn speed_and_pause_of_the_scrolling_keep_the_key() {
         let base = key(&settings(), &playing(10, 0.5));
-        let other = with(|s| {
-            s.scroll_speed = 80;
-            s.scroll_pause = Duration::from_millis(500);
-        });
-        assert_eq!(key(&other, &playing(10, 0.5)), base);
+        for speed in [1, 80, 1000] {
+            let other = with(|s| {
+                s.scroll_speed = speed;
+                s.scroll_pause = Duration::from_millis(500);
+            });
+            assert_eq!(key(&other, &playing(10, 0.5)), base, "{speed} px/s");
+        }
     }
 
     #[test]
