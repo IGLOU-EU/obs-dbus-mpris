@@ -18,7 +18,7 @@ Chaque exigence porte un identifiant B-xx, repris par la feuille de route et par
 
 1. l'instance mémorisée, si elle est présente, quel que soit son état,
 2. sinon une instance du lecteur mémorisé (même clé), celle qui est en lecture de préférence, sinon la première,
-3. sinon un autre lecteur disponible, le premier en lecture (`PlaybackStatus` = `Playing`) de préférence, sinon le premier présent,
+3. sinon un autre lecteur disponible, le premier en lecture (`PlaybackStatus` = `Playing`) de préférence, sinon le premier en pause. Un lecteur arrêté n'est pas retenu ici : il n'afficherait que le message de repli, et ne doit pas devenir le lecteur suivi,
 4. sinon aucun, et la source affiche le message de repli (B-23).
 
 Lancer sa source habituelle pendant le délai la fait donc afficher, à la place d'un autre lecteur affiché faute de mieux.
@@ -30,6 +30,8 @@ Lancer sa source habituelle pendant le délai la fait donc afficher, à la place
 « Premier » s'entend dans l'ordre alphabétique des clés (B-04), puis des noms de bus, sans tenir compte de la casse.
 
 La case « Sélection automatique », cochée par défaut, commande tout ce qui précède. Décochée, seule l'instance mémorisée exacte s'affiche, quel que soit son état : sans elle, même après une relance du même lecteur, la source affiche le message de repli jusqu'à un nouveau choix. Cocher ou décocher la case compte comme un choix manuel : pas de délai de grâce.
+
+**Annuler.** OBS applique chaque modification des propriétés en direct, puis rétablit l'ancien réglage si l'on annule. Un réglage du lecteur qui revient à sa valeur d'avant la modification rétablit l'état de sélection d'avant (lecteur suivi, délai de grâce en cours ou non) : annuler n'est pas un choix manuel.
 
 **B-06 Retour automatique.** Le repli ne modifie jamais le choix mémorisé dans les réglages : seul un choix manuel le change. Pendant le délai de grâce, quand l'instance mémorisée réapparaît ou qu'un lecteur de même clé apparaît, la source y revient d'elle-même (étapes 1 et 2). Après le délai, ou après un choix manuel, seule la relance du lecteur suivi le ramène.
 
