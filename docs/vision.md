@@ -25,7 +25,7 @@ Une personne qui diffuse ou enregistre avec OBS sous Linux (Flatpak ou natif) et
 - Lecture seule des interfaces `org.mpris.MediaPlayer2` et `org.mpris.MediaPlayer2.Player`.
 - OBS Studio 32 et suivants.
 - Deux builds : un `.so` natif et une extension Flatpak de `com.obsproject.Studio`.
-- Distribution par releases sur une forge Git, choisie plus tard (archive du `.so` et bundle `.flatpak`).
+- Distribution par releases sur GitLab, `https://gitlab.com/iglou.eu/obs-dbus-mpris` (archive du `.so` et bundle `.flatpak`).
 - Validation en Flatpak. Le build natif est produit, sa validation dans un OBS natif est reportée.
 
 ## Non-objectifs

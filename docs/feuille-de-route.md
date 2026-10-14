@@ -113,9 +113,9 @@ Demandés le 2026-10-14 après l'essai de la phase 3 dans OBS, et traités avant
 
 Rendus vérifiés hors d'OBS le 2026-10-14, identiques sur l'hôte et dans le bac à sable Flatpak. Coût mesuré : 5,2 ms pour le premier dessin d'une piste avec deux bandes, puis 0,65 ms par seconde, les bandes étant réutilisées. Par image, le rendu ne fait que décaler les bandes.
 
-Puis, demandés après l'essai de ces réglages dans OBS : sélection automatique limitée au démarrage avec un lecteur suivi par source (B-05 à B-08), case de défilement (B-36), épaisseur de la barre (B-50) et propriétés rangées en groupes (B-51). Vérifié sans interface dans le bac à sable le 2026-10-14 (étude `~/Sourcery/Etudes/obs-dbus-mpris-groupes-proprietes/`).
+Puis, demandés après l'essai de ces réglages dans OBS : sélection automatique limitée à un délai de grâce de 5 minutes avec un lecteur suivi par source (B-05 à B-08), vitesse de défilement à 0 pour le désactiver (B-36), textes d'aide (B-52), liste « Pochette en ligne » en fin de groupe, épaisseur de la barre (B-50) et propriétés rangées en groupes (B-51). Vérifié sans interface dans le bac à sable le 2026-10-14 (étude `~/Sourcery/Etudes/obs-dbus-mpris-groupes-proprietes/`).
 
-Besoins couverts : B-05 à B-08, B-19, B-36, B-38, B-39, B-50, B-51.
+Besoins couverts : B-05 à B-08, B-19, B-36, B-38, B-39, B-50, B-51, B-52.
 
 ## Phase 7. Distribution
 
