@@ -1,3 +1,6 @@
 /target
 /.claude/worktrees/
 /tools/gen-libobs-bindings/target
+# State of flatpak-builder run by hand, outside scripts/build-flatpak.sh,
+# which keeps all its outputs under target/.
+.flatpak-builder/
