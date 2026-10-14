@@ -19,7 +19,7 @@ use libobs_sys::{
 };
 use mpris_core::content::content;
 use mpris_core::model::Settings;
-use mpris_core::selection::select_player;
+use mpris_core::selection::{choice_changed, select};
 use render::draw::{Picture, RedrawKey, redraw_key};
 use render::frame::Frame;
 use render::layout::layout;
@@ -50,6 +50,10 @@ struct Source {
 /// What the source last asked the worker for, and what it shows.
 #[derive(Default)]
 struct View {
+    /// Bus name of the player the source keeps to (B-08), `None` until one
+    /// shows. Held in memory only, so it starts over with OBS, and when the
+    /// choice of player changes.
+    followed: Option<String>,
     /// `None` until the first request.
     asked: Option<RedrawKey>,
     texture: Option<Texture>,
@@ -214,8 +218,17 @@ unsafe extern "C" fn update(data: *mut c_void, obs_settings: *mut obs_data_t) {
         // SAFETY: OBS passes what `create` returned and the live settings of
         // that source.
         let (source, settings) = unsafe { (source(data), settings::read(obs_settings)) };
-        if let Some(source) = source {
-            *source.settings() = settings;
+        let Some(source) = source else {
+            return;
+        };
+        let rechosen = {
+            let mut current = source.settings();
+            let rechosen = choice_changed(&current, &settings);
+            *current = settings;
+            rechosen
+        };
+        if rechosen {
+            source.view().followed = None;
         }
     });
 }
@@ -263,11 +276,12 @@ unsafe extern "C" fn video_tick(data: *mut c_void, _seconds: f32) {
         };
         let settings = source.settings().clone();
         let snapshot = snapshot();
-        let player = select_player(&snapshot.players, &settings);
-        let shown = content(player, &settings, Instant::now());
+        let mut view = source.view();
+        let selection = select(&snapshot.players, &settings, view.followed.as_deref());
+        view.followed = selection.followed;
+        let shown = content(selection.player, &settings, Instant::now());
         let layout = layout(&settings);
         let key = redraw_key(&layout, &shown, &settings);
-        let mut view = source.view();
         view.cycle
             .follow(settings.scroll_speed, settings.scroll_pause);
         if view.asked.as_ref() != Some(&key) {

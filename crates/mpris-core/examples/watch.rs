@@ -8,6 +8,8 @@
 //! any mpv and `watch mpv.instance-XYZ` that instance while it runs.
 //! `--strict`, anywhere in the arguments, turns automatic selection off
 //! (B-05), so only the exact remembered instance is shown, never a fallback.
+//! Like a source, it keeps to the player it shows (B-08) for as long as it
+//! runs.
 
 use std::thread;
 use std::time::{Duration, Instant};
@@ -16,7 +18,7 @@ use mpris_core::content::{Content, content};
 use mpris_core::dbus::Core;
 use mpris_core::model::Settings;
 use mpris_core::player::MPRIS_PREFIX;
-use mpris_core::selection::{player_choices, select_player};
+use mpris_core::selection::{player_choices, select};
 use mpris_core::time::format_time;
 
 /// Shows the core's own logs, so a missing bus is not mistaken for an
@@ -49,10 +51,13 @@ fn main() {
         ..Settings::default()
     };
     let core = Core::start();
+    let mut followed = None;
     loop {
         thread::sleep(Duration::from_secs(1));
         let snapshot = core.snapshot();
-        let player = select_player(&snapshot.players, &settings);
+        let selection = select(&snapshot.players, &settings, followed.as_deref());
+        let player = selection.player;
+        followed = selection.followed;
         match player {
             Some(p) => println!(
                 "{} ({}) {:?}, {} player(s) on the bus",

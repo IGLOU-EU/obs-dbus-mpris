@@ -63,7 +63,7 @@ impl RightTime {
 }
 
 /// What to draw at `now` for `player`, the one picked by
-/// [`crate::selection::select_player`].
+/// [`crate::selection::select`].
 pub fn content(player: Option<&Player>, settings: &Settings, now: Instant) -> Content {
     match player {
         Some(player) if player.status != PlaybackStatus::Stopped => {
