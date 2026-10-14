@@ -2,16 +2,22 @@
 //! the session bus and the entries of its player selector, to check the
 //! core against real players without OBS.
 //!
-//! `cargo run --example watch [bus-name] [--strict] [--online <service>]`,
-//! the bus name standing for the instance remembered in the source
-//! settings (B-03). The `org.mpris.MediaPlayer2.` prefix may be left out,
-//! so `watch mpv` follows any mpv and `watch mpv.instance-XYZ` that
-//! instance while it runs. `--strict`, anywhere in the arguments, turns
-//! automatic selection off (B-05), so only the exact remembered instance is
-//! shown, never a fallback. `--online` looks a missing cover up with
-//! `musicbrainz`, `wikipedia` or `youtube` (B-18), and prints each request.
+//! `cargo run --example watch [bus-name] [--strict] [--settled] [--manual]
+//! [--online <service>]`, the bus name standing for the instance remembered
+//! in the source settings (B-03). The `org.mpris.MediaPlayer2.` prefix may
+//! be left out, so `watch mpv` follows any mpv and `watch mpv.instance-XYZ`
+//! that instance while it runs. `--strict`, anywhere in the arguments,
+//! turns automatic selection off (B-05), so only the exact remembered
+//! instance is shown, never a fallback. `--online` looks a missing cover up
+//! with `musicbrainz`, `wikipedia` or `youtube` (B-18), and prints each
+//! request.
+//!
 //! Like a source, it starts in its grace period, then keeps to the player
-//! it follows (B-05, B-08).
+//! it follows (B-05, B-08). `--settled` starts it past the grace period, as
+//! a source of an OBS running for more than five minutes, so the rule after
+//! it can be checked without the wait. `--manual` starts it as if the bus
+//! name, or "No choice" without one, had just been chosen by hand in the
+//! properties.
 
 use std::thread;
 use std::time::{Duration, Instant};
@@ -21,7 +27,7 @@ use mpris_core::dbus::Core;
 use mpris_core::model::{Art, Settings};
 use mpris_core::online::wish;
 use mpris_core::player::MPRIS_PREFIX;
-use mpris_core::selection::{phase, player_choices, select};
+use mpris_core::selection::{GRACE, Phase, followed_after_choice, phase, player_choices, select};
 use mpris_core::settings::SettingValue;
 use mpris_core::time::format_time;
 
@@ -47,14 +53,19 @@ impl log::Log for StderrLog {
 }
 
 const STRICT: &str = "--strict";
+const SETTLED: &str = "--settled";
+const MANUAL: &str = "--manual";
 const ONLINE: &str = "--online";
 
 fn main() {
     let mut settings = Settings::default();
+    let (mut settled, mut chosen_by_hand) = (false, false);
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
             STRICT => settings.auto_select = false,
+            SETTLED => settled = true,
+            MANUAL => chosen_by_hand = true,
             ONLINE => settings.art_online = Some(service(args.next())),
             _ => settings.player = Some(bus_name(arg)),
         }
@@ -68,12 +79,20 @@ fn main() {
     let core = Core::start();
     let mut art_wish = core.art_wish();
     let started = Instant::now();
-    let mut followed = None;
+    let mut followed = if chosen_by_hand {
+        followed_after_choice(&settings)
+    } else {
+        None
+    };
     loop {
         thread::sleep(Duration::from_secs(1));
         let snapshot = core.snapshot();
         let now = Instant::now();
-        let phase = phase(started, false, now);
+        let phase = if settled {
+            Phase::Settled
+        } else {
+            phase(started, chosen_by_hand, now)
+        };
         let selection = select(&snapshot.players, &settings, followed.as_deref(), phase);
         let player = selection.player;
         followed = selection.followed;
@@ -88,6 +107,14 @@ fn main() {
             ),
             None => println!("no player"),
         }
+        match phase {
+            Phase::Grace => {
+                let left = GRACE.saturating_sub(now.duration_since(started));
+                println!("  phase   grace, {} left", format_time(left));
+            }
+            Phase::Settled => println!("  phase   settled"),
+        }
+        println!("  follows {}", followed.as_deref().unwrap_or("nothing"));
         if let Some(url) = player.and_then(|p| p.track.url.as_deref()) {
             println!("  page    {url}");
         }
