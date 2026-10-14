@@ -16,9 +16,26 @@ variables:
 .rust:
   image: rust:1.87-bookworm
 
+# Tests and builds only run when something they depend on changed, so that a
+# documentation commit costs no runner time. A tag always builds, since its
+# release links the archive and the bundle.
+.on-code:
+  rules:
+    - if: $CI_COMMIT_TAG
+    - changes:
+        - Cargo.toml
+        - Cargo.lock
+        - rust-toolchain.toml
+        - crates/**/*
+        - tools/**/*
+        - packaging/**/*
+        - scripts/**/*
+        - LICENSE
+        - .gitlab-ci.yml
+
 test:
   stage: test
-  extends: .rust
+  extends: [.rust, .on-code]
   before_script:
     # dbus-daemon for the integration tests, which start private buses, and
     # a font for the text rendering tests, which skip themselves without one.
@@ -32,7 +49,7 @@ test:
 
 native:
   stage: build
-  extends: .rust
+  extends: [.rust, .on-code]
   script:
     - scripts/package-native.sh
   artifacts:
@@ -42,6 +59,7 @@ native:
 
 flatpak:
   stage: build
+  extends: .on-code
   # The freedesktop SDK 25.08 with flatpak-builder and the flathub remote.
   # flatpak-builder sandboxes the build with bubblewrap, which needs a
   # privileged container, as GitLab.com hosted runners provide.
