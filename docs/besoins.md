@@ -34,7 +34,7 @@ Conséquences voulues : si l'instance mémorisée est présente mais arrêtée p
 
 ## 2. Contenu affiché
 
-Données lues : dans `Metadata`, les clés `xesam:title`, `xesam:artist`, `xesam:albumArtist`, `xesam:album`, `mpris:artUrl`, `mpris:length`, ainsi que les propriétés `PlaybackStatus`, `Position`, `Rate` et `Identity`.
+Données lues : dans `Metadata`, les clés `xesam:title`, `xesam:artist`, `xesam:albumArtist`, `xesam:album`, `xesam:url`, `mpris:artUrl`, `mpris:length`, ainsi que les propriétés `PlaybackStatus`, `Position`, `Rate` et `Identity`.
 
 Chaque élément s'affiche ou se masque par une case à cocher indépendante.
 
@@ -65,7 +65,7 @@ Format des temps : `m:ss`, et `h:mm:ss` à partir d'une heure. Quand la durée e
 - **Aucune** (par défaut) : aucune recherche.
 - **MusicBrainz** : la base musicale libre, images du Cover Art Archive. Recherche par artiste et album, à défaut par artiste et titre, après nettoyage des métadonnées (suffixes comme « (Remastered) », titres « Artiste - Titre »). Un candidat n'est retenu que s'il passe un score minimal de ressemblance, pour qu'une piste sans correspondance n'ait pas de pochette plutôt qu'une fausse.
 - **Wikipédia** : l'image de l'article de l'album, pour les disques connus seulement.
-- **YouTube** : la miniature de la vidéo, déduite de son identifiant quand le lecteur donne l'adresse d'une page YouTube (`xesam:url`), sans recherche. Image servie par Google.
+- **YouTube** : la miniature de la vidéo, déduite de son identifiant quand le lecteur donne l'adresse d'une page YouTube (`xesam:url`), sans recherche. Image servie par Google. Constaté le 2026-10-14 : LibreWolf donne cette adresse, Chromium non.
 
 Pour tous :
 
@@ -235,6 +235,6 @@ La version 1.0 est acceptée quand ces scénarios passent dans OBS Flatpak. Le b
 À trancher au moment où elles deviennent utiles, pas avant.
 
 - **Organisation visuelle** : la disposition est fixée par B-37. Validée dans OBS le 2026-10-14. Les réglages visuels demandés ensuite (écart, image ronde, défilement, temps restant) sont spécifiés en B-19, B-36, B-38 et B-39.
-- **Service de pochettes en ligne** : choisi par essai au moment d'implémenter B-18.
+- **Service de pochettes en ligne** : tranché le 2026-10-14 par une étude (D-09).
 - **Forge de publication** (GitLab ou GitHub) : reportée à la phase de distribution.
 - **Validation dans un OBS natif** : reportée. Aucun OBS natif n'est installé sur le poste de développement, le build natif est produit sans y être testé.

@@ -15,7 +15,7 @@ Les validations se font dans OBS Flatpak. Le build natif est produit à chaque p
 | 2 | Cœur MPRIS, hors OBS | fait, lecteur local (Strawberry ou Elisa) à vérifier à l'occasion |
 | 3 | Rendu et disposition | fait, validé dans OBS |
 | 4 | Source complète | fait, validé dans OBS |
-| 5 | Pochette en ligne, en option | en cours |
+| 5 | Pochette en ligne, en option | fait, essai dans OBS en attente |
 | 6 | Réglages visuels | fait, essai dans OBS en attente |
 | 7 | Distribution, version 1.0 | à faire |
 
@@ -96,6 +96,8 @@ Récupérer une pochette que le bac à sable Flatpak empêche de lire.
 
 **Fini quand** le scénario d'acceptation 9 passe, et qu'aucune requête réseau ne part tant qu'aucune source n'a choisi de service (B-48).
 
+Vérifié le 2026-10-14 hors d'OBS (`~/Sourcery/Etudes/obs-dbus-mpris-phase5-validation/`) : recherches réelles conformes à l'étude (School, Back In Black et Harmonium trouvés par MusicBrainz, Cowboy Bebop et Stargate sans pochette), miniature YouTube, et HTTPS fonctionnel dans le bac à sable d'OBS Flatpak avec les certificats racines embarqués.
+
 Besoins couverts : B-18, B-48.
 
 ## Phase 6. Réglages visuels
@@ -122,6 +124,8 @@ Besoins couverts : B-05 à B-08, B-19, B-36, B-38, B-39, B-50, B-51.
 - Release : archive du `.so` avec ses traductions, bundle `.flatpak`.
 - Documentation d'installation, override Flatpak (B-45) et police CJK sur l'hôte compris, puisque le runtime n'en fournit aucune (D-04).
 - Versionnement sémantique et journal des changements.
+- Remplacer l'adresse provisoire du User-Agent (`REPOSITORY` dans `crates/mpris-core/src/network.rs`) par celle de la forge.
+- Le build Flatpak hors ligne doit fournir `ring` (qui compile du C) et `webpki-roots`.
 
 **Fini quand** la version 1.0 est publiée et que tous les scénarios d'acceptation passent dans OBS Flatpak à partir des artefacts de la release.
 
@@ -135,3 +139,4 @@ Une décision remise à plus tard n'est pas perdue. Chacune de ces idées attend
 - Une couleur par élément de texte.
 - Bouton « Rafraîchir » dans les propriétés, si la liste des lecteurs figée à l'ouverture gêne.
 - Publication sur Flathub ou AUR.
+- Description longue de la liste « Pochette en ligne », qui dirait ce qui est envoyé à chaque service.
