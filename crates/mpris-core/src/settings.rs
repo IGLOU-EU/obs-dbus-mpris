@@ -4,16 +4,19 @@
 //! [`Settings::from_lookup`] reads the same table, so each default is
 //! written once, here.
 
+use std::time::Duration;
+
 use crate::model::{Rgba, Settings};
 
 /// What a setting holds, and so which OBS property declares it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Kind {
     Bool,
-    /// Pixel size, kept within `[min, max]`.
+    /// Kept within `[min, max]`.
     Int {
         min: u32,
         max: u32,
+        unit: Unit,
     },
     /// Color with alpha (B-31).
     Color,
@@ -21,6 +24,26 @@ pub enum Kind {
     /// Player instance chosen from those present on the bus, stored as
     /// its full bus name (B-03).
     Player,
+}
+
+/// What an integer setting counts, shown beside its value so that the
+/// properties need no explanation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Unit {
+    Pixel,
+    PixelPerSecond,
+    Millisecond,
+}
+
+impl Unit {
+    /// The same in every language the plugin speaks (B-46).
+    pub const fn symbol(self) -> &'static str {
+        match self {
+            Unit::Pixel => "px",
+            Unit::PixelPerSecond => "px/s",
+            Unit::Millisecond => "ms",
+        }
+    }
 }
 
 /// Default value of a setting, in a form usable in a `const` table.
@@ -62,9 +85,15 @@ pub const MAX_SIDE: u32 = 8192;
 pub const MAX_FONT_SIZE: u32 = 512;
 /// Rounder than any real overlay needs.
 pub const MAX_CORNER_RADIUS: u32 = 256;
+/// Wider than any real overlay needs.
+pub const MAX_ART_GAP: u32 = 512;
+/// Faster than anyone can read.
+pub const MAX_SCROLL_SPEED: u32 = 1000;
+/// In milliseconds, a minute: longer than any real pause.
+pub const MAX_SCROLL_PAUSE: u32 = 60_000;
 
-// Flags, colors and sizes come from the constructor of their kind, so their
-// default fits their kind by construction. `PLAYER`, `CORNER_RADIUS` and
+// Flags, colors and integers come from the constructor of their kind, so
+// their default fits their kind by construction. `PLAYER` and
 // `FALLBACK_TEXT` are alone of their kind, and a constructor would serve a
 // single call.
 const PLAYER: Field = Field {
@@ -81,7 +110,11 @@ const SHOW_ALBUM: Field = flag("show_album", true);
 const SHOW_PROGRESS: Field = flag("show_progress", true);
 const SHOW_POSITION: Field = flag("show_position", true);
 const SHOW_DURATION: Field = flag("show_duration", true);
+const SHOW_REMAINING: Field = flag("show_remaining", false);
 const ART_RIGHT: Field = flag("art_right", false);
+const ART_ROUND: Field = flag("art_round", false);
+/// Down to 0, which glues the thumbnail to the panel (B-39).
+const ART_GAP: Field = int("art_gap", 0, 0, MAX_ART_GAP, Unit::Pixel);
 const COLOR_BACKGROUND: Field = color("color_background", Rgba::new(0x00, 0x00, 0x00, 153));
 const COLOR_TEXT: Field = color("color_text", Rgba::new(0xFF, 0xFF, 0xFF, 255));
 const COLOR_BAR_FILL: Field = color("color_bar_fill", Rgba::new(0xFF, 0xFF, 0xFF, 255));
@@ -91,14 +124,16 @@ const FONT_SIZE_TITLE: Field = size("font_size_title", 32, MAX_FONT_SIZE);
 const FONT_SIZE_SUBTITLE: Field = size("font_size_subtitle", 24, MAX_FONT_SIZE);
 const FONT_SIZE_TIME: Field = size("font_size_time", 20, MAX_FONT_SIZE);
 /// Down to 0, which gives square corners (B-38).
-const CORNER_RADIUS: Field = Field {
-    key: "corner_radius",
-    kind: Kind::Int {
-        min: 0,
-        max: MAX_CORNER_RADIUS,
-    },
-    default: DefaultValue::Int(12),
-};
+const CORNER_RADIUS: Field = int("corner_radius", 12, 0, MAX_CORNER_RADIUS, Unit::Pixel);
+/// Down to 0, which cuts a long text with an ellipsis instead (B-36).
+const SCROLL_SPEED: Field = int(
+    "scroll_speed",
+    40,
+    0,
+    MAX_SCROLL_SPEED,
+    Unit::PixelPerSecond,
+);
+const SCROLL_PAUSE: Field = int("scroll_pause", 2000, 0, MAX_SCROLL_PAUSE, Unit::Millisecond);
 const FALLBACK_TEXT: Field = Field {
     key: "fallback_text",
     kind: Kind::Text,
@@ -120,7 +155,10 @@ pub const FIELDS: &[Field] = &[
     SHOW_PROGRESS,
     SHOW_POSITION,
     SHOW_DURATION,
+    SHOW_REMAINING,
     ART_RIGHT,
+    ART_ROUND,
+    ART_GAP,
     COLOR_BACKGROUND,
     COLOR_TEXT,
     COLOR_BAR_FILL,
@@ -130,6 +168,8 @@ pub const FIELDS: &[Field] = &[
     FONT_SIZE_SUBTITLE,
     FONT_SIZE_TIME,
     CORNER_RADIUS,
+    SCROLL_SPEED,
+    SCROLL_PAUSE,
     FALLBACK_TEXT,
 ];
 
@@ -149,14 +189,18 @@ const fn color(key: &'static str, default: Rgba) -> Field {
     }
 }
 
+const fn int(key: &'static str, default: u32, min: u32, max: u32, unit: Unit) -> Field {
+    Field {
+        key,
+        kind: Kind::Int { min, max, unit },
+        default: DefaultValue::Int(default),
+    }
+}
+
 /// At least one pixel: a zero size would make the source or a text vanish
 /// with no visible reason.
 const fn size(key: &'static str, default: u32, max: u32) -> Field {
-    Field {
-        key,
-        kind: Kind::Int { min: 1, max },
-        default: DefaultValue::Int(default),
-    }
+    int(key, default, 1, max, Unit::Pixel)
 }
 
 impl Settings {
@@ -178,16 +222,21 @@ impl Settings {
             show_progress: read_bool(&get, &SHOW_PROGRESS),
             show_position: read_bool(&get, &SHOW_POSITION),
             show_duration: read_bool(&get, &SHOW_DURATION),
+            show_remaining: read_bool(&get, &SHOW_REMAINING),
             art_right: read_bool(&get, &ART_RIGHT),
+            art_round: read_bool(&get, &ART_ROUND),
+            art_gap: read_int(&get, &ART_GAP),
             color_background: read_color(&get, &COLOR_BACKGROUND),
             color_text: read_color(&get, &COLOR_TEXT),
             color_bar_fill: read_color(&get, &COLOR_BAR_FILL),
             color_bar_track: read_color(&get, &COLOR_BAR_TRACK),
-            width: read_size(&get, &WIDTH),
-            font_size_title: read_size(&get, &FONT_SIZE_TITLE),
-            font_size_subtitle: read_size(&get, &FONT_SIZE_SUBTITLE),
-            font_size_time: read_size(&get, &FONT_SIZE_TIME),
-            corner_radius: read_size(&get, &CORNER_RADIUS),
+            width: read_int(&get, &WIDTH),
+            font_size_title: read_int(&get, &FONT_SIZE_TITLE),
+            font_size_subtitle: read_int(&get, &FONT_SIZE_SUBTITLE),
+            font_size_time: read_int(&get, &FONT_SIZE_TIME),
+            corner_radius: read_int(&get, &CORNER_RADIUS),
+            scroll_speed: read_int(&get, &SCROLL_SPEED),
+            scroll_pause: Duration::from_millis(read_int(&get, &SCROLL_PAUSE).into()),
             fallback_text: read_text(&get, &FALLBACK_TEXT),
         }
     }
@@ -214,11 +263,10 @@ impl Rgba {
 
 // The `unreachable!` arms below hold because `from_lookup` gives each reader
 // only fields of its kind, and every default matches its field: the
-// constructors ensure it for flags, colors and sizes, the literals `PLAYER`
-// and `FALLBACK_TEXT` carry a text default, which `read_text` accepts, and
-// the literal `CORNER_RADIUS` an integer one, which `read_size` accepts. A
-// slip panics in `defaults_match_the_table`, which runs every reader on its
-// default.
+// constructors ensure it for flags, colors and integers, and the literals
+// `PLAYER` and `FALLBACK_TEXT` carry a text default, which `read_text`
+// accepts. A slip panics in `defaults_match_the_table`, which runs every
+// reader on its default.
 
 fn read_bool(get: &impl Fn(&str) -> Option<SettingValue>, field: &Field) -> bool {
     match (get(field.key), field.default) {
@@ -234,8 +282,9 @@ fn read_color(get: &impl Fn(&str) -> Option<SettingValue>, field: &Field) -> Rgb
     }
 }
 
-fn read_size(get: &impl Fn(&str) -> Option<SettingValue>, field: &Field) -> u32 {
-    let (Kind::Int { min, max }, DefaultValue::Int(default)) = (field.kind, field.default) else {
+fn read_int(get: &impl Fn(&str) -> Option<SettingValue>, field: &Field) -> u32 {
+    let (Kind::Int { min, max, .. }, DefaultValue::Int(default)) = (field.kind, field.default)
+    else {
         unreachable!("{} is not an integer field", field.key)
     };
     let value = match get(field.key) {
@@ -257,10 +306,11 @@ fn read_text(get: &impl Fn(&str) -> Option<SettingValue>, field: &Field) -> Stri
 mod tests {
     use std::cell::RefCell;
     use std::collections::HashSet;
+    use std::time::Duration;
 
     use super::*;
 
-    const EXPECTED_KEYS: [&str; 21] = [
+    const EXPECTED_KEYS: [&str; 26] = [
         "player",
         "auto_select",
         "show_art",
@@ -271,7 +321,10 @@ mod tests {
         "show_progress",
         "show_position",
         "show_duration",
+        "show_remaining",
         "art_right",
+        "art_round",
+        "art_gap",
         "color_background",
         "color_text",
         "color_bar_fill",
@@ -281,6 +334,8 @@ mod tests {
         "font_size_subtitle",
         "font_size_time",
         "corner_radius",
+        "scroll_speed",
+        "scroll_pause",
         "fallback_text",
     ];
 
@@ -301,7 +356,14 @@ mod tests {
 
     fn int_bounds(key: &str) -> (u32, u32) {
         match field(key).map(|f| f.kind) {
-            Some(Kind::Int { min, max }) => (min, max),
+            Some(Kind::Int { min, max, .. }) => (min, max),
+            other => panic!("{key} is not an integer field: {other:?}"),
+        }
+    }
+
+    fn unit(key: &str) -> Unit {
+        match field(key).map(|f| f.kind) {
+            Some(Kind::Int { unit, .. }) => unit,
             other => panic!("{key} is not an integer field: {other:?}"),
         }
     }
@@ -322,7 +384,10 @@ mod tests {
             show_progress: true,
             show_position: true,
             show_duration: true,
+            show_remaining: false,
             art_right: false,
+            art_round: false,
+            art_gap: 0,
             color_background: Rgba::new(0x00, 0x00, 0x00, 153),
             color_text: Rgba::new(0xFF, 0xFF, 0xFF, 255),
             color_bar_fill: Rgba::new(0xFF, 0xFF, 0xFF, 255),
@@ -332,6 +397,8 @@ mod tests {
             font_size_subtitle: 24,
             font_size_time: 20,
             corner_radius: 12,
+            scroll_speed: 40,
+            scroll_pause: Duration::from_millis(2000),
             fallback_text: "Nothing playing".to_owned(),
         }
     }
@@ -353,11 +420,11 @@ mod tests {
         for f in FIELDS {
             let expected = match f.key {
                 "player" => "player",
-                "auto_select" | "fetch_art_online" | "art_right" => "bool",
+                "auto_select" | "fetch_art_online" | "art_right" | "art_round" => "bool",
                 k if k.starts_with("show_") => "bool",
                 k if k.starts_with("color_") => "color",
                 "width" | "font_size_title" | "font_size_subtitle" | "font_size_time"
-                | "corner_radius" => "int",
+                | "corner_radius" | "art_gap" | "scroll_speed" | "scroll_pause" => "int",
                 "fallback_text" => "text",
                 other => panic!("unexpected key {other}"),
             };
@@ -439,12 +506,65 @@ mod tests {
             .iter()
             .filter(|f| matches!(f.kind, Kind::Int { .. }))
             .collect();
-        assert_eq!(ints.len(), 5);
-        for f in ints.into_iter().filter(|f| f.key != "corner_radius") {
-            let (min, max) = int_bounds(f.key);
-            assert!(min >= 1, "{} allows sizes below 1", f.key);
-            assert!((512..=16384).contains(&max), "{} max {max}", f.key);
+        assert_eq!(ints.len(), 8);
+        for key in [
+            "width",
+            "font_size_title",
+            "font_size_subtitle",
+            "font_size_time",
+        ] {
+            let (min, max) = int_bounds(key);
+            assert!(min >= 1, "{key} allows sizes below 1");
+            assert!((512..=16384).contains(&max), "{key} max {max}");
         }
+    }
+
+    #[test]
+    fn amounts_that_may_be_zero_have_their_documented_bounds() {
+        assert_eq!(int_bounds("corner_radius"), (0, 256));
+        assert_eq!(int_bounds("art_gap"), (0, 512));
+        assert_eq!(int_bounds("scroll_speed"), (0, 1000));
+        assert_eq!(int_bounds("scroll_pause"), (0, 60_000));
+    }
+
+    #[test]
+    fn every_integer_names_its_unit() {
+        for key in [
+            "width",
+            "font_size_title",
+            "font_size_subtitle",
+            "font_size_time",
+            "corner_radius",
+            "art_gap",
+        ] {
+            assert_eq!(unit(key), Unit::Pixel, "{key}");
+        }
+        assert_eq!(unit("scroll_speed"), Unit::PixelPerSecond);
+        assert_eq!(unit("scroll_pause"), Unit::Millisecond);
+        assert_eq!(Unit::Pixel.symbol(), "px");
+        assert_eq!(Unit::PixelPerSecond.symbol(), "px/s");
+        assert_eq!(Unit::Millisecond.symbol(), "ms");
+    }
+
+    #[test]
+    fn zero_gap_glues_and_zero_speed_stops_the_scrolling() {
+        let read = |key: &'static str| {
+            Settings::from_lookup(|k| (k == key).then_some(SettingValue::Int(0)))
+        };
+        assert_eq!(read("art_gap").art_gap, 0);
+        assert_eq!(read("scroll_speed").scroll_speed, 0);
+        assert_eq!(read("scroll_pause").scroll_pause, Duration::ZERO);
+    }
+
+    #[test]
+    fn scroll_pause_is_read_in_milliseconds() {
+        let read = |v: i64| {
+            Settings::from_lookup(|k| (k == "scroll_pause").then_some(SettingValue::Int(v)))
+                .scroll_pause
+        };
+        assert_eq!(read(1500), Duration::from_millis(1500));
+        assert_eq!(read(-1), Duration::ZERO);
+        assert_eq!(read(i64::MAX), Duration::from_secs(60));
     }
 
     #[test]
@@ -474,7 +594,10 @@ mod tests {
                 "show_progress" => Bool(false),
                 "show_position" => Bool(false),
                 "show_duration" => Bool(false),
+                "show_remaining" => Bool(true),
                 "art_right" => Bool(true),
+                "art_round" => Bool(true),
+                "art_gap" => Int(24),
                 "color_background" => Color(Rgba::new(1, 2, 3, 4)),
                 "color_text" => Color(Rgba::new(5, 6, 7, 8)),
                 "color_bar_fill" => Color(Rgba::new(9, 10, 11, 12)),
@@ -484,6 +607,8 @@ mod tests {
                 "font_size_subtitle" => Int(30),
                 "font_size_time" => Int(10),
                 "corner_radius" => Int(30),
+                "scroll_speed" => Int(80),
+                "scroll_pause" => Int(500),
                 "fallback_text" => Text("Aucune lecture".to_owned()),
                 _ => return None,
             })
@@ -499,7 +624,10 @@ mod tests {
             show_progress: false,
             show_position: false,
             show_duration: false,
+            show_remaining: true,
             art_right: true,
+            art_round: true,
+            art_gap: 24,
             color_background: Rgba::new(1, 2, 3, 4),
             color_text: Rgba::new(5, 6, 7, 8),
             color_bar_fill: Rgba::new(9, 10, 11, 12),
@@ -509,6 +637,8 @@ mod tests {
             font_size_subtitle: 30,
             font_size_time: 10,
             corner_radius: 30,
+            scroll_speed: 80,
+            scroll_pause: Duration::from_millis(500),
             fallback_text: "Aucune lecture".to_owned(),
         };
         assert_eq!(Settings::from_lookup(stored), expected);
@@ -552,12 +682,17 @@ mod tests {
     #[test]
     fn integers_are_clamped_to_their_bounds() {
         type Getter = fn(&Settings) -> u32;
-        let sizes: [(&str, Getter); 5] = [
+        let sizes: [(&str, Getter); 8] = [
+            ("art_gap", |s| s.art_gap),
             ("width", |s| s.width),
             ("font_size_title", |s| s.font_size_title),
             ("font_size_subtitle", |s| s.font_size_subtitle),
             ("font_size_time", |s| s.font_size_time),
             ("corner_radius", |s| s.corner_radius),
+            ("scroll_speed", |s| s.scroll_speed),
+            ("scroll_pause", |s| {
+                u32::try_from(s.scroll_pause.as_millis()).expect("bounded")
+            }),
         ];
         for (key, get) in sizes {
             let (min, max) = int_bounds(key);

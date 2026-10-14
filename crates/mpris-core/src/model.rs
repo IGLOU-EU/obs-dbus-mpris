@@ -137,7 +137,14 @@ pub struct Settings {
     pub show_progress: bool,
     pub show_position: bool,
     pub show_duration: bool,
+    /// The remaining time in place of the duration, only where the duration
+    /// shows (B-19).
+    pub show_remaining: bool,
     pub art_right: bool,
+    /// The thumbnail drawn as a disc, whatever `corner_radius` (B-38).
+    pub art_round: bool,
+    /// Pixels between the thumbnail and the panel, counted in `width` (B-39).
+    pub art_gap: u32,
     pub color_background: Rgba,
     pub color_text: Rgba,
     pub color_bar_fill: Rgba,
@@ -150,6 +157,11 @@ pub struct Settings {
     pub font_size_time: u32,
     /// Corners of the panel and the thumbnail, 0 for square ones (B-38).
     pub corner_radius: u32,
+    /// Pixels per second at which a text too long for its line scrolls, 0
+    /// to cut it with an ellipsis instead (B-36).
+    pub scroll_speed: u32,
+    /// The stop of a scrolling text at its start, before each round (B-36).
+    pub scroll_pause: Duration,
     /// Shown when nothing plays. Empty means a fully transparent source.
     pub fallback_text: String,
 }

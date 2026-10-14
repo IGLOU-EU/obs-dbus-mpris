@@ -97,7 +97,7 @@ pub fn properties(players: &[Player], remembered: Option<&str>) -> *mut obs_prop
                 Kind::Bool => {
                     obs_properties_add_bool(props, name, label);
                 }
-                Kind::Int { min, max } => {
+                Kind::Int { min, max, .. } => {
                     obs_properties_add_int(props, name, label, c_int_of(min), c_int_of(max), 1);
                 }
                 Kind::Color => {
