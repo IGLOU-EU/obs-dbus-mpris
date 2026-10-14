@@ -44,8 +44,9 @@ struct Source {
     /// `None` when the render worker could not start, and then the source
     /// stays empty.
     painter: Option<Painter>,
-    /// Touched by the graphics thread, and by `destroy` once OBS no longer
-    /// draws the source.
+    /// Touched by the graphics thread, by `get_properties` on the UI thread
+    /// for the record Cancel undoes with, and by `destroy` once OBS no
+    /// longer draws the source.
     view: Mutex<View>,
 }
 
@@ -57,7 +58,8 @@ struct View {
     started: Instant,
     /// The followed player, and whether a player was chosen by hand.
     choice: ChoiceState,
-    /// What Cancel in the properties brings back (B-05).
+    /// What Cancel in the properties brings back (B-05), until the dialog
+    /// opens again.
     undo: Option<ChoiceUndo>,
     /// Tells the core which online cover the source wants, if any (B-18).
     /// `None` without a core. Dropped with the source, which withdraws it.
@@ -257,7 +259,13 @@ unsafe extern "C" fn get_defaults(data: *mut obs_data_t) {
 unsafe extern "C" fn get_properties(data: *mut c_void) -> *mut obs_properties_t {
     guard("get_properties", ptr::null_mut(), || {
         // SAFETY: OBS passes what `create` returned, or null.
-        let remembered = unsafe { source(data) }.and_then(|s| s.settings().player.clone());
+        let source = unsafe { source(data) };
+        if let Some(source) = source {
+            // The dialog opens: an edit kept from an earlier one is no
+            // longer what Cancel undoes (B-05).
+            source.view().undo = None;
+        }
+        let remembered = source.and_then(|s| s.settings().player.clone());
         settings::properties(&snapshot().players, remembered.as_deref())
     })
 }

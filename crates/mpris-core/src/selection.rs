@@ -103,7 +103,9 @@ impl ChoiceState {
 }
 
 /// The choice of player a source had before its properties first changed
-/// it, and its choice state then, which Cancel brings back (B-05).
+/// it, and its choice state then, which Cancel brings back (B-05). Callers
+/// drop it when the properties dialog opens again, so that a choice made
+/// later is never taken for a Cancel.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ChoiceUndo {
     player: Option<String>,
@@ -399,9 +401,11 @@ mod tests {
         /// The player and the automatic selection set in the properties, as
         /// `update` receives them.
         Choose(Option<String>, bool),
+        /// The properties dialog opens, or reloads after Defaults.
+        Open,
     }
 
-    use Moment::{Choose, Frame};
+    use Moment::{Choose, Frame, Open};
 
     /// A source as the OBS glue drives it, its start instant, its choice
     /// state and what undoes it held beside its settings (B-08).
@@ -458,6 +462,7 @@ mod tests {
                         shown.push(source.frame(&order, started + *after));
                     }
                     Choose(player, auto) => source.choose(settings(player.as_deref(), *auto)),
+                    Open => source.undo = None,
                 }
             }
             shown
@@ -467,7 +472,7 @@ mod tests {
             .iter()
             .map(|moment| match moment {
                 Frame(_, players) => players.len(),
-                Choose(..) => 0,
+                Choose(..) | Open => 0,
             })
             .max()
             .unwrap_or(0);
@@ -974,6 +979,7 @@ mod tests {
     fn cancel_in_grace_keeps_the_grace_period() {
         let moments = [
             Frame(Duration::ZERO, vec![player("chromium", Playing)]),
+            Open,
             Choose(bus("vlc"), true),
             Frame(
                 minutes(1),
@@ -1014,6 +1020,7 @@ mod tests {
         let moments = [
             Frame(Duration::ZERO, vec![player("chromium", Playing)]),
             Frame(minutes(6), vec![player("chromium", Playing), usual()]),
+            Open,
             Choose(bus("vlc"), true),
             Frame(
                 minutes(7),
@@ -1042,6 +1049,7 @@ mod tests {
         let moments = [
             Frame(Duration::ZERO, vec![player("chromium", Playing)]),
             Frame(minutes(6), vec![player("chromium", Playing), usual()]),
+            Open,
             Choose(bus("vlc"), true),
             Frame(
                 minutes(7),
@@ -1128,26 +1136,50 @@ mod tests {
     }
 
     #[test]
-    fn the_defaults_button_then_cancel_changes_nothing() {
+    fn the_defaults_button_then_cancel_is_a_choice_by_hand_of_the_former_player() {
+        let usual = || instance("mpv", "instance-a", Paused);
         let moments = [
-            Frame(Duration::ZERO, vec![player("chromium", Playing)]),
+            Frame(Duration::ZERO, vec![usual(), player("chromium", Playing)]),
+            Open,
             Choose(None, true),
+            Open,
             Choose(bus("mpv.instance-a"), true),
-            Frame(
-                minutes(1),
-                vec![player("chromium", Paused), player("vlc", Playing)],
-            ),
+            Frame(minutes(1), vec![usual(), player("chromium", Playing)]),
             Frame(
                 minutes(2),
-                vec![
-                    player("vlc", Playing),
-                    instance("mpv", "instance-b", Paused),
-                ],
+                vec![player("chromium", Playing), player("vlc", Playing)],
             ),
         ];
         assert_eq!(
             shown_over(&moments, bus("mpv.instance-a").as_deref(), true),
-            [bus("chromium"), bus("vlc"), bus("mpv.instance-b")]
+            [bus("mpv.instance-a"), bus("mpv.instance-a"), None]
+        );
+    }
+
+    #[test]
+    fn coming_back_to_the_former_player_once_the_properties_reopen_is_a_choice_by_hand() {
+        let moments = [
+            Frame(Duration::ZERO, vec![player("chromium", Playing)]),
+            Open,
+            Choose(bus("vlc"), true),
+            Frame(
+                minutes(1),
+                vec![player("chromium", Playing), player("vlc", Paused)],
+            ),
+            Open,
+            Choose(bus("mpv.instance-a"), true),
+            Frame(
+                minutes(3 * 60),
+                vec![
+                    player("chromium", Playing),
+                    instance("mpv", "instance-b", Paused),
+                ],
+            ),
+            Frame(minutes(3 * 60 + 1), vec![player("chromium", Playing)]),
+        ];
+        assert_eq!(
+            shown_over(&moments, bus("mpv.instance-a").as_deref(), true),
+            [bus("chromium"), bus("vlc"), bus("mpv.instance-b"), None]
         );
     }
 
