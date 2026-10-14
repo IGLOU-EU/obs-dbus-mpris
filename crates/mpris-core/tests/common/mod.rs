@@ -404,6 +404,24 @@ impl Drop for HungFile {
     }
 }
 
+/// Names of the threads of this process, as the kernel reports them
+/// (truncated to 15 bytes).
+pub fn thread_names() -> Vec<String> {
+    fs::read_dir("/proc/self/task")
+        .expect("procfs")
+        .filter_map(|task| fs::read_to_string(task.ok()?.path().join("comm")).ok())
+        .map(|name| name.trim_end().to_owned())
+        .collect()
+}
+
+/// How many threads of this process have a name starting with `prefix`.
+pub fn count(prefix: &str) -> usize {
+    thread_names()
+        .iter()
+        .filter(|name| name.starts_with(prefix))
+        .count()
+}
+
 /// Polls `attempt` until it gives a value, and fails with `what` and the
 /// state `seen` describes once the deadline has passed.
 fn poll<T>(what: &str, attempt: impl Fn() -> Option<T>, seen: impl Fn() -> String) -> T {

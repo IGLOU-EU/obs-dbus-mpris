@@ -3,7 +3,9 @@
 //! One core thread owns the bus connection and the [`Store`]. It turns
 //! signals and property reads into [`Event`]s, applies them, loads the art
 //! the store asks for, and publishes an immutable [`Snapshot`] that any
-//! thread reads without waiting on the bus (B-41).
+//! thread reads without waiting on the bus (B-41). It also hands the
+//! online lookups the sources' wishes call for to the network thread, and
+//! applies their outcomes (B-18).
 //!
 //! The loop is async on a single thread: the zbus streams, the poll timer,
 //! the art loads and the stop signal are awaited together, so a stop
@@ -15,6 +17,8 @@
 //! threads remain, shared by the whole process and holding no player state:
 //! the `blocking` pool, which zbus connects through and which keeps an
 //! abandoned art load until it returns, and the global `async-io` thread.
+//! The network thread is not waited for either: it stops at its next
+//! check, at worst once its request in flight times out.
 //!
 //! A hostile local process can slow the loop by flooding signals or by never
 //! answering the reads of the properties it invalidates, each read waiting
@@ -23,8 +27,10 @@
 //! nothing and delays the others only while a call to it waits out that same
 //! timeout.
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::future;
 use std::panic::{self, AssertUnwindSafe};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
@@ -38,7 +44,9 @@ use zbus::{Connection, MatchRule, Message, MessageStream, connection};
 
 use crate::art::load_art;
 use crate::metadata::parse_track;
-use crate::model::{PlaybackStatus, Snapshot};
+use crate::model::{ArtImage, PlaybackStatus, Snapshot};
+use crate::network::{self, LookUp, Looked, Network};
+use crate::online::{Request, Wish};
 use crate::player::{
     player_key, read_identity, read_position, read_rate, read_status, unwrap_variant,
 };
@@ -69,23 +77,34 @@ type Shared = Arc<Mutex<Arc<Snapshot>>>;
 /// Properties of one interface, as `GetAll` and `PropertiesChanged` send them.
 type Props = HashMap<String, OwnedValue>;
 
+/// A source's wish as the core thread receives it: which source, and what
+/// it wishes, `None` for nothing.
+type WishMessage = (u64, Option<Wish>);
+
 /// Handle on the core thread. Dropping it stops the thread.
 pub struct Core {
     shared: Shared,
     stop: Sender<()>,
+    wishes: Sender<WishMessage>,
     thread: Option<JoinHandle<()>>,
 }
 
 impl Core {
     /// Watches the players of the user's session bus.
     pub fn start() -> Core {
-        Core::spawn(None)
+        Core::spawn(None, network::look_up_online)
     }
 
     /// Watches the players of the bus at `address`, so tests never touch
     /// the user's session.
     pub fn start_at(address: &str) -> Core {
-        Core::spawn(Some(address.to_owned()))
+        Core::spawn(Some(address.to_owned()), network::look_up_online)
+    }
+
+    /// Watches the bus at `address` and looks covers up with `look_up`,
+    /// so tests never touch the network either.
+    pub fn start_with(address: &str, look_up: LookUp) -> Core {
+        Core::spawn(Some(address.to_owned()), look_up)
     }
 
     /// Latest published state. Never waits on the bus.
@@ -93,12 +112,23 @@ impl Core {
         lock(&self.shared).clone()
     }
 
-    fn spawn(address: Option<String>) -> Core {
+    /// A new source's link to the core for its online cover (B-18).
+    pub fn art_wish(&self) -> ArtWish {
+        static NEXT: AtomicU64 = AtomicU64::new(0);
+        ArtWish {
+            source: NEXT.fetch_add(1, Ordering::Relaxed),
+            wishes: self.wishes.clone(),
+            current: None,
+        }
+    }
+
+    fn spawn(address: Option<String>, look_up: LookUp) -> Core {
         let shared = Shared::default();
         let (stop, stopped) = async_channel::bounded(1);
+        let (wishes, wished) = async_channel::unbounded();
         let thread = thread::Builder::new().name("mpris-core".into()).spawn({
             let shared = shared.clone();
-            move || run(address.as_deref(), &shared, stopped)
+            move || run(address.as_deref(), &shared, stopped, &wished, look_up)
         });
         // Without the thread the snapshot stays empty, which the sources
         // already show as "nothing playing" (B-22).
@@ -108,8 +138,38 @@ impl Core {
         Core {
             shared,
             stop,
+            wishes,
             thread,
         }
+    }
+}
+
+/// How one source tells the core which online cover it wants: a service,
+/// for the player it shows (B-18). The core thread alone can tell when a
+/// lookup is needed, since it holds the player's own cover and the cache
+/// of the session, while a source only knows what it shows. So each
+/// source sends its wish, and only when it changes, and the core looks up
+/// what the wishes call for. Dropping it withdraws the wish.
+pub struct ArtWish {
+    source: u64,
+    wishes: Sender<WishMessage>,
+    current: Option<Wish>,
+}
+
+impl ArtWish {
+    /// Wishes `wish` from now on, `None` for nothing.
+    pub fn set(&mut self, wish: Option<Wish>) {
+        if wish != self.current {
+            // Fails only once the core has stopped, when no wish matters.
+            let _ = self.wishes.try_send((self.source, wish.clone()));
+            self.current = wish;
+        }
+    }
+}
+
+impl Drop for ArtWish {
+    fn drop(&mut self) {
+        self.set(None);
     }
 }
 
@@ -135,13 +195,19 @@ fn publish(shared: &Shared, snapshot: Arc<Snapshot>) {
 
 /// Body of the core thread. A panic stops it here instead of reaching OBS
 /// (B-42), and leaves an empty snapshot rather than a frozen one.
-fn run(address: Option<&str>, shared: &Shared, stopped: Receiver<()>) {
+fn run(
+    address: Option<&str>,
+    shared: &Shared,
+    stopped: Receiver<()>,
+    wishes: &Receiver<WishMessage>,
+    look_up: LookUp,
+) {
     let outcome = panic::catch_unwind(AssertUnwindSafe(|| {
         async_io::block_on(async {
             let stop = async {
                 let _ = stopped.recv().await;
             };
-            stop.or(serve(address, shared)).await
+            stop.or(serve(address, shared, wishes, look_up)).await
         })
     }));
     if outcome.is_err() {
@@ -150,7 +216,12 @@ fn run(address: Option<&str>, shared: &Shared, stopped: Receiver<()>) {
     }
 }
 
-async fn serve(address: Option<&str>, shared: &Shared) {
+async fn serve(
+    address: Option<&str>,
+    shared: &Shared,
+    wishes: &Receiver<WishMessage>,
+    look_up: LookUp,
+) {
     let conn = match connect(address).await {
         Ok(conn) => conn,
         Err(error) => {
@@ -164,7 +235,7 @@ async fn serve(address: Option<&str>, shared: &Shared) {
             executor.tick().await;
         }
     };
-    match watch(&conn, shared).or(drive).await {
+    match watch(&conn, shared, wishes, look_up).or(drive).await {
         Ok(()) => log::warn!("MPRIS: lost the D-Bus session bus"),
         Err(error) => log::error!("MPRIS: cannot watch the D-Bus session bus: {error}"),
     }
@@ -189,15 +260,23 @@ enum Input {
     Owner(Message),
     Player(Message),
     Poll,
+    Wish(WishMessage),
+    Looked(Looked),
     Lost,
 }
 
-async fn watch(conn: &Connection, shared: &Shared) -> zbus::Result<()> {
+async fn watch(
+    conn: &Connection,
+    shared: &Shared,
+    wishes: &Receiver<WishMessage>,
+    look_up: LookUp,
+) -> zbus::Result<()> {
     // Subscribed before the first scan, so a player starting in between is
     // not missed.
     let mut owners = subscribe(conn, owner_rule()?).await?;
     let mut players = subscribe(conn, player_rule()?).await?;
-    let mut watcher = Watcher::new(conn, shared);
+    let (results, looked) = async_channel::unbounded();
+    let mut watcher = Watcher::new(conn, shared, Network::new(look_up, results));
     watcher.discover().await;
 
     let mut poll = Timer::after(POLL_INTERVAL);
@@ -208,10 +287,14 @@ async fn watch(conn: &Connection, shared: &Shared) -> zbus::Result<()> {
                 (&mut poll).await;
                 Input::Poll
             })
+            .or(receive(wishes, Input::Wish))
+            .or(receive(&looked, Input::Looked))
             .await;
         match input {
             Input::Owner(msg) => watcher.on_owner_changed(&msg).await,
             Input::Player(msg) => watcher.on_player_signal(&msg).await,
+            Input::Wish((source, wish)) => watcher.on_wish(source, wish),
+            Input::Looked((request, image)) => watcher.on_looked(request, image).await,
             Input::Poll => {
                 watcher.poll_positions().await;
                 // Counted from the end of the poll, so a slow player never
@@ -235,6 +318,15 @@ async fn next(stream: &mut MessageStream, input: fn(Message) -> Input) -> Input 
             Some(Err(error)) => log::debug!("MPRIS: unreadable message: {error}"),
             None => return Input::Lost,
         }
+    }
+}
+
+/// Next message of `channel`. A closed channel never wakes the loop again,
+/// which only happens once the core is stopping.
+async fn receive<T>(channel: &Receiver<T>, input: fn(T) -> Input) -> Input {
+    match channel.recv().await {
+        Ok(message) => input(message),
+        Err(_) => future::pending().await,
     }
 }
 
@@ -266,15 +358,44 @@ struct Watcher<'a> {
     store: Store,
     /// Last published snapshot. Tells which processes are players.
     current: Arc<Snapshot>,
+    /// The wish of each source that has one.
+    wishes: BTreeMap<u64, Wish>,
+    network: Network,
 }
 
 impl<'a> Watcher<'a> {
-    fn new(conn: &'a Connection, shared: &'a Shared) -> Self {
+    fn new(conn: &'a Connection, shared: &'a Shared, network: Network) -> Self {
         Watcher {
             conn,
             shared,
             store: Store::new(),
             current: Arc::default(),
+            wishes: BTreeMap::new(),
+            network,
+        }
+    }
+
+    /// A source wished an online cover, or stopped wishing one.
+    fn on_wish(&mut self, source: u64, wish: Option<Wish>) {
+        match wish {
+            Some(wish) => self.wishes.insert(source, wish),
+            None => self.wishes.remove(&source),
+        };
+        self.look_up();
+    }
+
+    /// The outcome of an online lookup, which the network thread sends
+    /// back, since only this thread writes the store.
+    async fn on_looked(&mut self, request: Request, image: Option<Arc<ArtImage>>) {
+        let changed = self.store.apply(Event::OnlineLooked { request, image });
+        self.commit(changed).await;
+    }
+
+    /// Hands the network thread the lookups the wishes call for now. The
+    /// store tells which, and marks them asked, so that none runs twice.
+    fn look_up(&mut self) {
+        for request in self.store.start_lookups(self.wishes.values()) {
+            self.network.send(request);
         }
     }
 
@@ -484,6 +605,8 @@ impl<'a> Watcher<'a> {
                 image,
             });
         }
+        // A new track, or a cover that failed to load, may call for one.
+        self.look_up();
         self.current = Arc::new(self.store.snapshot());
         publish(self.shared, self.current.clone());
     }

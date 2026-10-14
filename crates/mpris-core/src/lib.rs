@@ -4,13 +4,15 @@
 //!
 //! The data lives in [`model`]. Every other module is a set of
 //! transformations over that data, except [`store`] (the only writer of
-//! player state) and [`dbus`] (the only module that talks to the bus).
+//! player state), [`dbus`] (the only module that talks to the bus) and
+//! [`network`] (the only one that talks to online services).
 
 pub mod art;
 pub mod content;
 pub mod dbus;
 pub mod metadata;
 pub mod model;
+pub mod network;
 pub mod online;
 pub mod player;
 pub mod position;

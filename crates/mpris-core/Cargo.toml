@@ -20,6 +20,7 @@ serde = { version = "1", features = ["derive"] }
 regex = "1"
 unicode-normalization = "0.1"
 serde_json = "1"
+ureq = "3"
 
 [dev-dependencies]
 # File leases, to stand in for a cover on a hung network mount.

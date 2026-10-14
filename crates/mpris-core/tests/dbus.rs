@@ -2,7 +2,8 @@
 
 mod common;
 
-use std::sync::mpsc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Mutex, PoisonError, mpsc};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -11,7 +12,8 @@ use common::{
     wait_for, wait_until,
 };
 use mpris_core::dbus::Core;
-use mpris_core::model::{Art, PlaybackStatus, PlayerKey};
+use mpris_core::model::{Art, ArtImage, PlaybackStatus, PlayerKey, Service};
+use mpris_core::online::{Request, Wish};
 use zbus::zvariant::Value;
 
 const FAKE: &str = "org.mpris.MediaPlayer2.fake.instance1";
@@ -594,4 +596,191 @@ fn metadata_entries_of_other_types_are_tolerated() {
     assert_eq!(player.track.title.as_deref(), Some("Loose types"));
     assert_eq!(player.track.artists, ["A single string"]);
     assert_eq!(player.track.length, Some(secs(5)));
+}
+
+// Online covers (B-18), looked up by stand-ins that never reach the network.
+
+/// Every request the stand-ins got, from every test of this binary, each
+/// test telling its own by the title of its track.
+static ASKED: Mutex<Vec<Request>> = Mutex::new(Vec::new());
+
+fn asked(request: &Request) {
+    ASKED
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .push(request.clone());
+}
+
+/// How many lookups asked for the track titled `title`.
+fn asked_for(title: &str) -> usize {
+    ASKED
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .iter()
+        .filter(|request| matches!(request, Request::MusicBrainz(query) if query.title == title))
+        .count()
+}
+
+/// Finds a 2 by 2 cover for anything.
+fn finds(request: &Request, _stopped: &AtomicBool) -> Option<ArtImage> {
+    asked(request);
+    Some(ArtImage {
+        width: 2,
+        height: 2,
+        rgba: vec![9; 16],
+    })
+}
+
+fn musicbrainz() -> Option<Wish> {
+    Some(Wish {
+        bus_name: FAKE.into(),
+        service: Service::MusicBrainz,
+    })
+}
+
+fn without_cover(title: &str) -> Fake {
+    Fake::new("Fake Player", "Playing", track("/fake/1", title, None))
+}
+
+/// Waits until the core shows a cover found online for the track `title`.
+fn shows_online(core: &Core, title: &str) {
+    wait_for(core, &format!("the online cover of {title}"), |s| {
+        find(s, FAKE).is_some_and(|p| {
+            p.track.title.as_deref() == Some(title)
+                && p.online
+                    .iter()
+                    .any(|(service, _)| *service == Service::MusicBrainz)
+        })
+    });
+}
+
+#[test]
+fn a_wished_cover_is_looked_up_once_and_shown() {
+    let bus = PrivateBus::start();
+    let _fake = FakePlayer::start(&bus, FAKE, without_cover("Wished once"));
+    let core = Core::start_with(&bus.address, finds);
+    discovered(&core, FAKE);
+
+    let mut first = core.art_wish();
+    first.set(musicbrainz());
+    shows_online(&core, "Wished once");
+    // A second source asking the same shares the first lookup.
+    let mut second = core.art_wish();
+    second.set(musicbrainz());
+    thread::sleep(Duration::from_millis(100));
+    assert_eq!(asked_for("Wished once"), 1);
+}
+
+/// Acceptance scenario 9: changing tracks then coming back asks nothing.
+#[test]
+fn coming_back_to_a_track_asks_nothing_more() {
+    let bus = PrivateBus::start();
+    let fake = FakePlayer::start(&bus, FAKE, without_cover("Going"));
+    let core = Core::start_with(&bus.address, finds);
+    discovered(&core, FAKE);
+    let mut wish = core.art_wish();
+    wish.set(musicbrainz());
+    shows_online(&core, "Going");
+
+    fake.set_metadata(track("/fake/2", "Elsewhere", None));
+    shows_online(&core, "Elsewhere");
+    fake.set_metadata(track("/fake/1", "Going", None));
+    shows_online(&core, "Going");
+    assert_eq!((asked_for("Going"), asked_for("Elsewhere")), (1, 1));
+}
+
+/// B-48: no source picked a service, so nothing leaves the machine.
+#[test]
+fn nothing_is_looked_up_without_a_wish() {
+    let bus = PrivateBus::start();
+    let fake = FakePlayer::start(&bus, FAKE, without_cover("Never wished"));
+    let core = Core::start_with(&bus.address, finds);
+    discovered(&core, FAKE);
+    let mut wish = core.art_wish();
+    wish.set(None);
+    fake.set_status("Paused");
+    wait_for(&core, "the pause", |s| {
+        find(s, FAKE).is_some_and(|p| p.status == PlaybackStatus::Paused)
+    });
+    thread::sleep(Duration::from_millis(100));
+    assert_eq!(asked_for("Never wished"), 0);
+    assert!(find(&core.snapshot(), FAKE).is_some_and(|p| p.online.is_empty()));
+}
+
+#[test]
+fn a_withdrawn_wish_looks_nothing_more_up() {
+    let bus = PrivateBus::start();
+    let fake = FakePlayer::start(&bus, FAKE, without_cover("Wished then"));
+    let core = Core::start_with(&bus.address, finds);
+    discovered(&core, FAKE);
+    let mut wish = core.art_wish();
+    wish.set(musicbrainz());
+    shows_online(&core, "Wished then");
+
+    drop(wish);
+    thread::sleep(Duration::from_millis(50));
+    fake.set_metadata(track("/fake/2", "No longer", None));
+    wait_for(&core, "the next track", |s| {
+        find(s, FAKE).is_some_and(|p| p.track.title.as_deref() == Some("No longer"))
+    });
+    thread::sleep(Duration::from_millis(100));
+    assert_eq!(asked_for("No longer"), 0);
+}
+
+#[test]
+fn a_player_with_its_own_cover_is_not_looked_up() {
+    let bus = PrivateBus::start();
+    let cover = png_data_url(4, 4);
+    let _fake = FakePlayer::start(
+        &bus,
+        FAKE,
+        Fake::new(
+            "Fake Player",
+            "Playing",
+            track("/fake/1", "Own cover", Some(&cover)),
+        ),
+    );
+    let core = Core::start_with(&bus.address, finds);
+    wait_for(&core, "the player's own cover", |s| {
+        find(s, FAKE).is_some_and(|p| matches!(p.art, Art::Ready(_)))
+    });
+    let mut wish = core.art_wish();
+    wish.set(musicbrainz());
+    thread::sleep(Duration::from_millis(100));
+    assert_eq!(asked_for("Own cover"), 0);
+}
+
+static HANGING: AtomicBool = AtomicBool::new(false);
+static GAVE_UP: AtomicBool = AtomicBool::new(false);
+
+/// A lookup stuck on a service that never answers, until the core stops.
+fn hangs(request: &Request, stopped: &AtomicBool) -> Option<ArtImage> {
+    asked(request);
+    HANGING.store(true, Ordering::Relaxed);
+    let end = Instant::now() + Duration::from_secs(10);
+    while !stopped.load(Ordering::Relaxed) && Instant::now() < end {
+        thread::sleep(Duration::from_millis(5));
+    }
+    GAVE_UP.store(true, Ordering::Relaxed);
+    None
+}
+
+#[test]
+fn drop_returns_quickly_while_a_lookup_hangs() {
+    let bus = PrivateBus::start();
+    let _fake = FakePlayer::start(&bus, FAKE, without_cover("Hanging"));
+    let core = Core::start_with(&bus.address, hangs);
+    discovered(&core, FAKE);
+    let mut wish = core.art_wish();
+    wish.set(musicbrainz());
+    wait_until("the lookup to hang", || HANGING.load(Ordering::Relaxed));
+
+    let start = Instant::now();
+    drop(core);
+    let elapsed = start.elapsed();
+    assert!(
+        elapsed < Duration::from_millis(300),
+        "drop took {elapsed:?}"
+    );
+    wait_until("the lookup to give up", || GAVE_UP.load(Ordering::Relaxed));
 }
