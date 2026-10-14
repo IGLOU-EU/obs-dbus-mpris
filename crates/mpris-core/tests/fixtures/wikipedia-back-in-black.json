@@ -1,0 +1,47 @@
+{
+ "batchcomplete": true,
+ "query": {
+  "pages": [
+   {
+    "title": "Back in Black",
+    "index": 2,
+    "thumbnail": {
+     "source": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/ae/AC-DC_-_Back_In_Black_%28original_1980_album_cover_with_embossed_lettering%29.jpg/250px-AC-DC_-_Back_In_Black_%28original_1980_album_cover_with_embossed_lettering%29.jpg?utm_source=en.wikipedia.org&utm_campaign=api&utm_content=thumbnail"
+    },
+    "description": "1980 studio album by AC/DC"
+   },
+   {
+    "title": "Flick of the Switch",
+    "index": 5,
+    "thumbnail": {
+     "source": "https://thumb.wikimedia.org/wikipedia/en/thumb/8/8d/Ac-dc_Flick_of_the_Switch.JPG/250px-Ac-dc_Flick_of_the_Switch.JPG?utm_source=en.wikipedia.org&utm_campaign=api&utm_content=thumbnail"
+    },
+    "description": "1983 studio album by AC/DC"
+   },
+   {
+    "title": "AC/DC discography",
+    "index": 3,
+    "thumbnail": {
+     "source": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/9e/ACDC_In_Tacoma_2009.jpg/250px-ACDC_In_Tacoma_2009.jpg?utm_source=en.wikipedia.org&utm_campaign=api&utm_content=thumbnail"
+    },
+    "description": ""
+   },
+   {
+    "title": "Black Ice (album)",
+    "index": 4,
+    "thumbnail": {
+     "source": "https://thumb.wikimedia.org/wikipedia/en/thumb/3/3e/Black_ice_red.jpg/250px-Black_ice_red.jpg?utm_source=en.wikipedia.org&utm_campaign=api&utm_content=thumbnail"
+    },
+    "description": "2008 studio album by AC/DC"
+   },
+   {
+    "title": "Back in Black (song)",
+    "index": 1,
+    "thumbnail": {
+     "source": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/d2/Back_in_black_by_acdc_US_7-inch_single_side-A.png/250px-Back_in_black_by_acdc_US_7-inch_single_side-A.png?utm_source=en.wikipedia.org&utm_campaign=api&utm_content=thumbnail"
+    },
+    "description": "1980 single by AC/DC"
+   }
+  ]
+ }
+}

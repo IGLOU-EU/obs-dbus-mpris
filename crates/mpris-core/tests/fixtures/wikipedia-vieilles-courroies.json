@@ -1,0 +1,15 @@
+{
+ "batchcomplete": true,
+ "query": {
+  "pages": [
+   {
+    "title": "Harmonium (Harmonium album)",
+    "index": 1,
+    "thumbnail": {
+     "source": "https://thumb.wikimedia.org/wikipedia/en/thumb/5/52/Harmonium_Album.jpg/250px-Harmonium_Album.jpg?utm_source=en.wikipedia.org&utm_campaign=api&utm_content=thumbnail"
+    },
+    "description": "1974 studio album by Harmonium"
+   }
+  ]
+ }
+}

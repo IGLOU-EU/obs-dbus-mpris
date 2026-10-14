@@ -1,0 +1,47 @@
+{
+ "batchcomplete": true,
+ "query": {
+  "pages": [
+   {
+    "title": "Crime of the Century (album)",
+    "index": 1,
+    "thumbnail": {
+     "source": "https://thumb.wikimedia.org/wikipedia/en/thumb/1/15/Supertramp_-_Crime_of_the_Century.jpg/250px-Supertramp_-_Crime_of_the_Century.jpg?utm_source=en.wikipedia.org&utm_campaign=api&utm_content=thumbnail"
+    },
+    "description": "1974 studio album by Supertramp"
+   },
+   {
+    "title": "Dreamer (Supertramp song)",
+    "index": 5,
+    "thumbnail": {
+     "source": "https://thumb.wikimedia.org/wikipedia/en/thumb/e/e0/Supertramp_Dreamer_single_cover.jpg/250px-Supertramp_Dreamer_single_cover.jpg?utm_source=en.wikipedia.org&utm_campaign=api&utm_content=thumbnail"
+    },
+    "description": "1974 single from Supertramp"
+   },
+   {
+    "title": "The Very Best of Supertramp",
+    "index": 2,
+    "thumbnail": {
+     "source": "https://thumb.wikimedia.org/wikipedia/en/thumb/2/27/Supertramp-Best_of_Vol1.jpg/250px-Supertramp-Best_of_Vol1.jpg?utm_source=en.wikipedia.org&utm_campaign=api&utm_content=thumbnail"
+    },
+    "description": "1990 greatest hits album by Supertramp"
+   },
+   {
+    "title": "School (Supertramp song)",
+    "index": 3,
+    "thumbnail": {
+     "source": "https://thumb.wikimedia.org/wikipedia/en/thumb/6/64/Supertramp_School.jpg/250px-Supertramp_School.jpg?utm_source=en.wikipedia.org&utm_campaign=api&utm_content=thumbnail"
+    },
+    "description": "1983 single by Supertramp"
+   },
+   {
+    "title": "Supertramp discography",
+    "index": 4,
+    "thumbnail": {
+     "source": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/df/Supertramp0062.jpg/250px-Supertramp0062.jpg?utm_source=en.wikipedia.org&utm_campaign=api&utm_content=thumbnail"
+    },
+    "description": "Cataloging of published recordings by Supertramp"
+   }
+  ]
+ }
+}
