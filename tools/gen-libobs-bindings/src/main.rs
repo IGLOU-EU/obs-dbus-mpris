@@ -37,6 +37,7 @@ const FUNCTIONS: &[&str] = &[
     "obs_properties_add_list",
     "obs_property_list_add_string",
     "obs_properties_add_group",
+    "obs_property_set_long_description",
     // Drawing a premultiplied sRGB texture, as OBS's own image source does.
     "obs_enter_graphics",
     "obs_leave_graphics",

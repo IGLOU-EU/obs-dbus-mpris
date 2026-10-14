@@ -304,6 +304,12 @@ unsafe extern "C" {
     ) -> *mut obs_property_t;
 }
 unsafe extern "C" {
+    pub fn obs_property_set_long_description(
+        p: *mut obs_property_t,
+        long_description: *const ::std::os::raw::c_char,
+    );
+}
+unsafe extern "C" {
     pub fn obs_property_int_set_suffix(
         p: *mut obs_property_t,
         suffix: *const ::std::os::raw::c_char,
