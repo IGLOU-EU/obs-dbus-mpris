@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <title>obs-dbus-mpris</title>
+  <!-- Ring and dark disc, so the plugin reads as part of the OBS Studio family. -->
+  <circle cx="256" cy="256" r="254" fill="#C7C7C7"/>
+  <circle cx="256" cy="256" r="251" fill="#FFFFFF"/>
+  <circle cx="256" cy="256" r="228" fill="#272527"/>
+  <!-- Eighth note for the track now playing, its flag drawn as an OBS-like crescent blade. -->
+  <g fill="#E6E5E6">
+    <ellipse cx="206" cy="342" rx="64" ry="48" transform="rotate(-22 206 342)"/>
+    <path d="M242 332 V90 C282 142 392 172 362 320 C352 246 308 212 268 204 V332 Z"/>
+  </g>
+</svg>
