@@ -11,6 +11,7 @@ pub mod content;
 pub mod dbus;
 pub mod metadata;
 pub mod model;
+pub mod online;
 pub mod player;
 pub mod position;
 pub mod selection;
