@@ -148,11 +148,13 @@ Le choix des services vient d'une étude sur les pistes réelles (D-09, `~/Sourc
 
 **B-35 Police.** Police sans empattement par défaut de `cosmic-text` : Open Sans, à défaut Noto Sans, puis DejaVu Sans, puis FreeSans, selon ce qui est installé (D-04). Aucun choix de police dans les propriétés. Un caractère absent de cette police est pris dans une police installée qui l'a, ce qui couvre les écritures non latines : le cas est réel, mpv expose aujourd'hui un album au titre japonais.
 
-**B-36 Débordement.** Aucun élément ne déborde du cadre de la source, quelle que soit la longueur des textes. Un texte trop long (titre, sous-titre, message de repli) défile de droite à gauche dans sa ligne, toujours dans le même sens et sans saut : il est suivi d'un écart fixe de deux fois sa taille de police, puis de sa propre copie, si bien que la boucle reprend sans discontinuité. Chaque fois que le texte revient à sa position de départ, il marque une pause, dont la durée se règle, puis repart. Il commence aussi par cette pause. La vitesse se règle en pixels par seconde. Quand le titre et le sous-titre défilent tous deux, ils sont synchronisés : ils partent ensemble à la même vitesse, celui qui revient au début le premier attend l'autre, puis la pause s'applique aux deux. Un texte qui tient dans sa ligne ne bouge pas. Le cycle repart du début à chaque changement de texte, de largeur de ligne (apparition du pictogramme pause) ou de réglage du défilement. Le défilement continue pendant la pause du lecteur. Une case « Défilement », cochée par défaut, permet de le désactiver : le texte trop long est alors tronqué par des points de suspension, et la vitesse se règle à partir de 1 px/s.
+**B-36 Débordement.** Aucun élément ne déborde du cadre de la source, quelle que soit la longueur des textes. Un texte trop long (titre, sous-titre, message de repli) défile de droite à gauche dans sa ligne, toujours dans le même sens et sans saut : il est suivi d'un écart fixe de deux fois sa taille de police, puis de sa propre copie, si bien que la boucle reprend sans discontinuité. Chaque fois que le texte revient à sa position de départ, il marque une pause, dont la durée se règle, puis repart. Il commence aussi par cette pause. La vitesse se règle en pixels par seconde. Quand le titre et le sous-titre défilent tous deux, ils sont synchronisés : ils partent ensemble à la même vitesse, celui qui revient au début le premier attend l'autre, puis la pause s'applique aux deux. Un texte qui tient dans sa ligne ne bouge pas. Le cycle repart du début à chaque changement de texte, de largeur de ligne (apparition du pictogramme pause) ou de réglage du défilement. Le défilement continue pendant la pause du lecteur. Une vitesse de 0 désactive le défilement : le texte trop long est alors tronqué par des points de suspension. Un texte d'aide le dit à côté du réglage (B-52).
 
 ## 5. Propriétés de la source
 
-**B-51 Groupes.** Les propriétés sont rangées en groupes titrés, dans cet ordre : Lecteur (`player`, `auto_select`), Éléments affichés (les cases `show_*`), Disposition (largeur, image, coins, barre), Texte (tailles de police, défilement, message de repli), Couleurs. L'ordre du tableau ci-dessous suit celui des groupes.
+**B-51 Groupes.** Les propriétés sont rangées en groupes titrés, dans cet ordre : Lecteur (`player`, `auto_select`), Éléments affichés (les cases `show_*`, puis la liste « Pochette en ligne »), Disposition (largeur, image, coins, barre), Texte (tailles de police, défilement, message de repli), Couleurs. L'ordre du tableau ci-dessous suit celui des groupes.
+
+**B-52 Textes d'aide.** Deux réglages portent un texte d'aide, affiché par OBS en infobulle : la vitesse de défilement (ce qu'elle règle, et que 0 désactive le défilement), et la pochette en ligne (quand la recherche a lieu, ce que fait chaque service, ce qui lui est envoyé, et qu'Aucune n'envoie rien).
 
 Récapitulatif des réglages d'une source. Les valeurs par défaut des couleurs et des tailles sont des propositions à ajuster à l'usage.
 
@@ -161,7 +163,6 @@ Récapitulatif des réglages d'une source. Les valeurs par défaut des couleurs 
 | Lecteur | `player` | liste (nom de bus de l'instance) | vide (aucun choix mémorisé) | B-02 à B-07 |
 | Lecteur | `auto_select` | case | oui | B-05 à B-07 |
 | Éléments affichés | `show_art` | case | oui | B-10 |
-| Éléments affichés | `art_online` | liste (Aucune, MusicBrainz, Wikipédia, YouTube) | Aucune | B-18 |
 | Éléments affichés | `show_title` | case | oui | B-11 |
 | Éléments affichés | `show_artist` | case | oui | B-12 |
 | Éléments affichés | `show_album` | case | oui | B-13 |
@@ -169,6 +170,7 @@ Récapitulatif des réglages d'une source. Les valeurs par défaut des couleurs 
 | Éléments affichés | `show_position` | case | oui | B-15 |
 | Éléments affichés | `show_duration` | case | oui | B-16 |
 | Éléments affichés | `show_remaining` | case | non | B-19 |
+| Éléments affichés | `art_online` | liste (Aucune, MusicBrainz, Wikipédia, YouTube) | Aucune | B-18, B-52 |
 | Disposition | `width` | entier (px) | 600 | B-33 |
 | Disposition | `art_right` | case | non | B-30 |
 | Disposition | `art_round` | case | non | B-38 |
@@ -178,8 +180,7 @@ Récapitulatif des réglages d'une source. Les valeurs par défaut des couleurs 
 | Texte | `font_size_title` | entier (px) | 32 | B-34 |
 | Texte | `font_size_subtitle` | entier (px) | 24 | B-34 |
 | Texte | `font_size_time` | entier (px) | 20 | B-34 |
-| Texte | `scroll_enabled` | case | oui | B-36 |
-| Texte | `scroll_speed` | entier (px/s) | 40 | B-36 |
+| Texte | `scroll_speed` | entier (px/s, 0 = désactivé) | 40 | B-36, B-52 |
 | Texte | `scroll_pause` | entier (ms) | 2000 | B-36 |
 | Texte | `fallback_text` | texte | traduit | B-23 |
 | Couleurs | `color_background` | couleur RGBA | `#000000`, alpha 60 % | B-31 |
@@ -225,7 +226,7 @@ La version 1.0 est acceptée quand ces scénarios passent dans OBS Flatpak. Le b
 8. Deux sources réglées sur deux lecteurs différents vivent côte à côte sans interférer.
 10. Trois instances de mpv jouent : le sélecteur propose trois entrées, chacune libellée par son titre, et la source affiche exactement l'instance choisie.
 11. Sélection automatique décochée, instance mémorisée fermée alors que d'autres lecteurs jouent : message de repli. Relance du même lecteur : toujours le message de repli, jusqu'à un nouveau choix dans le sélecteur.
-12. Titre et sous-titre trop longs : pause, départ ensemble à la vitesse réglée, le plus court attend au début, pause commune, sans saut. Défilement décoché : points de suspension. Écart image-panneau, image ronde avec et sans pochette, temps restant qui décompte au rythme de la position.
+12. Titre et sous-titre trop longs : pause, départ ensemble à la vitesse réglée, le plus court attend au début, pause commune, sans saut. Vitesse de défilement à 0 : points de suspension. Écart image-panneau, image ronde avec et sans pochette, temps restant qui décompte au rythme de la position.
 13. Sans choix mémorisé, mpv affiché en lecture, une vidéo démarre dans Chromium : la source reste sur mpv. mpv fermé : message de repli, pas Chromium. mpv relancé : la source revient dessus.
 14. Les propriétés s'affichent en cinq groupes titrés (B-51). L'épaisseur de la barre change la barre et la hauteur de la source, l'image restant carrée (B-50).
 9. Une piste dont la miniature locale est illisible : pochette en ligne sur Aucune, image par défaut et aucune requête réseau. Sur MusicBrainz, une pochette trouvée s'affiche (Supertramp, Crime Of The Century), une piste sans correspondance garde l'image par défaut, et changer de piste puis revenir ne relance pas de requête. Sur YouTube, une vidéo ouverte dans LibreWolf affiche sa miniature.
@@ -236,5 +237,5 @@ La version 1.0 est acceptée quand ces scénarios passent dans OBS Flatpak. Le b
 
 - **Organisation visuelle** : la disposition est fixée par B-37. Validée dans OBS le 2026-10-14. Les réglages visuels demandés ensuite (écart, image ronde, défilement, temps restant) sont spécifiés en B-19, B-36, B-38 et B-39.
 - **Service de pochettes en ligne** : tranché le 2026-10-14 par une étude (D-09).
-- **Forge de publication** (GitLab ou GitHub) : reportée à la phase de distribution.
+- **Forge de publication** : GitLab, `https://gitlab.com/iglou.eu/obs-dbus-mpris` (choisie le 2026-10-14, dépôt pas encore en ligne).
 - **Validation dans un OBS natif** : reportée. Aucun OBS natif n'est installé sur le poste de développement, le build natif est produit sans y être testé.

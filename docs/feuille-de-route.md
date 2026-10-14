@@ -120,11 +120,10 @@ Besoins couverts : B-05 à B-08, B-19, B-36, B-38, B-39, B-50, B-51.
 ## Phase 7. Distribution
 
 - Manifeste de l'extension Flatpak et build hors ligne (pendant le développement, le `.so` natif suffit).
-- Choix de la forge, intégration continue : tests, build natif, build Flatpak.
+- Mise en ligne du dépôt sur GitLab (`https://gitlab.com/iglou.eu/obs-dbus-mpris`, déjà utilisé par le User-Agent), intégration continue : tests, build natif, build Flatpak.
 - Release : archive du `.so` avec ses traductions, bundle `.flatpak`.
 - Documentation d'installation, override Flatpak (B-45) et police CJK sur l'hôte compris, puisque le runtime n'en fournit aucune (D-04).
 - Versionnement sémantique et journal des changements.
-- Remplacer l'adresse provisoire du User-Agent (`REPOSITORY` dans `crates/mpris-core/src/network.rs`) par celle de la forge.
 - Le build Flatpak hors ligne doit fournir `ring` (qui compile du C) et `webpki-roots`.
 
 **Fini quand** la version 1.0 est publiée et que tous les scénarios d'acceptation passent dans OBS Flatpak à partir des artefacts de la release.
@@ -139,4 +138,3 @@ Une décision remise à plus tard n'est pas perdue. Chacune de ces idées attend
 - Une couleur par élément de texte.
 - Bouton « Rafraîchir » dans les propriétés, si la liste des lecteurs figée à l'ouverture gêne.
 - Publication sur Flathub ou AUR.
-- Description longue de la liste « Pochette en ligne », qui dirait ce qui est envoyé à chaque service.
