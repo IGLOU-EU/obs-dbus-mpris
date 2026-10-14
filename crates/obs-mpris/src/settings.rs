@@ -1,20 +1,20 @@
 //! The source settings on the OBS side: defaults, properties and reading,
 //! all walked from the single schema `mpris_core::settings::FIELDS`, so a
-//! setting is declared once.
+//! setting is declared once, its group included.
 
 use std::ffi::{CStr, c_char, c_int};
 
 use libobs_sys::{
-    OBS_COMBO_FORMAT_STRING, OBS_COMBO_TYPE_LIST, OBS_TEXT_DEFAULT, obs_data_get_bool,
-    obs_data_get_int, obs_data_get_string, obs_data_set_default_bool, obs_data_set_default_int,
-    obs_data_set_default_string, obs_data_t, obs_properties_add_bool,
-    obs_properties_add_color_alpha, obs_properties_add_int, obs_properties_add_list,
-    obs_properties_add_text, obs_properties_create, obs_properties_t, obs_property_int_set_suffix,
-    obs_property_list_add_string, obs_property_t,
+    OBS_COMBO_FORMAT_STRING, OBS_COMBO_TYPE_LIST, OBS_GROUP_NORMAL, OBS_TEXT_DEFAULT,
+    obs_data_get_bool, obs_data_get_int, obs_data_get_string, obs_data_set_default_bool,
+    obs_data_set_default_int, obs_data_set_default_string, obs_data_t, obs_properties_add_bool,
+    obs_properties_add_color_alpha, obs_properties_add_group, obs_properties_add_int,
+    obs_properties_add_list, obs_properties_add_text, obs_properties_create, obs_properties_t,
+    obs_property_int_set_suffix, obs_property_list_add_string, obs_property_t,
 };
 use mpris_core::model::{Player, Rgba, Settings};
 use mpris_core::selection::player_choices;
-use mpris_core::settings::{DefaultValue, FIELDS, Kind, SettingValue};
+use mpris_core::settings::{DefaultValue, FIELDS, Field, Group, Kind, SettingValue};
 
 use crate::c_string;
 use crate::locale::text;
@@ -80,50 +80,100 @@ pub unsafe fn read(data: *mut obs_data_t) -> Settings {
     })
 }
 
-/// The properties of a source, one per schema field, each labelled by the
-/// translation of its key. The player list offers `players` and the
+/// The properties of a source, one per schema field in the titled group of
+/// that field, the groups in their order (B-51), each property labelled by
+/// the translation of its key. The player list offers `players` and the
 /// `remembered` instance, present or not (B-02, B-03).
+///
+/// OBS keeps the values of grouped properties among the settings of the
+/// source itself, so the groups change nothing to how settings are stored
+/// or read.
 pub fn properties(players: &[Player], remembered: Option<&str>) -> *mut obs_properties_t {
     // SAFETY: no precondition, and OBS takes ownership of the result.
     let props = unsafe { obs_properties_create() };
-    for field in FIELDS {
-        let (key, translation) = (c_string(field.key), c_string(&text(field.key)));
-        let (name, label) = (key.as_ptr(), translation.as_ptr());
-        // SAFETY: `props` is the live object created above, the strings are
-        // C strings alive across each call, which copies them, the integer
-        // property is the one just added, and the player list is created of
-        // string format, as `add_players` needs.
-        unsafe {
-            match field.kind {
-                Kind::Bool => {
-                    obs_properties_add_bool(props, name, label);
-                }
-                Kind::Int { min, max, unit } => {
-                    let property =
-                        obs_properties_add_int(props, name, label, c_int_of(min), c_int_of(max), 1);
-                    let suffix = c_string(&format!(" {}", unit.symbol()));
-                    obs_property_int_set_suffix(property, suffix.as_ptr());
-                }
-                Kind::Color => {
-                    obs_properties_add_color_alpha(props, name, label);
-                }
-                Kind::Text => {
-                    obs_properties_add_text(props, name, label, OBS_TEXT_DEFAULT);
-                }
-                Kind::Player => {
-                    let list = obs_properties_add_list(
-                        props,
-                        name,
-                        label,
-                        OBS_COMBO_TYPE_LIST,
-                        OBS_COMBO_FORMAT_STRING,
-                    );
-                    add_players(list, players, remembered);
-                }
-            }
+    for group in Group::ALL {
+        // SAFETY: `props` is the live object created above.
+        let content = unsafe { add_group(props, group) };
+        for field in FIELDS.iter().filter(|field| field.group == group) {
+            // SAFETY: `content` is the live content of the group just added.
+            unsafe { add_property(content, field, players, remembered) };
         }
     }
     props
+}
+
+/// Adds the titled `group` to `props`, and returns the properties it holds,
+/// empty for now.
+///
+/// # Safety
+///
+/// `props` is a live properties object.
+unsafe fn add_group(props: *mut obs_properties_t, group: Group) -> *mut obs_properties_t {
+    let (key, translation) = (c_string(group.key()), c_string(&text(group.key())));
+    // SAFETY: `props` is live per the contract of this function, the strings
+    // are C strings alive across the call, which copies them, and OBS takes
+    // ownership of the new content. OBS refuses a group whose name is taken,
+    // which the schema rules out by keeping group names apart from every
+    // setting key.
+    unsafe {
+        let content = obs_properties_create();
+        obs_properties_add_group(
+            props,
+            key.as_ptr(),
+            translation.as_ptr(),
+            OBS_GROUP_NORMAL,
+            content,
+        );
+        content
+    }
+}
+
+/// Adds the property that declares `field` to `props`.
+///
+/// # Safety
+///
+/// `props` is a live properties object.
+unsafe fn add_property(
+    props: *mut obs_properties_t,
+    field: &Field,
+    players: &[Player],
+    remembered: Option<&str>,
+) {
+    let (key, translation) = (c_string(field.key), c_string(&text(field.key)));
+    let (name, label) = (key.as_ptr(), translation.as_ptr());
+    // SAFETY: `props` is live per the contract of this function, the strings
+    // are C strings alive across each call, which copies them, the integer
+    // property is the one just added, and the player list is created of
+    // string format, as `add_players` needs.
+    unsafe {
+        match field.kind {
+            Kind::Bool => {
+                obs_properties_add_bool(props, name, label);
+            }
+            Kind::Int { min, max, unit } => {
+                let property =
+                    obs_properties_add_int(props, name, label, c_int_of(min), c_int_of(max), 1);
+                let suffix = c_string(&format!(" {}", unit.symbol()));
+                obs_property_int_set_suffix(property, suffix.as_ptr());
+            }
+            Kind::Color => {
+                obs_properties_add_color_alpha(props, name, label);
+            }
+            Kind::Text => {
+                obs_properties_add_text(props, name, label, OBS_TEXT_DEFAULT);
+            }
+            Kind::Player => {
+                let list = obs_properties_add_list(
+                    props,
+                    name,
+                    label,
+                    OBS_COMBO_TYPE_LIST,
+                    OBS_COMBO_FORMAT_STRING,
+                );
+                add_players(list, players, remembered);
+            }
+        }
+    }
 }
 
 /// Fills the player list. The first entry remembers no player, so that a
