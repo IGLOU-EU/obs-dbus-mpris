@@ -119,12 +119,18 @@ Besoins couverts : B-05 à B-08, B-19, B-36, B-38, B-39, B-50, B-51, B-52.
 
 ## Phase 7. Distribution
 
-- Manifeste de l'extension Flatpak et build hors ligne (pendant le développement, le `.so` natif suffit).
-- Mise en ligne du dépôt sur GitLab (`https://gitlab.com/iglou.eu/obs-dbus-mpris`, déjà utilisé par le User-Agent), intégration continue : tests, build natif, build Flatpak.
-- Release : archive du `.so` avec ses traductions, bundle `.flatpak`.
-- Documentation d'installation, override Flatpak (B-45) et police CJK sur l'hôte compris, puisque le runtime n'en fournit aucune (D-04).
-- Versionnement sémantique et journal des changements.
-- Le build Flatpak hors ligne doit fournir `ring` (qui compile du C) et `webpki-roots`.
+Fait le 2026-10-14, sans rien publier :
+
+- Manifeste de l'extension Flatpak `com.obsproject.Studio.Plugin.DbusMpris`, build hors ligne à partir de `cargo-sources.json` (`ring` et `webpki-roots` compris), bundle vérifié dans une installation Flatpak séparée (`~/Sourcery/Etudes/obs-dbus-mpris-distribution/`).
+- Archive native pour le dossier de plugins utilisateur, construite sur Debian 12 (glibc 2.36 au plus).
+- Intégration continue GitLab : tests, build natif, build Flatpak, release sur les tags `v*` avec dépôt des fichiers dans le registre de paquets. Jobs de test et natif rejoués localement sous podman.
+- Version 1.0.0, journal des changements, logo, licence GPL-3.0-or-later, README en français et en anglais, dossier `docs/captures/` pour les captures d'écran.
+
+Reste à faire :
+
+- Captures d'écran dans `docs/captures/`, puis dans les README.
+- Premier push sur GitLab (`git@gitlab.com:iglou.eu/obs-dbus-mpris.git`) et premier pipeline, qui seul peut valider le job Flatpak sur un runner partagé et la création de la release.
+- Dater l'entrée 1.0.0 du `CHANGELOG.md` et poser le tag `v1.0.0`.
 
 **Fini quand** la version 1.0 est publiée et que tous les scénarios d'acceptation passent dans OBS Flatpak à partir des artefacts de la release.
 
