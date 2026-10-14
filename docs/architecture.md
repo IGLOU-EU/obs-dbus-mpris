@@ -9,7 +9,8 @@ Chaque donnée a un seul propriétaire et un seul endroit où elle s'écrit. Tou
 | Donnée | Propriétaire unique | Écrite par | Lue par |
 |--------|---------------------|------------|---------|
 | État des lecteurs (métadonnées, statut, position de référence, miniature décodée) | le `Store` du cœur MPRIS | le fil du cœur, et lui seul | les sources, via un instantané immuable |
-| Pochettes trouvées en ligne (cache par piste, échecs compris) | le `Store` du cœur MPRIS | le fil du cœur, à réception des résultats du fil réseau | les sources, via l'instantané |
+| Pochettes trouvées en ligne (cache de la session par service et par piste, échecs compris) | le `Store` du cœur MPRIS, qui garde chaque pochette telle que téléchargée, et décodée seulement dans les lecteurs dont la piste affichée est la sienne | le fil du cœur, à réception des résultats du fil réseau | les sources, via l'instantané |
+| Vœu de pochette en ligne d'une source (service choisi, lecteur affiché) | la source, qui le tient dans son `ArtWish` | le fil graphique : `video_tick` le recalcule à chaque image et ne l'envoie au fil du cœur que quand il change, la fin de la source le retire | le fil du cœur, qui garde le dernier vœu de chaque source |
 | Réglages d'une source | les `obs_data` d'OBS, persistés avec la collection de scènes | OBS, depuis les propriétés | la source, convertis en une structure `Settings` immuable à chaque `update` |
 | Schéma des réglages (clés, groupes, types, valeurs par défaut) | une table unique dans le code | | la déclaration des propriétés et de leurs groupes, les valeurs par défaut, la conversion en `Settings` |
 | Lecteur effectif | personne | jamais stocké, recalculé à chaque image par une fonction pure, d'après l'instantané, les réglages et le lecteur suivi | |
@@ -64,16 +65,37 @@ video_render, par source (fil graphique d'OBS)
 
 Le `Store` indexe les lecteurs par nom connu (`org.mpris.MediaPlayer2.mpv.instance-…`) et rattache les signaux par nom unique D-Bus (`:1.42`), puisque c'est de ce nom qu'ils arrivent. Un même processus peut posséder plusieurs noms MPRIS, un signal touche alors chacun d'eux.
 
-Pochette en ligne (B-18), quand une source a l'option cochée et que la miniature locale manque :
+Pochette en ligne (B-18), quand une source a choisi un service :
 
 ```
-source ── demande ──► fil du cœur : déjà en cache ou en cours ? sinon ──► fil réseau
-                                                                            │
-fil du cœur ◄── résultat : pochette décodée, ou échec ───────────────────────┘
-  └─ met à jour le Store, publie un nouvel instantané
+video_tick, par source
+  └─ vœu : (service choisi, lecteur affiché), ou aucun     fonction pure online::wish
+     envoyé par un canal, seulement quand il change
+           ▼
+fil du cœur, à chaque vœu et à chaque changement publié
+  ├─ Store::start_lookups(vœux)
+  │    pour chaque vœu : miniature locale absente ou illisible ?
+  │    requête de la piste pour ce service (nettoyage, identifiant de vidéo) ?
+  │    jamais demandée dans la session ? alors marquée demandée
+  └─ envoie chaque requête nouvelle au fil réseau, démarré à la première
+           ▼
+fil réseau (mpris-online), une requête à la fois
+  └─ recherches puis image, rythmées par hôte          online::look_up, pur, sur un fetch
+     renvoie au fil du cœur les octets de la pochette, ou rien
+           ▼
+fil du cœur
+  ├─ Store : la requête trouvée (octets gardés) ou manquée, pour la session
+  ├─ décode sur le pool blocking les pochettes que les pistes affichées réclament
+  │    (première fois, ou retour à une piste déjà trouvée), deux secondes au plus
+  └─ Store : l'image décodée rejoint les lecteurs dont la piste est la sienne,
+     puis nouvel instantané
+           ▼
+content(), par source : la pochette du lecteur d'abord, sinon celle que le service choisi a trouvée
 ```
 
-Le fil du cœur reste le seul écrivain du `Store` et le seul à dédoublonner les demandes, quel que soit le nombre de sources qui demandent la même pochette.
+Le fil du cœur reste le seul écrivain du `Store` et le seul à dédoublonner les demandes, quel que soit le nombre de sources qui demandent la même pochette. Il est aussi le seul à savoir quand une recherche est utile, puisqu'il voit la miniature locale de chaque lecteur et le cache de la session. Une source ne sait que ce qu'elle montre : elle envoie donc son vœu, le service qu'elle a choisi pour le lecteur qu'elle affiche, et seulement quand il change. C'est le plus petit lien qui laisse la décision au fil du cœur sans qu'il interroge les sources. Deux sources qui suivent la même piste avec des services différents donnent deux recherches, une par service, et chacune voit la pochette de son service.
+
+Le cache garde chaque pochette trouvée telle que téléchargée (50 à 100 Ko à 500 pixels), pas décodée (1 Mo), comme l'étude le recommande : sur une longue session, seuls les lecteurs dont la piste affichée a une pochette trouvée en tiennent l'image décodée. Revenir à une piste déjà trouvée la décode à nouveau, sans requête réseau.
 
 ## Découpage
 
@@ -82,7 +104,7 @@ Un workspace Cargo de quatre crates :
 ```
 crates/
   libobs-sys/   bindings FFI bruts vers libobs, générés par bindgen et commités
-  mpris-core/   modèle, règles pures, adaptateur D-Bus. Aucune dépendance à OBS.
+  mpris-core/   modèle, règles pures, adaptateur D-Bus, fil réseau. Aucune dépendance à OBS.
   render/       disposition, dessin de la source en une image RGBA, fil de rendu. Aucune dépendance à OBS.
   obs-mpris/    cdylib chargée par OBS : déclaration de la source, propriétés, image montrée en texture
 ```
@@ -92,7 +114,7 @@ La séparation entre `mpris-core` et `obs-mpris` a une raison concrète : les te
 ## Fils d'exécution
 
 - **Fil du cœur** : un seul pour tout le plugin, démarré par `obs_module_load` et arrêté par `obs_module_unload`. Une boucle d'événements asynchrone unique qui reçoit les signaux D-Bus, le minuteur de relecture et les messages des autres fils. L'exécuteur de zbus tourne dans ce fil (`internal_executor(false)`), ce qui permet à l'arrêt d'interrompre même un appel en attente sur un lecteur figé. Les miniatures se lisent et se décodent sur le pool de `blocking`, attendues dans cette même boucle, si bien que l'arrêt abandonne aussi une lecture bloquée sur un montage réseau figé. Ce pool, par lequel zbus se connecte aussi, et le fil global `async-io` sont partagés par tout le processus et survivent à l'arrêt du cœur, sans aucun état de lecteur. Un bus injoignable n'empêche pas le chargement du module, il est journalisé et la source affiche le message de repli.
-- **Fil réseau** : démarré à la première demande de pochette en ligne, jamais sinon (B-48). Il ne touche pas au `Store`, il renvoie ses résultats au fil du cœur.
+- **Fil réseau** (`mpris-online`) : un seul pour tout le plugin, démarré par le fil du cœur à la première recherche de pochette en ligne, jamais sinon (B-48). Il ne touche pas au `Store` : il reçoit les requêtes du fil du cœur par un canal, les traite une à une, et lui renvoie par un autre canal les octets de chaque pochette trouvée, ou rien, que la boucle du cœur applique comme un événement. Toutes les requêtes du plugin passant par lui, l'espacement d'au moins 1,1 s entre deux requêtes au même hôte vaut pour tout le plugin, ce qui tient la limite d'une requête par seconde de MusicBrainz. Une panique dans une recherche est rattrapée et compte comme un échec (B-42). L'arrêt du cœur ne l'attend pas : le canal des requêtes se ferme et un drapeau d'arrêt interrompt les attentes, si bien qu'il s'arrête à sa prochaine vérification, au pire à la fin de sa requête en cours, bornée à 5 s. Il ne garde aucun état de lecteur.
 - **Fil de rendu** (`mpris-render`) : un seul pour tout le plugin, démarré par `obs_module_load` et arrêté par `obs_module_unload`, qui attend la fin de l'image ou du chargement de polices en cours. Il charge d'abord les polices du système, ce qui prend jusqu'à quelques secondes à froid, puis dessine les images que les sources demandent. Pour chaque source, il ne garde qu'une demande en attente, qu'une plus récente remplace, et qu'une image finie, que le fil graphique vient prendre. Un dessin qui panique est journalisé sans arrêter le fil, un échec du chargement des polices laisse le texte non dessiné, et un fil qui ne démarre pas laisse les sources vides sans empêcher le chargement du module.
 - **Fil graphique d'OBS** (`video_tick`, `video_render`, et `update`, qu'OBS 32 diffère au tick graphique pour une source vidéo) : lit l'instantané courant sans attendre le fil du cœur, demande une image au fil de rendu sans l'attendre, et charge en texture la dernière image finie et ses bandes nouvelles. À chaque image, il ne fait que calculer le décalage de chaque bande et la dessiner : le défilement ne redessine rien sur le processeur. Il tient aussi le lecteur suivi de chaque source (B-08), qu'il range avec l'état d'affichage de la source, derrière le même `Mutex` : `video_tick` le remplace par celui que rend la sélection, et `update`, qui tourne sur ce même fil, l'efface quand le choix de lecteur change.
 - **Fil d'interface d'OBS** (`create`, `get_defaults`, `get_properties`) : lit l'instantané pour construire la liste des lecteurs.
@@ -133,9 +155,15 @@ Critères de choix : repli correct sur les caractères japonais (cas réel de mp
 
 **D-07 Frontière FFI étanche.** Chaque rappel `extern "C"` passe par `catch_unwind`. Les erreurs sont journalisées via `blog`, jamais propagées à OBS.
 
-**D-08 Client HTTP `ureq`**, bloquant, léger, TLS par rustls, utilisé seulement dans le fil réseau avec un délai d'expiration court. Pas de runtime asynchrone ajouté pour quelques requêtes.
+**D-08 Client HTTP `ureq`**, bloquant, léger, TLS par rustls, utilisé seulement dans le fil réseau avec un délai d'expiration court. Pas de runtime asynchrone ajouté pour quelques requêtes. Précisé à l'implémentation (phase 5) :
 
-**D-09 Services de pochettes.** Tranché le 2026-10-14 par une étude sur 13 pistes réelles et 8 témoins (`~/Sourcery/Etudes/obs-dbus-mpris-pochettes-en-ligne/rapport.md`, qui donne la séquence de requêtes, le nettoyage, le score minimal et ses tests). MusicBrainz et le Cover Art Archive : 7 pochettes justes, 0 fausse une fois retirée la variante « X by Y » du nettoyage, qui causait la seule erreur. User-Agent `obs-dbus-mpris/<version> ( <URL du dépôt> )`, une requête par seconde au plus, une nouvelle tentative sur un refus de débit, image `front-500`. Wikipédia, avec les images non libres de l'article de l'album. YouTube, miniature déduite de l'identifiant de la vidéo. Écartés : ListenBrainz (mêmes données, accès stable sous jeton), Wikidata (2 images sur 21), TheAudioDB (abonnement payant pour publier), Discogs (images non libres, société commerciale), et les services commerciaux comme Deezer, plus complets (9 justes) mais hors du cadre voulu.
+- `ureq` 3 avec ses fonctions par défaut : rustls sur `ring`, et les certificats racines de `webpki-roots` compilés dans le plugin. Le plugin ne dépend donc ni du magasin de certificats de l'hôte ni de celui du runtime : vérifié dans le bac à sable d'OBS Flatpak le 2026-10-14 (MusicBrainz, Cover Art Archive avec sa redirection vers archive.org, `i.ytimg.com`).
+- Délais : 3 s pour la connexion, 5 s pour une requête entière, redirections et corps compris. Une erreur réseau ou un délai dépassé est un échec sans nouvelle tentative. Les statuts 429, 500, 502, 503 et 504 ont droit à une seule nouvelle tentative, après 2 s ou après le `Retry-After` demandé s'il ne dépasse pas 10 s.
+- Corps lus jusqu'à la même limite que les miniatures locales (32 Mio), seule une réponse 200 non vide compte.
+- User-Agent `obs-dbus-mpris/<version du crate> ( <adresse du dépôt> )`, l'adresse venant de la constante `REPOSITORY` de `crates/mpris-core/src/network.rs`, provisoire (`https://forge.invalid/obs-dbus-mpris`) jusqu'au choix de la forge.
+- glibc : la bibliothèque n'exige toujours pas plus que GLIBC_2.39, `ring` n'ajoute aucun symbole plus récent que celui du runtime 25.08 (2.42).
+
+**D-09 Services de pochettes.** Tranché le 2026-10-14 par une étude sur 13 pistes réelles et 8 témoins (`~/Sourcery/Etudes/obs-dbus-mpris-pochettes-en-ligne/rapport.md`, qui donne la séquence de requêtes, le nettoyage, le score minimal et ses tests). MusicBrainz et le Cover Art Archive : 7 pochettes justes, 0 fausse une fois retirée la variante « X by Y » du nettoyage, qui causait la seule erreur. User-Agent `obs-dbus-mpris/<version> ( <URL du dépôt> )`, une requête par seconde au plus, une nouvelle tentative sur un refus de débit, image `front-500`. Wikipédia, avec les images non libres de l'article de l'album. YouTube, miniature déduite de l'identifiant de la vidéo. Précisé à l'implémentation (phase 5) : la variante « X by Y » est retirée du nettoyage, sans autre variante qu'`Artiste - Titre` pour une piste sans artiste, et un test garde la BO de *Cowboy Bebop* sans pochette. Pour une recherche d'album, Wikipédia passe l'article d'un album avant celui d'un single du même nom, comme MusicBrainz, ce qui donne la pochette de l'album *Back in Black* là où l'étude trouvait le rond de label du single. La miniature YouTube (`hqdefault`, 480 × 360) est recadrée sur le carré central de son image 16:9, sans les bandes noires. Écartés : ListenBrainz (mêmes données, accès stable sous jeton), Wikidata (2 images sur 21), TheAudioDB (abonnement payant pour publier), Discogs (images non libres, société commerciale), et les services commerciaux comme Deezer, plus complets (9 justes) mais hors du cadre voulu.
 
 | Service | Particularités |
 |---------|----------------|
@@ -181,10 +209,10 @@ Le build Flatpak se fait hors ligne : les dépendances Cargo sont fournies au ma
 
 ## Tests
 
-- **Unitaires, test d'abord, dans `mpris-core`** : règle de sélection (lecteur mémorisé présent mais arrêté, lecteur qui se met à jouer sans jamais remplacer celui affiché, lecteur suivi disparu puis relancé, aucun lecteur en pause ou arrêté retenu au démarrage, indépendance à l'ordre des lecteurs), extraction de la clé, extrapolation de la position, lecture des métadonnées (manquantes, mal typées), décodage des miniatures (`data:`, `file://`, format non pris en charge, données corrompues), format des temps, temps restant (nul en fin de piste et au-delà, compté sur les secondes affichées), conversion des réglages et valeurs par défaut, groupe de chaque réglage et ordre du schéma, pochette en ligne (construction de la recherche, lecture des réponses du service à partir de réponses enregistrées, cache et dédoublonnage, échecs compris). Aucun test n'appelle le vrai service.
+- **Unitaires, test d'abord, dans `mpris-core`** : règle de sélection (lecteur mémorisé présent mais arrêté, lecteur qui se met à jouer sans jamais remplacer celui affiché, lecteur suivi disparu puis relancé, aucun lecteur en pause ou arrêté retenu au démarrage, indépendance à l'ordre des lecteurs), extraction de la clé, extrapolation de la position, lecture des métadonnées (manquantes, mal typées), décodage des miniatures (`data:`, `file://`, format non pris en charge, données corrompues), format des temps, temps restant (nul en fin de piste et au-delà, compté sur les secondes affichées), conversion des réglages et valeurs par défaut, groupe de chaque réglage et ordre du schéma, pochette en ligne (nettoyage et score minimal portés du contrat de l'étude, construction des recherches, lecture des réponses des services à partir de réponses réelles enregistrées par l'étude dans `crates/mpris-core/tests/fixtures/`, réduites aux champs lus, réponses mal formées, identifiant YouTube, séquence des requêtes sur un `fetch` simulé, cache et dédoublonnage, échecs compris, rythme et nouvelles tentatives). Aucun test n'appelle le vrai service par défaut. Un test ignoré, `cargo test -p mpris-core --test online_live -- --ignored --nocapture`, rejoue les pistes de l'étude contre les vrais services, et l'exemple `cargo run --example look_up -- <service> <titre> <artiste> [album]` fait une seule recherche, y compris dans le bac à sable d'OBS Flatpak.
 - **Unitaires dans `render`**, sans OBS : disposition (largeur totale, hauteur tirée des polices, de l'épaisseur de la barre et des éléments cochés, marges proportionnelles, flip, bornes du schéma, aucun rectangle hors du cadre), dessin (couleurs et alpha en lumière linéaire, coins arrondis, barre au pixel près, pictogramme pause, chaque texte dans sa rangée), miniature (recadrage central, mise à l'échelle, cache), troncature par points de suspension, clé de redessin (deux clés égales donnent la même image, une progression de moins d'un pixel garde la clé), fil de rendu (seule la dernière demande est dessinée, l'arrêt n'attend pas que les sources disparaissent), défilement (pause d'abord, vitesse constante, texte court qui attend le long, pause commune, boucle sans dérive sur des durées énormes, vitesse et pause nulles), bandes (période, fenêtre à la période identique au début, écart vide, couleur, repli sur les points de suspension, bandes gardées d'une seconde à l'autre). Les tests de texte chargent un seul fichier de police connu, DejaVu Sans ou Noto Sans, ou celui que nomme `RENDER_TEST_FONT`, et se sautent sans lui.
 - **Contrôle visuel du rendu** : l'exemple `cargo run --release -p render --example render_png -- <dossier>` dessine en PNG chaque variante de la maquette de B-37, titre japonais et titre trop long compris, ainsi que l'écart, l'image ronde et le temps restant, et mesure le temps de dessin. Pour une variante dont des textes défilent, il écrit aussi l'image seule, chaque bande, et la source composée à quelques instants du cycle, comme OBS la dessine. Le même exécutable se lance dans le bac à sable d'OBS Flatpak (`flatpak run --command=<chemin absolu de l'exemple> com.obsproject.Studio <dossier>`), pour voir le rendu avec les polices que voit OBS.
-- **Intégration D-Bus** : un faux lecteur MPRIS servi par zbus sur un bus privé (`dbus-run-session -- cargo test`). Scénarios : apparition, disparition, changement de métadonnées, `Seeked`, relance avec un nouveau suffixe d'instance.
+- **Intégration D-Bus** : un faux lecteur MPRIS servi par zbus sur un bus privé (`dbus-run-session -- cargo test`). Scénarios : apparition, disparition, changement de métadonnées, `Seeked`, relance avec un nouveau suffixe d'instance. Pour la pochette en ligne, le cœur démarre avec une recherche simulée (`Core::start_with`), sans réseau : une seule recherche par piste et par service, rien sans vœu (B-48), retour à une piste sans nouvelle requête (scénario 9), vœu retiré, pochette illisible, arrêt rapide pendant une recherche bloquée. Un binaire de test à part compte les fils : pas de fil réseau avant la première recherche, et plus après l'arrêt du cœur. L'exemple `watch --online <service>` montre la recherche sur les lecteurs réels.
 - **Colle OBS** : scénarios d'acceptation manuels ([besoins.md](besoins.md), section 7) dans OBS Flatpak.
 
 ## Risques
