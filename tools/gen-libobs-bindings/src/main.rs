@@ -31,6 +31,7 @@ const FUNCTIONS: &[&str] = &[
     "obs_properties_create",
     "obs_properties_add_bool",
     "obs_properties_add_int",
+    "obs_property_int_set_suffix",
     "obs_properties_add_color_alpha",
     "obs_properties_add_text",
     "obs_properties_add_list",
@@ -48,6 +49,11 @@ const FUNCTIONS: &[&str] = &[
     "gs_draw_sprite",
     "gs_framebuffer_srgb_enabled",
     "gs_enable_framebuffer_srgb",
+    // Drawing a window of a scrolling text's strip at its line.
+    "gs_draw_sprite_subregion",
+    "gs_matrix_push",
+    "gs_matrix_pop",
+    "gs_matrix_translate3f",
 ];
 
 /// Constants no function signature pulls in: macros and anonymous enums.

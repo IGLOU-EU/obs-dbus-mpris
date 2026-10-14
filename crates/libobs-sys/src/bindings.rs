@@ -115,8 +115,27 @@ unsafe extern "C" {
     pub fn gs_effect_set_texture_srgb(param: *mut gs_eparam_t, val: *mut gs_texture_t);
 }
 unsafe extern "C" {
+    pub fn gs_matrix_push();
+}
+unsafe extern "C" {
+    pub fn gs_matrix_pop();
+}
+unsafe extern "C" {
+    pub fn gs_matrix_translate3f(x: f32, y: f32, z: f32);
+}
+unsafe extern "C" {
     #[doc = " Draws a 2D sprite\n\n   If width or height is 0, the width or height of the texture will be used.\n The flip value specifies whether the texture should be flipped on the U or V\n axis with GS_FLIP_U and GS_FLIP_V."]
     pub fn gs_draw_sprite(tex: *mut gs_texture_t, flip: u32, width: u32, height: u32);
+}
+unsafe extern "C" {
+    pub fn gs_draw_sprite_subregion(
+        tex: *mut gs_texture_t,
+        flip: u32,
+        x: u32,
+        y: u32,
+        cx: u32,
+        cy: u32,
+    );
 }
 unsafe extern "C" {
     pub fn gs_blend_state_push();
@@ -270,6 +289,12 @@ unsafe extern "C" {
         name: *const ::std::os::raw::c_char,
         description: *const ::std::os::raw::c_char,
     ) -> *mut obs_property_t;
+}
+unsafe extern "C" {
+    pub fn obs_property_int_set_suffix(
+        p: *mut obs_property_t,
+        suffix: *const ::std::os::raw::c_char,
+    );
 }
 unsafe extern "C" {
     pub fn obs_property_list_add_string(
