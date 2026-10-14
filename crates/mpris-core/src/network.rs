@@ -147,6 +147,14 @@ fn serve(
                 log::error!("MPRIS: an online lookup panicked, the cover counts as not found");
                 None
             });
+        match &image {
+            Some(image) => log::debug!(
+                "MPRIS: {request:?} found a {}x{} cover",
+                image.width,
+                image.height
+            ),
+            None => log::debug!("MPRIS: {request:?} found no cover"),
+        }
         if results
             .send_blocking((request, image.map(Arc::new)))
             .is_err()
