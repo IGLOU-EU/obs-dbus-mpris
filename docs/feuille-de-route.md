@@ -17,7 +17,7 @@ Les validations se font dans OBS Flatpak. Le build natif est produit à chaque p
 | 4 | Source complète | fait, validé dans OBS |
 | 5 | Pochette en ligne, en option | fait, validé dans OBS |
 | 6 | Réglages visuels | fait, validé dans OBS |
-| 7 | Distribution, version 1.0 | en cours |
+| 7 | Distribution, version 1.0 | fait, v1.0.0 taguée le 2026-10-15, essai à partir des fichiers de la release en attente |
 
 ## Phase 0. Cadrage
 
@@ -126,11 +126,9 @@ Fait le 2026-10-14, sans rien publier :
 - Intégration continue GitLab : tests, build natif, build Flatpak, release sur les tags `v*` avec dépôt des fichiers dans le registre de paquets. Jobs de test et natif rejoués localement sous podman.
 - Version 1.0.0, journal des changements, logo, licence GPL-3.0-or-later, README en français et en anglais, dossier `docs/captures/` pour les captures d'écran.
 
-Reste à faire :
+Puis le 2026-10-15 : capture d'écran dans `docs/captures/` et dans les README, premier push sur GitLab avec des pipelines de test et de build verts, intégration continue limitée aux changements de code ou d'empaquetage (un tag construit toujours), entrée 1.0.0 du `CHANGELOG.md` datée, tag `v1.0.0`.
 
-- Captures d'écran dans `docs/captures/`, puis dans les README.
-- Premier push sur GitLab (`git@gitlab.com:iglou.eu/obs-dbus-mpris.git`) et premier pipeline, qui seul peut valider le job Flatpak sur un runner partagé et la création de la release.
-- Dater l'entrée 1.0.0 du `CHANGELOG.md` et poser le tag `v1.0.0`.
+Reste à faire : vérifier la release créée par le pipeline du tag, puis jouer les scénarios d'acceptation à partir de ses fichiers.
 
 **Fini quand** la version 1.0 est publiée et que tous les scénarios d'acceptation passent dans OBS Flatpak à partir des artefacts de la release.
 
