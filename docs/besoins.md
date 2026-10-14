@@ -228,7 +228,7 @@ La version 1.0 est acceptée quand ces scénarios passent dans OBS Flatpak. Le b
 12. Titre et sous-titre trop longs : pause, départ ensemble à la vitesse réglée, le plus court attend au début, pause commune, sans saut. Défilement décoché : points de suspension. Écart image-panneau, image ronde avec et sans pochette, temps restant qui décompte au rythme de la position.
 13. Sans choix mémorisé, mpv affiché en lecture, une vidéo démarre dans Chromium : la source reste sur mpv. mpv fermé : message de repli, pas Chromium. mpv relancé : la source revient dessus.
 14. Les propriétés s'affichent en cinq groupes titrés (B-51). L'épaisseur de la barre change la barre et la hauteur de la source, l'image restant carrée (B-50).
-9. Une piste dont la miniature locale est illisible : option B-18 décochée, emplacement vide et aucune requête réseau. Option cochée, une pochette trouvée en ligne s'affiche, et changer de piste puis revenir ne relance pas de requête.
+9. Une piste dont la miniature locale est illisible : pochette en ligne sur Aucune, image par défaut et aucune requête réseau. Sur MusicBrainz, une pochette trouvée s'affiche (Supertramp, Crime Of The Century), une piste sans correspondance garde l'image par défaut, et changer de piste puis revenir ne relance pas de requête. Sur YouTube, une vidéo ouverte dans LibreWolf affiche sa miniature.
 
 ## 8. Questions ouvertes
 
