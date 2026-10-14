@@ -213,13 +213,15 @@ La version 1.0 est acceptée quand ces scénarios passent dans OBS Flatpak. Le b
 2. Mise en pause de mpv : indicateur de pause, temps figé. Reprise : le temps repart sans saut.
 3. Avance rapide dans mpv : la position affichée suit en moins d'une seconde.
 4. Fermeture de mpv : message de repli. Relance de mpv (nouveau suffixe d'instance) : la source revient sur mpv sans intervention.
-5. Lecteur mémorisé absent, deux autres lecteurs présents dont un en lecture : la source affiche celui qui joue.
+5. À l'ajout de la source, lecteur mémorisé absent, deux autres lecteurs présents dont un en lecture : la source affiche celui qui joue.
 6. Chaque case masque son élément. Le flip déplace la miniature. Des couleurs à alpha nul rendent les zones concernées transparentes. La largeur totale, miniature comprise, et les tailles de police sont respectées. La hauteur suit les tailles de police et les éléments cochés (B-33).
 7. Un titre très long, ou en japonais, s'affiche lisiblement et ne déborde pas du cadre.
 8. Deux sources réglées sur deux lecteurs différents vivent côte à côte sans interférer.
 10. Trois instances de mpv jouent : le sélecteur propose trois entrées, chacune libellée par son titre, et la source affiche exactement l'instance choisie.
 11. Sélection automatique décochée, instance mémorisée fermée alors que d'autres lecteurs jouent : message de repli. Relance du même lecteur : toujours le message de repli, jusqu'à un nouveau choix dans le sélecteur.
-12. Titre et sous-titre trop longs : pause, départ ensemble à la vitesse réglée, le plus court attend au début, pause commune, sans saut. Vitesse 0 : points de suspension. Écart image-panneau, image ronde avec et sans pochette, temps restant qui décompte au rythme de la position.
+12. Titre et sous-titre trop longs : pause, départ ensemble à la vitesse réglée, le plus court attend au début, pause commune, sans saut. Défilement décoché : points de suspension. Écart image-panneau, image ronde avec et sans pochette, temps restant qui décompte au rythme de la position.
+13. Sans choix mémorisé, mpv affiché en lecture, une vidéo démarre dans Chromium : la source reste sur mpv. mpv fermé : message de repli, pas Chromium. mpv relancé : la source revient dessus.
+14. Les propriétés s'affichent en cinq groupes titrés (B-51). L'épaisseur de la barre change la barre et la hauteur de la source, l'image restant carrée (B-50).
 9. Une piste dont la miniature locale est illisible : option B-18 décochée, emplacement vide et aucune requête réseau. Option cochée, une pochette trouvée en ligne s'affiche, et changer de piste puis revenir ne relance pas de requête.
 
 ## 8. Questions ouvertes
