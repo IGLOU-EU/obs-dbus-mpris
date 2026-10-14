@@ -31,7 +31,7 @@ Lancer sa source habituelle pendant le délai la fait donc afficher, à la place
 
 La case « Sélection automatique », cochée par défaut, commande tout ce qui précède. Décochée, seule l'instance mémorisée exacte s'affiche, quel que soit son état : sans elle, même après une relance du même lecteur, la source affiche le message de repli jusqu'à un nouveau choix. Cocher ou décocher la case compte comme un choix manuel : pas de délai de grâce.
 
-**Annuler.** OBS applique chaque modification des propriétés en direct, puis rétablit l'ancien réglage si l'on annule. Un réglage du lecteur qui revient à sa valeur d'avant la modification rétablit l'état de sélection d'avant (lecteur suivi, délai de grâce en cours ou non) : annuler n'est pas un choix manuel.
+**Annuler.** OBS applique chaque modification des propriétés en direct, puis rétablit l'ancien réglage si l'on annule. Un réglage du lecteur qui revient à sa valeur d'avant la modification rétablit l'état de sélection d'avant (lecteur suivi, délai de grâce en cours ou non) : annuler n'est pas un choix manuel. Cette mémoire ne vaut que jusqu'à la prochaine ouverture des propriétés : revenir plus tard, à la main, à l'ancien lecteur est un choix manuel. Limite acceptée : « Par défaut » recharge les propriétés, si bien que « Par défaut » puis « Annuler » compte comme un choix manuel du lecteur d'origine.
 
 **B-06 Retour automatique.** Le repli ne modifie jamais le choix mémorisé dans les réglages : seul un choix manuel le change. Pendant le délai de grâce, quand l'instance mémorisée réapparaît ou qu'un lecteur de même clé apparaît, la source y revient d'elle-même (étapes 1 et 2). Après le délai, ou après un choix manuel, seule la relance du lecteur suivi le ramène.
 
