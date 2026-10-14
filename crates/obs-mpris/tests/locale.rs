@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::PathBuf;
 
-use mpris_core::settings::{DefaultValue, FIELDS, Group};
+use mpris_core::settings::{DefaultValue, FIELDS, Group, Kind};
 
 const LOCALES: [&str; 2] = ["en-US", "fr-FR"];
 
@@ -16,8 +16,9 @@ const LOCALES: [&str; 2] = ["en-US", "fr-FR"];
 const GLUE_KEYS: [&str; 3] = ["SourceName", "PlayerNone", "PlayerUnavailable"];
 
 /// Every key the plugin looks up: each field labels its property with its
-/// own key, a translated default adds its locale key, each group titles
-/// itself with its key, and the glue adds its own.
+/// own key, a translated default adds its locale key, each choice of a
+/// list labels itself with its own, each group titles itself with its key,
+/// and the glue adds its own.
 fn expected_keys() -> Vec<String> {
     let mut keys: Vec<String> = FIELDS
         .iter()
@@ -26,7 +27,11 @@ fn expected_keys() -> Vec<String> {
                 DefaultValue::Translated { locale_key, .. } => Some(locale_key),
                 _ => None,
             };
-            std::iter::once(field.key).chain(translated)
+            let choices = match field.kind {
+                Kind::Choice(choices) => choices.iter().map(|choice| choice.locale_key).collect(),
+                _ => Vec::new(),
+            };
+            std::iter::once(field.key).chain(translated).chain(choices)
         })
         .chain(Group::ALL.map(Group::key))
         .chain(GLUE_KEYS)

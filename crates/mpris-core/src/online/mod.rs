@@ -13,7 +13,7 @@ use std::collections::HashMap;
 use percent_encoding::{AsciiSet, NON_ALPHANUMERIC, utf8_percent_encode};
 
 use crate::art::ArtError;
-use crate::model::{Art, ArtImage, Service, Track};
+use crate::model::{Art, ArtImage, PlaybackStatus, Player, Service, Settings, Track};
 use cleanup::Query;
 
 /// One lookup: a service and what it is asked, which is also the key of
@@ -109,6 +109,26 @@ pub fn decode(request: &Request, bytes: &[u8]) -> Result<ArtImage, ArtError> {
     })
 }
 
+/// What a source asks the core for: a cover from `service` for the player
+/// it shows, when that player has none of its own (B-18).
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Wish {
+    pub bus_name: String,
+    pub service: Service,
+}
+
+/// The wish of a source that shows `player` with `settings`: none while it
+/// shows no track, or no thumbnail, or picked no service, so that nothing
+/// is sent that nobody would see (B-48).
+pub fn wish(player: Option<&Player>, settings: &Settings) -> Option<Wish> {
+    let player = player.filter(|player| player.status != PlaybackStatus::Stopped)?;
+    let service = settings.art_online.filter(|_| settings.show_art)?;
+    Some(Wish {
+        bus_name: player.bus_name.clone(),
+        service,
+    })
+}
+
 /// Whether a player's own cover leaves room for an online one: none, or
 /// one that could not be read (B-18). A pending one may still come.
 pub fn needs_lookup(art: &Art) -> bool {
@@ -170,8 +190,10 @@ fn form(pairs: &[(&str, &str)]) -> String {
 mod tests {
     use std::io::Cursor;
     use std::sync::Arc;
+    use std::time::{Duration, Instant};
 
     use super::*;
+    use crate::model::{PlayerKey, PositionAnchor};
 
     fn track(title: &str, artists: &[&str], album: &str) -> Track {
         Track {
@@ -470,7 +492,63 @@ mod tests {
         }
     }
 
-    // needs_lookup
+    // wish and needs_lookup
+
+    fn player(status: PlaybackStatus) -> Player {
+        Player {
+            unique_name: ":1.1".into(),
+            bus_name: "org.mpris.MediaPlayer2.firefox".into(),
+            key: PlayerKey("firefox".into()),
+            identity: "Firefox".into(),
+            status,
+            rate: 1.0,
+            track: school(),
+            anchor: PositionAnchor {
+                position: Duration::ZERO,
+                at: Instant::now(),
+            },
+            art: Art::None,
+        }
+    }
+
+    fn online(service: Option<Service>) -> Settings {
+        Settings {
+            art_online: service,
+            ..Settings::default()
+        }
+    }
+
+    #[test]
+    fn a_source_showing_a_track_wishes_its_service() {
+        for status in [PlaybackStatus::Playing, PlaybackStatus::Paused] {
+            assert_eq!(
+                wish(Some(&player(status)), &online(Some(Service::Wikipedia))),
+                Some(Wish {
+                    bus_name: "org.mpris.MediaPlayer2.firefox".into(),
+                    service: Service::Wikipedia,
+                })
+            );
+        }
+    }
+
+    /// No request may leave while no source chose a service (B-48), nor
+    /// for a cover nobody would see.
+    #[test]
+    fn no_wish_without_service_track_or_thumbnail() {
+        let playing = player(PlaybackStatus::Playing);
+        assert_eq!(wish(Some(&playing), &online(None)), None);
+        assert_eq!(wish(None, &online(Some(Service::MusicBrainz))), None);
+        let stopped = player(PlaybackStatus::Stopped);
+        assert_eq!(
+            wish(Some(&stopped), &online(Some(Service::MusicBrainz))),
+            None
+        );
+        let hidden = Settings {
+            show_art: false,
+            ..online(Some(Service::MusicBrainz))
+        };
+        assert_eq!(wish(Some(&playing), &hidden), None);
+    }
 
     #[test]
     fn only_a_missing_or_unreadable_cover_is_looked_up() {

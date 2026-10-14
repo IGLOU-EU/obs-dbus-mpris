@@ -1197,7 +1197,7 @@ mod tests {
         let unseen = with(|s| {
             s.player = Some("org.mpris.MediaPlayer2.vlc".into());
             s.auto_select = false;
-            s.fetch_art_online = true;
+            s.art_online = Some(mpris_core::model::Service::YouTube);
             s.fallback_text = "Other".into();
         });
         assert_eq!(key(&unseen, &playing(10, 0.5)), base);

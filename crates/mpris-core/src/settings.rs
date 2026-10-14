@@ -7,7 +7,7 @@
 
 use std::time::Duration;
 
-use crate::model::{Rgba, Settings};
+use crate::model::{Rgba, Service, Settings};
 
 /// What a setting holds, and so which OBS property declares it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -25,6 +25,16 @@ pub enum Kind {
     /// Player instance chosen from those present on the bus, stored as
     /// its full bus name (B-03).
     Player,
+    /// One of a fixed list, stored as the value of the choice.
+    Choice(&'static [Choice]),
+}
+
+/// One entry of a list setting.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Choice {
+    /// What the setting stores, the same in every language.
+    pub value: &'static str,
+    pub locale_key: &'static str,
 }
 
 /// What an integer setting counts, shown beside its value so that the
@@ -132,7 +142,7 @@ pub const MAX_SCROLL_SPEED: u32 = 1000;
 pub const MAX_SCROLL_PAUSE: u32 = 60_000;
 
 // Flags, colors and integers come from the constructor of their kind, so
-// their default fits their kind by construction. `PLAYER` and
+// their default fits their kind by construction. `PLAYER`, `ART_ONLINE` and
 // `FALLBACK_TEXT` are alone of their kind, and a constructor would serve a
 // single call.
 const PLAYER: Field = Field {
@@ -143,7 +153,25 @@ const PLAYER: Field = Field {
 };
 const AUTO_SELECT: Field = flag(Group::Player, "auto_select", true);
 const SHOW_ART: Field = flag(Group::Elements, "show_art", true);
-const FETCH_ART_ONLINE: Field = flag(Group::Elements, "fetch_art_online", false);
+/// No lookup by default, so that nothing leaves the machine until a
+/// source picks a service (B-48).
+const ART_ONLINE: Field = Field {
+    key: "art_online",
+    group: Group::Elements,
+    kind: Kind::Choice(&ART_ONLINE_CHOICES),
+    default: DefaultValue::Text(NO_SERVICE),
+};
+const NO_SERVICE: &str = "none";
+/// The services in the order of B-18.
+const ART_ONLINE_CHOICES: [Choice; 4] = [
+    Choice {
+        value: NO_SERVICE,
+        locale_key: "ArtOnlineNone",
+    },
+    service(Service::MusicBrainz, "ArtOnlineMusicBrainz"),
+    service(Service::Wikipedia, "ArtOnlineWikipedia"),
+    service(Service::YouTube, "ArtOnlineYouTube"),
+];
 const SHOW_TITLE: Field = flag(Group::Elements, "show_title", true);
 const SHOW_ARTIST: Field = flag(Group::Elements, "show_artist", true);
 const SHOW_ALBUM: Field = flag(Group::Elements, "show_album", true);
@@ -208,7 +236,7 @@ pub const FIELDS: &[Field] = &[
     PLAYER,
     AUTO_SELECT,
     SHOW_ART,
-    FETCH_ART_ONLINE,
+    ART_ONLINE,
     SHOW_TITLE,
     SHOW_ARTIST,
     SHOW_ALBUM,
@@ -270,6 +298,23 @@ const fn int(
     }
 }
 
+/// The value a service is stored as, written once for the list and for
+/// reading it back.
+const fn service_value(service: Service) -> &'static str {
+    match service {
+        Service::MusicBrainz => "musicbrainz",
+        Service::Wikipedia => "wikipedia",
+        Service::YouTube => "youtube",
+    }
+}
+
+const fn service(service: Service, locale_key: &'static str) -> Choice {
+    Choice {
+        value: service_value(service),
+        locale_key,
+    }
+}
+
 /// At least one pixel: a zero size would make the source or a text vanish
 /// with no visible reason.
 const fn size(group: Group, key: &'static str, default: u32, max: u32) -> Field {
@@ -288,7 +333,7 @@ impl Settings {
             player: (!player.is_empty()).then(|| player.to_owned()),
             auto_select: read_bool(&get, &AUTO_SELECT),
             show_art: read_bool(&get, &SHOW_ART),
-            fetch_art_online: read_bool(&get, &FETCH_ART_ONLINE),
+            art_online: read_service(&get, &ART_ONLINE),
             show_title: read_bool(&get, &SHOW_TITLE),
             show_artist: read_bool(&get, &SHOW_ARTIST),
             show_album: read_bool(&get, &SHOW_ALBUM),
@@ -339,8 +384,8 @@ impl Rgba {
 // The `unreachable!` arms below hold because `from_lookup` gives each reader
 // only fields of its kind, and every default matches its field: the
 // constructors ensure it for flags, colors and integers, and the literals
-// `PLAYER` and `FALLBACK_TEXT` carry a text default, which `read_text`
-// accepts. A slip panics in `defaults_match_the_table`, which runs every
+// `PLAYER`, `ART_ONLINE` and `FALLBACK_TEXT` carry a text default, which
+// `read_text` accepts. A slip panics in `defaults_match_the_table`, which runs every
 // reader on its default.
 
 fn read_bool(get: &impl Fn(&str) -> Option<SettingValue>, field: &Field) -> bool {
@@ -369,6 +414,15 @@ fn read_int(get: &impl Fn(&str) -> Option<SettingValue>, field: &Field) -> u32 {
     value.clamp(min, max)
 }
 
+/// `None` for no lookup, and for a value no service has, so that only an
+/// explicit choice ever sends a request (B-48).
+fn read_service(get: &impl Fn(&str) -> Option<SettingValue>, field: &Field) -> Option<Service> {
+    let value = read_text(get, field);
+    Service::ALL
+        .into_iter()
+        .find(|service| service_value(*service) == value)
+}
+
 fn read_text(get: &impl Fn(&str) -> Option<SettingValue>, field: &Field) -> String {
     match (get(field.key), field.default) {
         (Some(SettingValue::Text(v)), _) => v,
@@ -390,7 +444,7 @@ mod tests {
         "player",
         "auto_select",
         "show_art",
-        "fetch_art_online",
+        "art_online",
         "show_title",
         "show_artist",
         "show_album",
@@ -428,7 +482,10 @@ mod tests {
             (Kind::Bool, SettingValue::Bool(_))
                 | (Kind::Int { .. }, SettingValue::Int(_))
                 | (Kind::Color, SettingValue::Color(_))
-                | (Kind::Text | Kind::Player, SettingValue::Text(_))
+                | (
+                    Kind::Text | Kind::Player | Kind::Choice(_),
+                    SettingValue::Text(_)
+                )
         )
     }
 
@@ -455,7 +512,7 @@ mod tests {
             player: None,
             auto_select: true,
             show_art: true,
-            fetch_art_online: false,
+            art_online: None,
             show_title: true,
             show_artist: true,
             show_album: true,
@@ -524,7 +581,7 @@ mod tests {
         for f in FIELDS {
             let expected = match f.key {
                 "player" | "auto_select" => Group::Player,
-                "fetch_art_online" => Group::Elements,
+                "art_online" => Group::Elements,
                 k if k.starts_with("show_") => Group::Elements,
                 "width" | "art_right" | "art_round" | "art_gap" | "corner_radius"
                 | "bar_height" => Group::Layout,
@@ -565,8 +622,8 @@ mod tests {
         for f in FIELDS {
             let expected = match f.key {
                 "player" => "player",
-                "auto_select" | "fetch_art_online" | "art_right" | "art_round"
-                | "scroll_enabled" => "bool",
+                "auto_select" | "art_right" | "art_round" | "scroll_enabled" => "bool",
+                "art_online" => "choice",
                 k if k.starts_with("show_") => "bool",
                 k if k.starts_with("color_") => "color",
                 "width" | "font_size_title" | "font_size_subtitle" | "font_size_time"
@@ -582,6 +639,7 @@ mod tests {
                 Kind::Color => "color",
                 Kind::Text => "text",
                 Kind::Player => "player",
+                Kind::Choice(_) => "choice",
             };
             assert_eq!(actual, expected, "{}", f.key);
         }
@@ -614,6 +672,71 @@ mod tests {
             field("player").map(|f| f.default),
             Some(DefaultValue::Text(""))
         );
+    }
+
+    fn choices(key: &str) -> &'static [Choice] {
+        match field(key).map(|f| f.kind) {
+            Some(Kind::Choice(choices)) => choices,
+            other => panic!("{key} is not a list: {other:?}"),
+        }
+    }
+
+    fn with_art_online(value: &str) -> Option<Service> {
+        Settings::from_lookup(|k| (k == "art_online").then(|| SettingValue::Text(value.to_owned())))
+            .art_online
+    }
+
+    /// The order of B-18, none first since it is the default.
+    #[test]
+    fn online_cover_offers_none_then_each_service() {
+        let values: Vec<&str> = choices("art_online").iter().map(|c| c.value).collect();
+        assert_eq!(values, ["none", "musicbrainz", "wikipedia", "youtube"]);
+        let keys: Vec<&str> = choices("art_online").iter().map(|c| c.locale_key).collect();
+        assert_eq!(
+            keys,
+            [
+                "ArtOnlineNone",
+                "ArtOnlineMusicBrainz",
+                "ArtOnlineWikipedia",
+                "ArtOnlineYouTube"
+            ]
+        );
+    }
+
+    #[test]
+    fn online_cover_defaults_to_none_among_its_choices() {
+        assert_eq!(
+            field("art_online").map(|f| f.default),
+            Some(DefaultValue::Text("none"))
+        );
+        assert_eq!(Settings::default().art_online, None);
+    }
+
+    #[test]
+    fn each_choice_reads_as_its_service() {
+        assert_eq!(with_art_online("none"), None);
+        assert_eq!(with_art_online("musicbrainz"), Some(Service::MusicBrainz));
+        assert_eq!(with_art_online("wikipedia"), Some(Service::Wikipedia));
+        assert_eq!(with_art_online("youtube"), Some(Service::YouTube));
+        let read: Vec<Option<Service>> = choices("art_online")
+            .iter()
+            .map(|c| with_art_online(c.value))
+            .collect();
+        let mut every: Vec<Option<Service>> = vec![None];
+        every.extend(Service::ALL.map(Some));
+        assert_eq!(read, every);
+    }
+
+    /// A value from another version of the plugin, or typed by hand, must
+    /// never send a request.
+    #[test]
+    fn an_unknown_choice_reads_as_none() {
+        for value in ["", "MusicBrainz", "deezer", " youtube", "true"] {
+            assert_eq!(with_art_online(value), None, "{value:?}");
+        }
+        let flag =
+            Settings::from_lookup(|k| (k == "art_online").then_some(SettingValue::Bool(true)));
+        assert_eq!(flag.art_online, None);
     }
 
     #[test]
@@ -782,7 +905,7 @@ mod tests {
                 "player" => Text("org.mpris.MediaPlayer2.mpv.instance-mWyyJbmA".to_owned()),
                 "auto_select" => Bool(false),
                 "show_art" => Bool(false),
-                "fetch_art_online" => Bool(true),
+                "art_online" => Text("wikipedia".to_owned()),
                 "show_title" => Bool(false),
                 "show_artist" => Bool(false),
                 "show_album" => Bool(false),
@@ -814,7 +937,7 @@ mod tests {
             player: Some("org.mpris.MediaPlayer2.mpv.instance-mWyyJbmA".to_owned()),
             auto_select: false,
             show_art: false,
-            fetch_art_online: true,
+            art_online: Some(Service::Wikipedia),
             show_title: false,
             show_artist: false,
             show_album: false,

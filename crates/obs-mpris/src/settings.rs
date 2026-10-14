@@ -14,7 +14,7 @@ use libobs_sys::{
 };
 use mpris_core::model::{Player, Rgba, Settings};
 use mpris_core::selection::player_choices;
-use mpris_core::settings::{DefaultValue, FIELDS, Field, Group, Kind, SettingValue};
+use mpris_core::settings::{Choice, DefaultValue, FIELDS, Field, Group, Kind, SettingValue};
 
 use crate::c_string;
 use crate::locale::text;
@@ -71,7 +71,7 @@ pub unsafe fn read(data: *mut obs_data_t) -> Settings {
                 Kind::Color => {
                     SettingValue::Color(Rgba::from_obs(obs_data_get_int(data, name) as u32))
                 }
-                Kind::Text | Kind::Player => {
+                Kind::Text | Kind::Player | Kind::Choice(_) => {
                     SettingValue::Text(owned(obs_data_get_string(data, name)))
                 }
             }
@@ -143,8 +143,8 @@ unsafe fn add_property(
     let (name, label) = (key.as_ptr(), translation.as_ptr());
     // SAFETY: `props` is live per the contract of this function, the strings
     // are C strings alive across each call, which copies them, the integer
-    // property is the one just added, and the player list is created of
-    // string format, as `add_players` needs.
+    // property is the one just added, and both lists are created of string
+    // format, as `add_players` and `add_choices` need.
     unsafe {
         match field.kind {
             Kind::Bool => {
@@ -172,7 +172,32 @@ unsafe fn add_property(
                 );
                 add_players(list, players, remembered);
             }
+            Kind::Choice(choices) => {
+                let list = obs_properties_add_list(
+                    props,
+                    name,
+                    label,
+                    OBS_COMBO_TYPE_LIST,
+                    OBS_COMBO_FORMAT_STRING,
+                );
+                add_choices(list, choices);
+            }
         }
+    }
+}
+
+/// Fills a list with the choices of the schema, each labelled by the
+/// translation of its locale key.
+///
+/// # Safety
+///
+/// `list` is a live list property of string format.
+unsafe fn add_choices(list: *mut obs_property_t, choices: &[Choice]) {
+    for choice in choices {
+        let (label, value) = (c_string(&text(choice.locale_key)), c_string(choice.value));
+        // SAFETY: `list` is live per the contract of this function, and the
+        // strings are C strings alive across the call, which copies them.
+        unsafe { obs_property_list_add_string(list, label.as_ptr(), value.as_ptr()) };
     }
 }
 

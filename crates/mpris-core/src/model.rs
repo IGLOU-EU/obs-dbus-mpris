@@ -145,7 +145,8 @@ pub struct Settings {
     /// never switches to another.
     pub auto_select: bool,
     pub show_art: bool,
-    pub fetch_art_online: bool,
+    /// Where to look a missing cover up, `None` for nowhere (B-18).
+    pub art_online: Option<Service>,
     pub show_title: bool,
     pub show_artist: bool,
     pub show_album: bool,
