@@ -446,6 +446,7 @@ fn player(status: PlaybackStatus, now: Instant) -> Player {
             album: Some("Nom Album".into()),
             length: Some(Duration::from_secs(116)),
             art_url: Some("data:".into()),
+            url: None,
         },
         anchor: PositionAnchor {
             position: Duration::from_secs(81),

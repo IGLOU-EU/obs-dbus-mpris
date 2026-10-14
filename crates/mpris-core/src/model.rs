@@ -39,6 +39,9 @@ pub struct Track {
     pub length: Option<Duration>,
     /// `mpris:artUrl`, untouched.
     pub art_url: Option<String>,
+    /// `xesam:url`, the page a browser plays, which tells a YouTube video
+    /// whose thumbnail can stand in for a cover (B-18).
+    pub url: Option<String>,
 }
 
 /// Last position read from the player, and when. MPRIS does not signal

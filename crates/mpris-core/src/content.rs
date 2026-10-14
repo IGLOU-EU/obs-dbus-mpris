@@ -182,6 +182,7 @@ mod tests {
                 album: Some("Album".into()),
                 length: Some(secs(180)),
                 art_url: Some("file:///cover.jpg".into()),
+                url: None,
             },
             anchor: PositionAnchor {
                 position: secs(45),

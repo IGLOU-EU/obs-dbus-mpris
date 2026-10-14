@@ -28,6 +28,7 @@ pub fn parse_track(metadata: &HashMap<String, OwnedValue>) -> Track {
         album: get("xesam:album").and_then(read_text),
         length: get("mpris:length").and_then(read_length),
         art_url: get("mpris:artUrl").and_then(read_text),
+        url: get("xesam:url").and_then(read_text),
     }
 }
 
@@ -126,6 +127,7 @@ mod tests {
             album: Some(ALBUM.into()),
             length: Some(Duration::from_micros(219_533_000)),
             art_url: Some(ART_URL.into()),
+            url: None,
         }
     }
 
@@ -250,6 +252,25 @@ mod tests {
         for url in [long.as_str(), file] {
             let track = parse(vec![("mpris:artUrl", Value::from(url.to_owned()))]);
             assert_eq!(track.art_url.as_deref(), Some(url));
+        }
+    }
+
+    #[test]
+    fn page_address_of_a_browser_is_read() {
+        let page = "https://www.youtube.com/watch?v=jNQXAC9IVRw";
+        let track = parse(vec![("xesam:url", Value::from(page))]);
+        assert_eq!(track.url.as_deref(), Some(page));
+    }
+
+    #[test]
+    fn page_address_of_the_wrong_type_or_blank_is_absent() {
+        for value in [
+            Value::from(3i32),
+            Value::from(vec!["https://x"]),
+            Value::from(" "),
+        ] {
+            let label = format!("{value:?}");
+            assert_eq!(parse(vec![("xesam:url", value)]).url, None, "{label}");
         }
     }
 
