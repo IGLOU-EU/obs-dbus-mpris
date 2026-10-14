@@ -215,7 +215,7 @@ flatpak override --user --talk-name='org.mpris.MediaPlayer2.*' com.obsproject.St
 
 **B-46 Langues.** Interface en français (fr-FR) et en anglais (en-US).
 
-**B-47 Licence.** GPL-2.0-or-later.
+**B-47 Licence.** GPL-3.0-or-later, texte complet dans `LICENSE`.
 
 **B-48 Aucun accès réseau par défaut.** Le plugin n'émet aucune requête réseau tant qu'aucune source n'a choisi un service de pochette en ligne (B-18). Le fil réseau ne démarre qu'à la première recherche.
 

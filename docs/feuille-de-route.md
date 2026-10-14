@@ -15,9 +15,9 @@ Les validations se font dans OBS Flatpak. Le build natif est produit à chaque p
 | 2 | Cœur MPRIS, hors OBS | fait, lecteur local (Strawberry ou Elisa) à vérifier à l'occasion |
 | 3 | Rendu et disposition | fait, validé dans OBS |
 | 4 | Source complète | fait, validé dans OBS |
-| 5 | Pochette en ligne, en option | fait, essai dans OBS en attente |
+| 5 | Pochette en ligne, en option | fait, validé dans OBS |
 | 6 | Réglages visuels | fait, validé dans OBS |
-| 7 | Distribution, version 1.0 | à faire |
+| 7 | Distribution, version 1.0 | en cours |
 
 ## Phase 0. Cadrage
 

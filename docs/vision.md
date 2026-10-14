@@ -43,7 +43,7 @@ Une personne qui diffuse ou enregistre avec OBS sous Linux (Flatpak ou natif) et
 - **Data oriented, single point of truth** : chaque donnée a un seul propriétaire, tout ce qui se dérive est dérivé au lieu d'être stocké. Détail dans [architecture.md](architecture.md).
 - **TDD** : la logique (sélection du lecteur, temps, décodage, mise en page) est écrite test d'abord, hors d'OBS.
 - **KISS** : chaque ajout répond à un besoin constaté. Ce qui relève du « au cas où » attend dans la liste « plus tard » de la [feuille de route](feuille-de-route.md).
-- **Licence GPL-2.0-or-later**, comme OBS, dont le plugin lie la bibliothèque `libobs`.
+- **Licence GPL-3.0-or-later.** OBS est sous GPL-2.0-or-later, une licence qui permet de lier `libobs` depuis un plugin sous GPL-3.0-or-later.
 
 ## Noms
 
