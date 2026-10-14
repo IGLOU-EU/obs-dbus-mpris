@@ -7,5 +7,6 @@ pub mod color;
 pub mod draw;
 pub mod frame;
 pub mod layout;
+pub mod scroll;
 pub mod text;
 pub mod worker;
