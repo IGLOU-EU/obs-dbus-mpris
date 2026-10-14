@@ -16,7 +16,7 @@ Les validations se font dans OBS Flatpak. Le build natif est produit à chaque p
 | 3 | Rendu et disposition | fait, validé dans OBS |
 | 4 | Source complète | fait, validé dans OBS |
 | 5 | Pochette en ligne, en option | à faire |
-| 6 | Réglages visuels | en cours, avancée avant la phase 5 |
+| 6 | Réglages visuels | fait, essai dans OBS en attente |
 | 7 | Distribution, version 1.0 | à faire |
 
 ## Phase 0. Cadrage
@@ -107,6 +107,10 @@ Demandés le 2026-10-14 après l'essai de la phase 3 dans OBS, et traités avant
 - Temps restant à la place de la durée (B-19).
 
 **Fini quand** ces réglages se comportent dans OBS comme décrit, et que le défilement reste fluide sans ralentir le rendu.
+
+Rendus vérifiés hors d'OBS le 2026-10-14, identiques sur l'hôte et dans le bac à sable Flatpak. Coût mesuré : 5,2 ms pour le premier dessin d'une piste avec deux bandes, puis 0,65 ms par seconde, les bandes étant réutilisées. Par image, le rendu ne fait que décaler les bandes.
+
+Besoins couverts : B-19, B-36, B-38, B-39.
 
 ## Phase 7. Distribution
 
