@@ -1,4 +1,5 @@
-//! The single settings schema: keys, kinds and defaults (besoins.md, section 5).
+//! The single settings schema: keys, groups, kinds and defaults (besoins.md,
+//! section 5).
 //!
 //! The OBS glue walks [`FIELDS`] to declare properties and defaults, and
 //! [`Settings::from_lookup`] reads the same table, so each default is
@@ -61,10 +62,46 @@ pub enum DefaultValue {
     },
 }
 
+/// Titled group of the properties a setting shows in (B-51).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Group {
+    Player,
+    /// The `show_*` switches.
+    Elements,
+    Layout,
+    Text,
+    Colors,
+}
+
+impl Group {
+    /// Every group, in the order the properties show them (B-51).
+    pub const ALL: [Group; 5] = [
+        Group::Player,
+        Group::Elements,
+        Group::Layout,
+        Group::Text,
+        Group::Colors,
+    ];
+
+    /// Name of the group property, and the locale key of its title. Apart
+    /// from every setting key, since OBS refuses a property whose name is
+    /// taken.
+    pub const fn key(self) -> &'static str {
+        match self {
+            Group::Player => "group_player",
+            Group::Elements => "group_elements",
+            Group::Layout => "group_layout",
+            Group::Text => "group_text",
+            Group::Colors => "group_colors",
+        }
+    }
+}
+
 /// One setting of a source.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Field {
     pub key: &'static str,
+    pub group: Group,
     pub kind: Kind,
     pub default: DefaultValue,
 }
@@ -100,55 +137,73 @@ pub const MAX_SCROLL_PAUSE: u32 = 60_000;
 // single call.
 const PLAYER: Field = Field {
     key: "player",
+    group: Group::Player,
     kind: Kind::Player,
     default: DefaultValue::Text(""),
 };
-const AUTO_SELECT: Field = flag("auto_select", true);
-const SHOW_ART: Field = flag("show_art", true);
-const FETCH_ART_ONLINE: Field = flag("fetch_art_online", false);
-const SHOW_TITLE: Field = flag("show_title", true);
-const SHOW_ARTIST: Field = flag("show_artist", true);
-const SHOW_ALBUM: Field = flag("show_album", true);
-const SHOW_PROGRESS: Field = flag("show_progress", true);
-const SHOW_POSITION: Field = flag("show_position", true);
-const SHOW_DURATION: Field = flag("show_duration", true);
-const SHOW_REMAINING: Field = flag("show_remaining", false);
-const ART_RIGHT: Field = flag("art_right", false);
-const ART_ROUND: Field = flag("art_round", false);
+const AUTO_SELECT: Field = flag(Group::Player, "auto_select", true);
+const SHOW_ART: Field = flag(Group::Elements, "show_art", true);
+const FETCH_ART_ONLINE: Field = flag(Group::Elements, "fetch_art_online", false);
+const SHOW_TITLE: Field = flag(Group::Elements, "show_title", true);
+const SHOW_ARTIST: Field = flag(Group::Elements, "show_artist", true);
+const SHOW_ALBUM: Field = flag(Group::Elements, "show_album", true);
+const SHOW_PROGRESS: Field = flag(Group::Elements, "show_progress", true);
+const SHOW_POSITION: Field = flag(Group::Elements, "show_position", true);
+const SHOW_DURATION: Field = flag(Group::Elements, "show_duration", true);
+const SHOW_REMAINING: Field = flag(Group::Elements, "show_remaining", false);
+const WIDTH: Field = size(Group::Layout, "width", 600, MAX_SIDE);
+const ART_RIGHT: Field = flag(Group::Layout, "art_right", false);
+const ART_ROUND: Field = flag(Group::Layout, "art_round", false);
 /// Down to 0, which glues the thumbnail to the panel (B-39).
-const ART_GAP: Field = int("art_gap", 0, 0, MAX_ART_GAP, Unit::Pixel);
-const COLOR_BACKGROUND: Field = color("color_background", Rgba::new(0x00, 0x00, 0x00, 153));
-const COLOR_TEXT: Field = color("color_text", Rgba::new(0xFF, 0xFF, 0xFF, 255));
-const COLOR_BAR_FILL: Field = color("color_bar_fill", Rgba::new(0xFF, 0xFF, 0xFF, 255));
-const COLOR_BAR_TRACK: Field = color("color_bar_track", Rgba::new(0xFF, 0xFF, 0xFF, 64));
-const WIDTH: Field = size("width", 600, MAX_SIDE);
-const FONT_SIZE_TITLE: Field = size("font_size_title", 32, MAX_FONT_SIZE);
-const FONT_SIZE_SUBTITLE: Field = size("font_size_subtitle", 24, MAX_FONT_SIZE);
-const FONT_SIZE_TIME: Field = size("font_size_time", 20, MAX_FONT_SIZE);
+const ART_GAP: Field = int(Group::Layout, "art_gap", 0, 0, MAX_ART_GAP, Unit::Pixel);
 /// Down to 0, which gives square corners (B-38).
-const CORNER_RADIUS: Field = int("corner_radius", 12, 0, MAX_CORNER_RADIUS, Unit::Pixel);
-const BAR_HEIGHT: Field = int("bar_height", 6, 1, MAX_BAR_HEIGHT, Unit::Pixel);
+const CORNER_RADIUS: Field = int(
+    Group::Layout,
+    "corner_radius",
+    12,
+    0,
+    MAX_CORNER_RADIUS,
+    Unit::Pixel,
+);
+const BAR_HEIGHT: Field = size(Group::Layout, "bar_height", 6, MAX_BAR_HEIGHT);
+const FONT_SIZE_TITLE: Field = size(Group::Text, "font_size_title", 32, MAX_FONT_SIZE);
+const FONT_SIZE_SUBTITLE: Field = size(Group::Text, "font_size_subtitle", 24, MAX_FONT_SIZE);
+const FONT_SIZE_TIME: Field = size(Group::Text, "font_size_time", 20, MAX_FONT_SIZE);
 /// Off, a long text ends with an ellipsis instead (B-36).
-const SCROLL_ENABLED: Field = flag("scroll_enabled", true);
+const SCROLL_ENABLED: Field = flag(Group::Text, "scroll_enabled", true);
 /// From 1, so that the switch above is the one way to stop the scrolling.
 const SCROLL_SPEED: Field = int(
+    Group::Text,
     "scroll_speed",
     40,
     1,
     MAX_SCROLL_SPEED,
     Unit::PixelPerSecond,
 );
-const SCROLL_PAUSE: Field = int("scroll_pause", 2000, 0, MAX_SCROLL_PAUSE, Unit::Millisecond);
+const SCROLL_PAUSE: Field = int(
+    Group::Text,
+    "scroll_pause",
+    2000,
+    0,
+    MAX_SCROLL_PAUSE,
+    Unit::Millisecond,
+);
 const FALLBACK_TEXT: Field = Field {
     key: "fallback_text",
+    group: Group::Text,
     kind: Kind::Text,
     default: DefaultValue::Translated {
         locale_key: "FallbackText",
         english: "Nothing playing",
     },
 };
+const COLOR_BACKGROUND: Field = color("color_background", Rgba::new(0x00, 0x00, 0x00, 153));
+const COLOR_TEXT: Field = color("color_text", Rgba::new(0xFF, 0xFF, 0xFF, 255));
+const COLOR_BAR_FILL: Field = color("color_bar_fill", Rgba::new(0xFF, 0xFF, 0xFF, 255));
+const COLOR_BAR_TRACK: Field = color("color_bar_track", Rgba::new(0xFF, 0xFF, 0xFF, 64));
 
-/// Every setting, in the order of besoins.md section 5.
+/// Every setting, in the order of the table of besoins.md section 5, which
+/// is that of their groups (B-51).
 pub const FIELDS: &[Field] = &[
     PLAYER,
     AUTO_SELECT,
@@ -161,44 +216,55 @@ pub const FIELDS: &[Field] = &[
     SHOW_POSITION,
     SHOW_DURATION,
     SHOW_REMAINING,
+    WIDTH,
     ART_RIGHT,
     ART_ROUND,
     ART_GAP,
-    COLOR_BACKGROUND,
-    COLOR_TEXT,
-    COLOR_BAR_FILL,
-    COLOR_BAR_TRACK,
-    WIDTH,
+    CORNER_RADIUS,
+    BAR_HEIGHT,
     FONT_SIZE_TITLE,
     FONT_SIZE_SUBTITLE,
     FONT_SIZE_TIME,
-    CORNER_RADIUS,
-    BAR_HEIGHT,
     SCROLL_ENABLED,
     SCROLL_SPEED,
     SCROLL_PAUSE,
     FALLBACK_TEXT,
+    COLOR_BACKGROUND,
+    COLOR_TEXT,
+    COLOR_BAR_FILL,
+    COLOR_BAR_TRACK,
 ];
 
-const fn flag(key: &'static str, default: bool) -> Field {
+const fn flag(group: Group, key: &'static str, default: bool) -> Field {
     Field {
         key,
+        group,
         kind: Kind::Bool,
         default: DefaultValue::Bool(default),
     }
 }
 
+/// Colors have a group of their own.
 const fn color(key: &'static str, default: Rgba) -> Field {
     Field {
         key,
+        group: Group::Colors,
         kind: Kind::Color,
         default: DefaultValue::Color(default),
     }
 }
 
-const fn int(key: &'static str, default: u32, min: u32, max: u32, unit: Unit) -> Field {
+const fn int(
+    group: Group,
+    key: &'static str,
+    default: u32,
+    min: u32,
+    max: u32,
+    unit: Unit,
+) -> Field {
     Field {
         key,
+        group,
         kind: Kind::Int { min, max, unit },
         default: DefaultValue::Int(default),
     }
@@ -206,8 +272,8 @@ const fn int(key: &'static str, default: u32, min: u32, max: u32, unit: Unit) ->
 
 /// At least one pixel: a zero size would make the source or a text vanish
 /// with no visible reason.
-const fn size(key: &'static str, default: u32, max: u32) -> Field {
-    int(key, default, 1, max, Unit::Pixel)
+const fn size(group: Group, key: &'static str, default: u32, max: u32) -> Field {
+    int(group, key, default, 1, max, Unit::Pixel)
 }
 
 impl Settings {
@@ -319,6 +385,7 @@ mod tests {
 
     use super::*;
 
+    /// In the order of the table of besoins.md, section 5.
     const EXPECTED_KEYS: [&str; 28] = [
         "player",
         "auto_select",
@@ -331,23 +398,23 @@ mod tests {
         "show_position",
         "show_duration",
         "show_remaining",
+        "width",
         "art_right",
         "art_round",
         "art_gap",
-        "color_background",
-        "color_text",
-        "color_bar_fill",
-        "color_bar_track",
-        "width",
+        "corner_radius",
+        "bar_height",
         "font_size_title",
         "font_size_subtitle",
         "font_size_time",
-        "corner_radius",
-        "bar_height",
         "scroll_enabled",
         "scroll_speed",
         "scroll_pause",
         "fallback_text",
+        "color_background",
+        "color_text",
+        "color_bar_fill",
+        "color_bar_track",
     ];
 
     fn field(key: &str) -> Option<&'static Field> {
@@ -426,6 +493,71 @@ mod tests {
     fn keys_are_unique() {
         let unique: HashSet<&str> = FIELDS.iter().map(|f| f.key).collect();
         assert_eq!(unique.len(), FIELDS.len());
+    }
+
+    #[test]
+    fn groups_come_in_the_documented_order() {
+        assert_eq!(
+            Group::ALL,
+            [
+                Group::Player,
+                Group::Elements,
+                Group::Layout,
+                Group::Text,
+                Group::Colors
+            ]
+        );
+        assert_eq!(
+            Group::ALL.map(Group::key),
+            [
+                "group_player",
+                "group_elements",
+                "group_layout",
+                "group_text",
+                "group_colors"
+            ]
+        );
+    }
+
+    #[test]
+    fn each_setting_sits_in_its_documented_group() {
+        for f in FIELDS {
+            let expected = match f.key {
+                "player" | "auto_select" => Group::Player,
+                "fetch_art_online" => Group::Elements,
+                k if k.starts_with("show_") => Group::Elements,
+                "width" | "art_right" | "art_round" | "art_gap" | "corner_radius"
+                | "bar_height" => Group::Layout,
+                "fallback_text" => Group::Text,
+                k if k.starts_with("font_size_") || k.starts_with("scroll_") => Group::Text,
+                k if k.starts_with("color_") => Group::Colors,
+                other => panic!("unexpected key {other}"),
+            };
+            assert_eq!(f.group, expected, "{}", f.key);
+        }
+    }
+
+    #[test]
+    fn settings_follow_the_order_of_their_groups() {
+        let rank = |group: Group| Group::ALL.iter().position(|g| *g == group);
+        let ranks: Vec<_> = FIELDS.iter().map(|f| rank(f.group)).collect();
+        assert!(ranks.is_sorted(), "{ranks:?}");
+        for group in Group::ALL {
+            assert!(
+                FIELDS.iter().any(|f| f.group == group),
+                "{group:?} is empty"
+            );
+        }
+    }
+
+    #[test]
+    fn group_names_are_apart_from_every_setting_key() {
+        let names: HashSet<&str> = FIELDS
+            .iter()
+            .map(|f| f.key)
+            .chain(Group::ALL.map(Group::key))
+            .collect();
+        assert_eq!(names.len(), FIELDS.len() + Group::ALL.len());
     }
 
     #[test]
