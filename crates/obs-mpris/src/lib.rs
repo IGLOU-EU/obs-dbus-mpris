@@ -23,7 +23,7 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Instant;
 
 use libobs_sys::{LIBOBS_API_MAJOR_VER, LIBOBS_API_MINOR_VER, LIBOBS_API_PATCH_VER, obs_module_t};
-use mpris_core::dbus::Core;
+use mpris_core::dbus::{ArtWish, Core};
 use mpris_core::model::Snapshot;
 use render::text::Fonts;
 use render::worker::{Painter, Worker};
@@ -125,6 +125,12 @@ fn worker() -> MutexGuard<'static, Option<Worker>> {
 /// A new source's link to the render thread, `None` without one.
 fn painter() -> Option<Painter> {
     worker().as_ref().map(Worker::painter)
+}
+
+/// A new source's link to the core for its online cover, `None` without a
+/// core.
+fn art_wish() -> Option<ArtWish> {
+    core().as_ref().map(Core::art_wish)
 }
 
 /// The system fonts, read on the render thread since it takes up to seconds

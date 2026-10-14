@@ -18,7 +18,9 @@ use libobs_sys::{
     obs_leave_graphics, obs_properties_t, obs_register_source_s, obs_source_info, obs_source_t,
 };
 use mpris_core::content::content;
+use mpris_core::dbus::ArtWish;
 use mpris_core::model::Settings;
+use mpris_core::online::wish;
 use mpris_core::selection::{choice_changed, select};
 use render::draw::{Picture, RedrawKey, redraw_key};
 use render::frame::Frame;
@@ -28,7 +30,7 @@ use render::strip::Strip;
 use render::worker::Painter;
 
 use crate::locale::obs_module_text;
-use crate::{guard, painter, settings, snapshot};
+use crate::{art_wish, guard, painter, settings, snapshot};
 
 const ID: &CStr = c"mpris_now_playing";
 
@@ -54,6 +56,9 @@ struct View {
     /// shows. Held in memory only, so it starts over with OBS, and when the
     /// choice of player changes.
     followed: Option<String>,
+    /// Tells the core which online cover the source wants, if any (B-18).
+    /// `None` without a core. Dropped with the source, which withdraws it.
+    art_wish: Option<ArtWish>,
     /// `None` until the first request.
     asked: Option<RedrawKey>,
     texture: Option<Texture>,
@@ -174,10 +179,14 @@ unsafe extern "C" fn create(data: *mut obs_data_t, _source: *mut obs_source_t) -
     guard("create", ptr::null_mut(), || {
         // SAFETY: OBS passes the live settings of the new source.
         let settings = unsafe { settings::read(data) };
+        let view = View {
+            art_wish: art_wish(),
+            ..View::default()
+        };
         let source = Box::new(Source {
             settings: Mutex::new(settings),
             painter: painter(),
-            view: Mutex::default(),
+            view: Mutex::new(view),
         });
         Box::into_raw(source).cast()
     })
@@ -279,6 +288,9 @@ unsafe extern "C" fn video_tick(data: *mut c_void, _seconds: f32) {
         let mut view = source.view();
         let selection = select(&snapshot.players, &settings, view.followed.as_deref());
         view.followed = selection.followed;
+        if let Some(art_wish) = &mut view.art_wish {
+            art_wish.set(wish(selection.player, &settings));
+        }
         let shown = content(selection.player, &settings, Instant::now());
         let layout = layout(&settings);
         let key = redraw_key(&layout, &shown, &settings);
