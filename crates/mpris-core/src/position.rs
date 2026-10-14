@@ -55,6 +55,7 @@ mod tests {
             track: Track::default(),
             anchor: PositionAnchor { position, at },
             art: Art::None,
+            online: Vec::new(),
         }
     }
 

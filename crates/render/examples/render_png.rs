@@ -453,6 +453,7 @@ fn player(status: PlaybackStatus, now: Instant) -> Player {
             at: now,
         },
         art: Art::Ready(Arc::new(cover())),
+        online: Vec::new(),
     }
 }
 

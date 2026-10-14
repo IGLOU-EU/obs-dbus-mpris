@@ -3,7 +3,7 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use crate::model::{Art, ArtImage, PlaybackStatus, Player, Settings};
+use crate::model::{Art, ArtImage, PlaybackStatus, Player, Service, Settings};
 use crate::position::display_position;
 use crate::time::format_time;
 
@@ -24,7 +24,8 @@ pub enum Content {
 /// `art` is the exception. The thumbnail slot is decided by
 /// `settings.show_art` alone, and `art: None` only means nothing to draw in
 /// it, so the layout does not jump while a cover is pending or after it
-/// failed (B-10).
+/// failed (B-10). The player's own cover comes first, then the one the
+/// service the source picked found online (B-18).
 #[derive(Debug, Clone, PartialEq)]
 pub struct TrackContent {
     /// Drives the pause indicator (B-21).
@@ -120,10 +121,22 @@ fn track_content(player: &Player, settings: &Settings, now: Instant) -> TrackCon
             .show_art
             .then(|| match &player.art {
                 Art::Ready(image) => Some(Arc::clone(image)),
-                Art::None | Art::Pending | Art::Failed => None,
+                Art::None | Art::Failed => settings
+                    .art_online
+                    .and_then(|service| found_online(player, service)),
+                Art::Pending => None,
             })
             .flatten(),
     }
+}
+
+/// The cover `service` found for the player's track, if it found one.
+fn found_online(player: &Player, service: Service) -> Option<Arc<ArtImage>> {
+    player
+        .online
+        .iter()
+        .find(|(found_by, _)| *found_by == service)
+        .map(|(_, image)| Arc::clone(image))
 }
 
 /// An empty list gives `None`, so the album artist fallback applies (B-12).
@@ -189,6 +202,7 @@ mod tests {
                 at,
             },
             art: Art::Ready(image()),
+            online: Vec::new(),
         }
     }
 
@@ -647,5 +661,83 @@ mod tests {
             let track = track_of(content(Some(&p), &Settings::default(), t0));
             assert_eq!(track.art, None, "{art:?}");
         }
+    }
+
+    // Online cover (B-18)
+
+    fn image_of(red: u8) -> Arc<ArtImage> {
+        Arc::new(ArtImage {
+            width: 1,
+            height: 1,
+            rgba: vec![red, 0, 0, 255],
+        })
+    }
+
+    fn looking_up(service: Service) -> Settings {
+        Settings {
+            art_online: Some(service),
+            ..Settings::default()
+        }
+    }
+
+    /// A player whose own cover is `art`, and for which MusicBrainz found
+    /// another.
+    fn found_online(art: Art, at: Instant) -> (Player, Arc<ArtImage>) {
+        let online = image_of(9);
+        let mut p = player(Playing, at);
+        p.art = art;
+        p.online = vec![(Service::MusicBrainz, online.clone())];
+        (p, online)
+    }
+
+    #[test]
+    fn a_missing_or_unreadable_cover_gives_way_to_the_one_found_online() {
+        let t0 = Instant::now();
+        for art in [Art::None, Art::Failed] {
+            let (p, online) = found_online(art.clone(), t0);
+            let track = track_of(content(Some(&p), &looking_up(Service::MusicBrainz), t0));
+            match track.art {
+                Some(shown) => assert!(Arc::ptr_eq(&shown, &online), "{art:?}"),
+                None => panic!("no art for {art:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn the_players_own_cover_comes_first() {
+        let t0 = Instant::now();
+        let own = image_of(1);
+        let (p, _) = found_online(Art::Ready(own.clone()), t0);
+        let track = track_of(content(Some(&p), &looking_up(Service::MusicBrainz), t0));
+        assert!(Arc::ptr_eq(&track.art.expect("art"), &own));
+    }
+
+    #[test]
+    fn a_cover_found_online_shows_only_for_the_service_the_source_picked() {
+        let t0 = Instant::now();
+        let (p, _) = found_online(Art::None, t0);
+        for settings in [Settings::default(), looking_up(Service::Wikipedia)] {
+            let track = track_of(content(Some(&p), &settings, t0));
+            assert_eq!(track.art, None, "{:?}", settings.art_online);
+        }
+    }
+
+    #[test]
+    fn a_cover_found_online_waits_for_the_players_own() {
+        let t0 = Instant::now();
+        let (p, _) = found_online(Art::Pending, t0);
+        let track = track_of(content(Some(&p), &looking_up(Service::MusicBrainz), t0));
+        assert_eq!(track.art, None);
+    }
+
+    #[test]
+    fn a_hidden_thumbnail_hides_the_cover_found_online() {
+        let t0 = Instant::now();
+        let (p, _) = found_online(Art::None, t0);
+        let settings = Settings {
+            show_art: false,
+            ..looking_up(Service::MusicBrainz)
+        };
+        assert_eq!(track_of(content(Some(&p), &settings, t0)).art, None);
     }
 }

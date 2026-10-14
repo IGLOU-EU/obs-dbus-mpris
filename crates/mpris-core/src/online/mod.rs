@@ -508,6 +508,7 @@ mod tests {
                 at: Instant::now(),
             },
             art: Art::None,
+            online: Vec::new(),
         }
     }
 

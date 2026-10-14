@@ -1,16 +1,19 @@
 //! The single writer of player state: events in, snapshots out.
 //!
-//! A pure reducer. The D-Bus adapter turns bus signals into [`Event`]s and
-//! every time comes from the event, so the store reads no clock and does no
-//! I/O: each rule here stays deterministic and testable without a bus.
+//! A pure reducer. The D-Bus adapter turns bus signals into [`Event`]s, the
+//! network thread's answers too, and every time comes from the event, so
+//! the store reads no clock and does no I/O: each rule here stays
+//! deterministic and testable without a bus.
 
-use std::collections::BTreeMap;
+use std::collections::hash_map::Entry;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use crate::model::{
-    Art, ArtImage, PlaybackStatus, Player, PlayerKey, PositionAnchor, Snapshot, Track,
+    Art, ArtImage, PlaybackStatus, Player, PlayerKey, PositionAnchor, Service, Snapshot, Track,
 };
+use crate::online::{Request, Wish, needs_lookup, request};
 use crate::position::display_position;
 
 /// Something that happened on the bus, already read and typed by the adapter.
@@ -56,15 +59,25 @@ pub enum Event {
         url: String,
         image: Option<Arc<ArtImage>>,
     },
+    /// Outcome of an online lookup (B-18). `None` when nothing was found,
+    /// or the service could not be reached.
+    OnlineLooked {
+        request: Request,
+        image: Option<Arc<ArtImage>>,
+    },
 }
 
-/// Every player present on the bus.
+/// Every player present on the bus, and the covers looked up online.
 #[derive(Debug, Default)]
 pub struct Store {
     /// Keyed by well-known name, since every instance of a player shares its
     /// key (B-04) and still needs its own entry. Ordered, so the same state
     /// always gives the same snapshot.
     players: BTreeMap<String, Player>,
+    /// Every online lookup of the session, by what it asked: pending while
+    /// it runs, then ready or failed for good, so that a track is never
+    /// asked twice of a service (B-18).
+    online: HashMap<Request, Art>,
 }
 
 impl Store {
@@ -100,6 +113,7 @@ impl Store {
                     art,
                     track,
                     anchor: PositionAnchor { position, at },
+                    online: Vec::new(),
                 };
                 if self.players.get(&player.bus_name) == Some(&player) {
                     return false;
@@ -137,17 +151,71 @@ impl Store {
                 url,
                 image,
             } => self.update(&unique_name, |player| load_art(player, &url, image.clone())),
+            Event::OnlineLooked { request, image } => {
+                let found = image.map_or(Art::Failed, Art::Ready);
+                self.online.insert(request, found.clone()) != Some(found)
+            }
         }
     }
 
-    /// Immutable copy of every player, ordered by bus name. Decoded images
-    /// are shared, but each `art_url` is copied, and mpv puts its whole
-    /// cover there as a base64 `data:` URI. One such string copy per
-    /// published change is acceptable at the rate bus events arrive.
-    pub fn snapshot(&self) -> Snapshot {
-        Snapshot {
-            players: self.players.values().cloned().collect(),
+    /// The online lookups to run for `wishes`, each marked as asked, so
+    /// that however many sources wish it, it runs once in the session
+    /// (B-18). Only a player without a readable cover of its own is looked
+    /// up.
+    pub fn start_lookups<'a>(
+        &mut self,
+        wishes: impl IntoIterator<Item = &'a Wish>,
+    ) -> Vec<Request> {
+        let mut started = Vec::new();
+        for wish in wishes {
+            let Some(player) = self.players.get(&wish.bus_name) else {
+                continue;
+            };
+            if !needs_lookup(&player.art) {
+                continue;
+            }
+            let Some(request) = request(wish.service, &player.track) else {
+                continue;
+            };
+            if let Entry::Vacant(entry) = self.online.entry(request) {
+                started.push(entry.key().clone());
+                entry.insert(Art::Pending);
+            }
         }
+        started
+    }
+
+    /// Immutable copy of every player, ordered by bus name, each with the
+    /// covers found online for its current track. Decoded images are
+    /// shared, but each `art_url` is copied, and mpv puts its whole cover
+    /// there as a base64 `data:` URI. One such string copy per published
+    /// change is acceptable at the rate bus events arrive.
+    pub fn snapshot(&self) -> Snapshot {
+        let players = self.players.values().map(|player| Player {
+            online: self.online_covers(&player.track),
+            ..player.clone()
+        });
+        Snapshot {
+            players: players.collect(),
+        }
+    }
+
+    /// The covers found for `track`, one per service that found one.
+    fn online_covers(&self, track: &Track) -> Vec<(Service, Arc<ArtImage>)> {
+        // The usual case, where no source looks covers up, skips the work
+        // of building each request.
+        if self.online.is_empty() {
+            return Vec::new();
+        }
+        Service::ALL
+            .into_iter()
+            .filter_map(
+                |service| match self.online.get(&request(service, track)?)? {
+                    Art::Ready(image) => Some((service, Arc::clone(image))),
+                    Art::None | Art::Pending | Art::Failed => None,
+                },
+            )
+            .collect()
     }
 
     /// Art the adapter has to load, as `(unique_name, url)`. Each pair comes
@@ -1275,5 +1343,209 @@ mod tests {
         assert_eq!(snapshot.players.len(), 1);
         assert_eq!(snapshot.players[0].bus_name, SECOND);
         assert!(store.apply(status_changed(PlaybackStatus::Paused, t0 + secs(1))));
+    }
+
+    // Online covers (B-18).
+
+    fn wish(service: Service) -> Wish {
+        Wish {
+            bus_name: BUS.into(),
+            service,
+        }
+    }
+
+    fn ask(service: Service, track: &Track) -> Request {
+        request(service, track).expect("a request")
+    }
+
+    fn online_looked(request: Request, image: Option<Arc<ArtImage>>) -> Event {
+        Event::OnlineLooked { request, image }
+    }
+
+    /// A playing mpv whose own cover could not be read.
+    fn store_without_art(t0: Instant) -> Store {
+        let mut store = store_playing(t0);
+        store.apply(art_loaded("file:///a.png", None));
+        store
+    }
+
+    #[test]
+    fn nothing_is_looked_up_without_a_wish() {
+        let t0 = Instant::now();
+        let mut store = store_without_art(t0);
+        assert!(store.start_lookups(&[]).is_empty());
+        assert!(player(&store, BUS).online.is_empty());
+    }
+
+    #[test]
+    fn a_wish_starts_one_lookup_for_the_session() {
+        let t0 = Instant::now();
+        let mut store = store_without_art(t0);
+        let wishes = [wish(Service::MusicBrainz)];
+        let expected = ask(Service::MusicBrainz, &track("a", Some("file:///a.png")));
+        assert_eq!(store.start_lookups(&wishes), [expected]);
+        assert!(store.start_lookups(&wishes).is_empty());
+    }
+
+    #[test]
+    fn a_player_with_its_own_cover_or_waiting_for_it_is_not_looked_up() {
+        let t0 = Instant::now();
+        let wishes = [wish(Service::MusicBrainz)];
+        let mut pending = store_playing(t0);
+        assert!(pending.start_lookups(&wishes).is_empty());
+        pending.apply(art_loaded("file:///a.png", Some(image())));
+        assert!(pending.start_lookups(&wishes).is_empty());
+    }
+
+    #[test]
+    fn a_cover_that_fails_to_load_is_then_looked_up() {
+        let t0 = Instant::now();
+        let wishes = [wish(Service::MusicBrainz)];
+        let mut store = store_playing(t0);
+        assert!(store.start_lookups(&wishes).is_empty());
+        store.apply(art_loaded("file:///a.png", None));
+        assert_eq!(store.start_lookups(&wishes).len(), 1);
+    }
+
+    #[test]
+    fn a_track_without_cover_url_is_looked_up() {
+        let t0 = Instant::now();
+        let mut store = Store::new();
+        store.apply(appeared(
+            UNIQUE,
+            BUS,
+            PlaybackStatus::Playing,
+            track("a", None),
+            secs(0),
+            t0,
+        ));
+        assert_eq!(store.start_lookups(&[wish(Service::Wikipedia)]).len(), 1);
+    }
+
+    #[test]
+    fn sources_wishing_the_same_share_one_lookup() {
+        let t0 = Instant::now();
+        let mut store = store_without_art(t0);
+        let same = [wish(Service::MusicBrainz), wish(Service::MusicBrainz)];
+        assert_eq!(store.start_lookups(&same).len(), 1);
+    }
+
+    #[test]
+    fn each_service_has_its_own_lookup_of_a_track() {
+        let t0 = Instant::now();
+        let mut store = store_without_art(t0);
+        let both = [wish(Service::MusicBrainz), wish(Service::Wikipedia)];
+        let shown = track("a", Some("file:///a.png"));
+        assert_eq!(
+            store.start_lookups(&both),
+            [
+                ask(Service::MusicBrainz, &shown),
+                ask(Service::Wikipedia, &shown)
+            ]
+        );
+    }
+
+    #[test]
+    fn a_wish_for_a_player_gone_or_a_track_with_nothing_to_ask_starts_nothing() {
+        let t0 = Instant::now();
+        let mut store = store_without_art(t0);
+        let gone = Wish {
+            bus_name: "org.mpris.MediaPlayer2.vlc".into(),
+            service: Service::MusicBrainz,
+        };
+        assert!(store.start_lookups(&[gone]).is_empty());
+        // The track has no YouTube page.
+        assert!(store.start_lookups(&[wish(Service::YouTube)]).is_empty());
+    }
+
+    #[test]
+    fn a_cover_found_shows_for_its_service_only() {
+        let t0 = Instant::now();
+        let mut store = store_without_art(t0);
+        let request = store.start_lookups(&[wish(Service::MusicBrainz)]).remove(0);
+        let image = image();
+        assert!(store.apply(online_looked(request, Some(image.clone()))));
+        assert_eq!(player(&store, BUS).online, [(Service::MusicBrainz, image)]);
+    }
+
+    #[test]
+    fn a_failed_lookup_is_kept_and_never_asked_again() {
+        let t0 = Instant::now();
+        let mut store = store_without_art(t0);
+        let wishes = [wish(Service::MusicBrainz)];
+        let request = store.start_lookups(&wishes).remove(0);
+        assert!(store.apply(online_looked(request.clone(), None)));
+        assert!(player(&store, BUS).online.is_empty());
+        assert!(store.start_lookups(&wishes).is_empty());
+        assert!(!store.apply(online_looked(request, None)));
+    }
+
+    /// Acceptance scenario 9: changing tracks then coming back asks nothing.
+    #[test]
+    fn coming_back_to_a_track_shows_its_cover_without_asking_again() {
+        let t0 = Instant::now();
+        let wishes = [wish(Service::MusicBrainz)];
+        let first = track("a", None);
+        let mut store = Store::new();
+        store.apply(appeared(
+            UNIQUE,
+            BUS,
+            PlaybackStatus::Playing,
+            first.clone(),
+            secs(0),
+            t0,
+        ));
+        let asked = store.start_lookups(&wishes);
+        let image = image();
+        store.apply(online_looked(asked[0].clone(), Some(image.clone())));
+
+        store.apply(track_changed(track("b", None), t0 + secs(1)));
+        assert!(player(&store, BUS).online.is_empty());
+        assert_eq!(store.start_lookups(&wishes).len(), 1);
+
+        store.apply(track_changed(first, t0 + secs(2)));
+        assert!(store.start_lookups(&wishes).is_empty());
+        assert_eq!(player(&store, BUS).online, [(Service::MusicBrainz, image)]);
+    }
+
+    #[test]
+    fn a_cover_found_after_the_track_changed_waits_for_its_track() {
+        let t0 = Instant::now();
+        let wishes = [wish(Service::MusicBrainz)];
+        let first = track("a", None);
+        let mut store = Store::new();
+        store.apply(appeared(
+            UNIQUE,
+            BUS,
+            PlaybackStatus::Playing,
+            first.clone(),
+            secs(0),
+            t0,
+        ));
+        let asked = store.start_lookups(&wishes).remove(0);
+        store.apply(track_changed(track("b", None), t0 + secs(1)));
+        let image = image();
+        store.apply(online_looked(asked, Some(image.clone())));
+        assert!(player(&store, BUS).online.is_empty());
+        store.apply(track_changed(first, t0 + secs(2)));
+        assert_eq!(player(&store, BUS).online, [(Service::MusicBrainz, image)]);
+    }
+
+    #[test]
+    fn a_cover_found_serves_every_player_of_that_track() {
+        let t0 = Instant::now();
+        let mut store = store_with_two_names(t0);
+        store.apply(art_loaded("file:///a.png", None));
+        let request = store.start_lookups(&[wish(Service::Wikipedia)]).remove(0);
+        let image = image();
+        store.apply(online_looked(request, Some(image.clone())));
+        for p in store.snapshot().players {
+            assert_eq!(
+                p.online,
+                [(Service::Wikipedia, image.clone())],
+                "{}",
+                p.bus_name
+            );
+        }
     }
 }
