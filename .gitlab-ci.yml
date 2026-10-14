@@ -1,0 +1,103 @@
+# Tests, then the native archive and the Flatpak bundle, and on a v* tag a
+# GitLab release that links both (architecture.md, Builds).
+stages:
+  - test
+  - build
+  - release
+
+variables:
+  # The generic package registry keeps release files for good, where job
+  # artifacts expire.
+  PACKAGES: ${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/obs-dbus-mpris
+
+# Debian 12 and the toolchain of rust-toolchain.toml. A library links against
+# the glibc of its build system, 2.36 here, so the native archive loads on
+# Debian 12, Ubuntu 24.04 and every newer distribution.
+.rust:
+  image: rust:1.87-bookworm
+
+test:
+  stage: test
+  extends: .rust
+  before_script:
+    # dbus-daemon for the integration tests, which start private buses, and
+    # a font for the text rendering tests, which skip themselves without one.
+    - apt-get update
+    - apt-get install --yes --no-install-recommends dbus-daemon fonts-dejavu-core
+    - rustup component add clippy rustfmt
+  script:
+    - cargo fmt --check
+    - cargo clippy --workspace --all-targets --locked -- -D warnings
+    - cargo test --workspace --locked
+
+native:
+  stage: build
+  extends: .rust
+  script:
+    - scripts/package-native.sh
+  artifacts:
+    paths:
+      - target/dist/*.tar.gz
+    expire_in: 1 week
+
+flatpak:
+  stage: build
+  # The freedesktop SDK 25.08 with flatpak-builder and the flathub remote.
+  # flatpak-builder sandboxes the build with bubblewrap, which needs a
+  # privileged container, as GitLab.com hosted runners provide.
+  image: ghcr.io/flathub-infra/flatpak-github-actions:freedesktop-25.08
+  before_script:
+    - flatpak install --noninteractive flathub com.obsproject.Studio//stable org.freedesktop.Sdk.Extension.rust-stable//25.08
+  script:
+    - scripts/build-flatpak.sh
+  artifacts:
+    paths:
+      - target/flatpak/*.flatpak
+    expire_in: 1 week
+
+upload:
+  stage: release
+  image: alpine:3.22
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v/
+  needs: [native, flatpak]
+  script:
+    - apk add --no-cache curl
+    - VERSION=${CI_COMMIT_TAG#v}
+    - |
+      for file in target/dist/obs-dbus-mpris-$VERSION-x86_64-linux.tar.gz target/flatpak/obs-dbus-mpris-$VERSION-x86_64.flatpak; do
+        if [ ! -f "$file" ]; then
+          echo "error: no $file. Does the tag $CI_COMMIT_TAG match the workspace version in Cargo.toml?" >&2
+          exit 1
+        fi
+        curl --fail-with-body --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file "$file" "$PACKAGES/$VERSION/${file##*/}"
+      done
+    # The changelog section of this version, as the release description.
+    - awk -v heading="## [$VERSION]" 'index($0, "## [") == 1 { keep = index($0, heading) == 1; next } keep' CHANGELOG.md > release-notes.md
+    - echo "VERSION=$VERSION" > release.env
+  artifacts:
+    paths:
+      - release-notes.md
+    reports:
+      dotenv: release.env
+
+release:
+  stage: release
+  image: registry.gitlab.com/gitlab-org/cli:latest
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v/
+  needs: [upload]
+  script:
+    - echo "Releasing $CI_COMMIT_TAG"
+  release:
+    tag_name: $CI_COMMIT_TAG
+    name: obs-dbus-mpris $VERSION
+    description: release-notes.md
+    assets:
+      links:
+        - name: obs-dbus-mpris-$VERSION-x86_64-linux.tar.gz
+          url: $PACKAGES/$VERSION/obs-dbus-mpris-$VERSION-x86_64-linux.tar.gz
+          link_type: package
+        - name: obs-dbus-mpris-$VERSION-x86_64.flatpak
+          url: $PACKAGES/$VERSION/obs-dbus-mpris-$VERSION-x86_64.flatpak
+          link_type: package
