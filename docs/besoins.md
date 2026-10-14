@@ -60,14 +60,20 @@ Format des temps : `m:ss`, et `h:mm:ss` à partir d'une heure. Quand la durée e
 
 **B-17 Exactitude de la position.** MPRIS ne signale pas les changements de `Position`. La position affichée est donc extrapolée à partir de la dernière valeur connue, du temps écoulé et de `Rate` (1.0 par défaut), et recalée sur le signal `Seeked`, sur chaque changement de piste ou d'état, et par une relecture périodique. Affichage à la seconde, écart toléré d'une seconde.
 
-**B-18 Pochette en ligne, en option.** En Flatpak, OBS ne peut généralement pas lire les fichiers hors de son bac à sable, et notamment pas les fichiers où d'autres applications Flatpak déposent leur pochette. Constaté le 2026-10-13 : Chrome la met dans son `/tmp` privé, AudioTube dans son dossier `~/.var/app`, tous deux invisibles depuis OBS Flatpak. Une case dans les propriétés, décochée par défaut, autorise alors la source à chercher la pochette dans une base en ligne :
+**B-18 Pochette en ligne, en option.** En Flatpak, OBS ne peut généralement pas lire les fichiers hors de son bac à sable, et notamment pas les fichiers où d'autres applications Flatpak déposent leur pochette. Constaté le 2026-10-13 : Chrome la met dans son `/tmp` privé, AudioTube dans son dossier `~/.var/app`, tous deux invisibles depuis OBS Flatpak. Un choix « Pochette en ligne » dans les propriétés autorise alors la source à chercher la pochette en ligne, auprès d'un seul service à la fois :
+
+- **Aucune** (par défaut) : aucune recherche.
+- **MusicBrainz** : la base musicale libre, images du Cover Art Archive. Recherche par artiste et album, à défaut par artiste et titre, après nettoyage des métadonnées (suffixes comme « (Remastered) », titres « Artiste - Titre »). Un candidat n'est retenu que s'il passe un score minimal de ressemblance, pour qu'une piste sans correspondance n'ait pas de pochette plutôt qu'une fausse.
+- **Wikipédia** : l'image de l'article de l'album, pour les disques connus seulement.
+- **YouTube** : la miniature de la vidéo, déduite de son identifiant quand le lecteur donne l'adresse d'une page YouTube (`xesam:url`), sans recherche. Image servie par Google.
+
+Pour tous :
 
 - la recherche n'a lieu que si la miniature locale (B-10) est absente ou illisible,
-- elle se fait par artiste et album, à défaut par artiste et titre,
-- une seule requête par piste distincte, résultat mis en cache pour la session, échecs compris, pour ne jamais interroger le service en boucle,
-- la requête ne bloque rien et expire vite. Un échec laisse l'emplacement vide, comme en B-10.
+- une seule recherche par piste distincte, résultat mis en cache pour la session, échecs compris, pour ne jamais interroger le service en boucle,
+- la requête ne bloque rien et expire vite. Un échec laisse l'image par défaut, comme en B-10.
 
-Le service se choisit par un essai sur des pistes réelles, japonaises comprises, parmi des services sans clé d'API (voir D-09).
+Le choix des services vient d'une étude sur les pistes réelles (D-09, `~/Sourcery/Etudes/obs-dbus-mpris-pochettes-en-ligne/`). Une seule base libre de pochettes tient la route, MusicBrainz. Wikipédia et YouTube complètent la liste à la demande d'Adrien, en connaissant leurs limites.
 
 ## 3. États de lecture
 
@@ -155,7 +161,7 @@ Récapitulatif des réglages d'une source. Les valeurs par défaut des couleurs 
 | Lecteur | `player` | liste (nom de bus de l'instance) | vide (aucun choix mémorisé) | B-02 à B-07 |
 | Lecteur | `auto_select` | case | oui | B-05 à B-07 |
 | Éléments affichés | `show_art` | case | oui | B-10 |
-| Éléments affichés | `fetch_art_online` | case | non | B-18 |
+| Éléments affichés | `art_online` | liste (Aucune, MusicBrainz, Wikipédia, YouTube) | Aucune | B-18 |
 | Éléments affichés | `show_title` | case | oui | B-11 |
 | Éléments affichés | `show_artist` | case | oui | B-12 |
 | Éléments affichés | `show_album` | case | oui | B-13 |
@@ -203,7 +209,7 @@ flatpak override --user --talk-name='org.mpris.MediaPlayer2.*' com.obsproject.St
 
 **B-47 Licence.** GPL-2.0-or-later.
 
-**B-48 Aucun accès réseau par défaut.** Le plugin n'émet aucune requête réseau tant qu'aucune source n'a coché l'option B-18.
+**B-48 Aucun accès réseau par défaut.** Le plugin n'émet aucune requête réseau tant qu'aucune source n'a choisi un service de pochette en ligne (B-18). Le fil réseau ne démarre qu'à la première recherche.
 
 ## 7. Critères d'acceptation
 

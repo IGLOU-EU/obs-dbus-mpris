@@ -15,7 +15,7 @@ Les validations se font dans OBS Flatpak. Le build natif est produit à chaque p
 | 2 | Cœur MPRIS, hors OBS | fait, lecteur local (Strawberry ou Elisa) à vérifier à l'occasion |
 | 3 | Rendu et disposition | fait, validé dans OBS |
 | 4 | Source complète | fait, validé dans OBS |
-| 5 | Pochette en ligne, en option | à faire |
+| 5 | Pochette en ligne, en option | en cours |
 | 6 | Réglages visuels | fait, essai dans OBS en attente |
 | 7 | Distribution, version 1.0 | à faire |
 
@@ -89,11 +89,12 @@ Besoins couverts : aucun nouveau, la phase valide dans OBS ceux des phases 1 à 
 
 Récupérer une pochette que le bac à sable Flatpak empêche de lire.
 
-- Essai des services candidats sur des pistes réelles et choix consigné (D-09).
+- Essai des services candidats sur des pistes réelles et choix consigné (D-09) : fait le 2026-10-14.
+- Nettoyage des métadonnées et score minimal, purs et testés, d'après le contrat de l'étude.
 - Fil réseau, client HTTP (D-08), cache par piste avec échecs, dédoublonnage par le fil du cœur.
-- Case `fetch_art_online`, décochée par défaut.
+- Choix `art_online` (Aucune, MusicBrainz, Wikipédia, YouTube), Aucune par défaut.
 
-**Fini quand** le scénario d'acceptation 9 passe, et qu'aucune requête réseau ne part tant que l'option n'est cochée nulle part (B-48).
+**Fini quand** le scénario d'acceptation 9 passe, et qu'aucune requête réseau ne part tant qu'aucune source n'a choisi de service (B-48).
 
 Besoins couverts : B-18, B-48.
 

@@ -135,7 +135,7 @@ Critères de choix : repli correct sur les caractères japonais (cas réel de mp
 
 **D-08 Client HTTP `ureq`**, bloquant, léger, TLS par rustls, utilisé seulement dans le fil réseau avec un délai d'expiration court. Pas de runtime asynchrone ajouté pour quelques requêtes.
 
-**D-09 Service de pochettes : à trancher par un essai au moment d'implémenter B-18.** Candidats sans clé d'API :
+**D-09 Services de pochettes.** Tranché le 2026-10-14 par une étude sur 13 pistes réelles et 8 témoins (`~/Sourcery/Etudes/obs-dbus-mpris-pochettes-en-ligne/rapport.md`, qui donne la séquence de requêtes, le nettoyage, le score minimal et ses tests). MusicBrainz et le Cover Art Archive : 7 pochettes justes, 0 fausse une fois retirée la variante « X by Y » du nettoyage, qui causait la seule erreur. User-Agent `obs-dbus-mpris/<version> ( <URL du dépôt> )`, une requête par seconde au plus, une nouvelle tentative sur un refus de débit, image `front-500`. Wikipédia, avec les images non libres de l'article de l'album. YouTube, miniature déduite de l'identifiant de la vidéo. Écartés : ListenBrainz (mêmes données, accès stable sous jeton), Wikidata (2 images sur 21), TheAudioDB (abonnement payant pour publier), Discogs (images non libres, société commerciale), et les services commerciaux comme Deezer, plus complets (9 justes) mais hors du cadre voulu.
 
 | Service | Particularités |
 |---------|----------------|
