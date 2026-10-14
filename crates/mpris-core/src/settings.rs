@@ -76,7 +76,7 @@ pub enum DefaultValue {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Group {
     Player,
-    /// The `show_*` switches.
+    /// The `show_*` switches, then the online cover list.
     Elements,
     Layout,
     Text,
@@ -153,6 +153,13 @@ const PLAYER: Field = Field {
 };
 const AUTO_SELECT: Field = flag(Group::Player, "auto_select", true);
 const SHOW_ART: Field = flag(Group::Elements, "show_art", true);
+const SHOW_TITLE: Field = flag(Group::Elements, "show_title", true);
+const SHOW_ARTIST: Field = flag(Group::Elements, "show_artist", true);
+const SHOW_ALBUM: Field = flag(Group::Elements, "show_album", true);
+const SHOW_PROGRESS: Field = flag(Group::Elements, "show_progress", true);
+const SHOW_POSITION: Field = flag(Group::Elements, "show_position", true);
+const SHOW_DURATION: Field = flag(Group::Elements, "show_duration", true);
+const SHOW_REMAINING: Field = flag(Group::Elements, "show_remaining", false);
 /// No lookup by default, so that nothing leaves the machine until a
 /// source picks a service (B-48).
 const ART_ONLINE: Field = Field {
@@ -172,13 +179,6 @@ const ART_ONLINE_CHOICES: [Choice; 4] = [
     service(Service::Wikipedia, "ArtOnlineWikipedia"),
     service(Service::YouTube, "ArtOnlineYouTube"),
 ];
-const SHOW_TITLE: Field = flag(Group::Elements, "show_title", true);
-const SHOW_ARTIST: Field = flag(Group::Elements, "show_artist", true);
-const SHOW_ALBUM: Field = flag(Group::Elements, "show_album", true);
-const SHOW_PROGRESS: Field = flag(Group::Elements, "show_progress", true);
-const SHOW_POSITION: Field = flag(Group::Elements, "show_position", true);
-const SHOW_DURATION: Field = flag(Group::Elements, "show_duration", true);
-const SHOW_REMAINING: Field = flag(Group::Elements, "show_remaining", false);
 const WIDTH: Field = size(Group::Layout, "width", 600, MAX_SIDE);
 const ART_RIGHT: Field = flag(Group::Layout, "art_right", false);
 const ART_ROUND: Field = flag(Group::Layout, "art_round", false);
@@ -235,7 +235,6 @@ pub const FIELDS: &[Field] = &[
     PLAYER,
     AUTO_SELECT,
     SHOW_ART,
-    ART_ONLINE,
     SHOW_TITLE,
     SHOW_ARTIST,
     SHOW_ALBUM,
@@ -243,6 +242,7 @@ pub const FIELDS: &[Field] = &[
     SHOW_POSITION,
     SHOW_DURATION,
     SHOW_REMAINING,
+    ART_ONLINE,
     WIDTH,
     ART_RIGHT,
     ART_ROUND,
@@ -441,7 +441,6 @@ mod tests {
         "player",
         "auto_select",
         "show_art",
-        "art_online",
         "show_title",
         "show_artist",
         "show_album",
@@ -449,6 +448,7 @@ mod tests {
         "show_position",
         "show_duration",
         "show_remaining",
+        "art_online",
         "width",
         "art_right",
         "art_round",
