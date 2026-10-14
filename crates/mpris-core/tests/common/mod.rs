@@ -111,16 +111,21 @@ fn copy(metadata: &Metadata) -> Metadata {
         .collect()
 }
 
-/// A `data:` URL holding a PNG of the given size, red at its top-left pixel.
-pub fn png_data_url(width: u32, height: u32) -> String {
+/// A red PNG of the given size.
+pub fn png(width: u32, height: u32) -> Vec<u8> {
     let image = image::RgbaImage::from_pixel(width, height, image::Rgba([255, 0, 0, 255]));
     let mut bytes = Cursor::new(Vec::new());
     image
         .write_to(&mut bytes, image::ImageFormat::Png)
         .expect("PNG encoding");
+    bytes.into_inner()
+}
+
+/// A `data:` URL holding a red PNG of the given size.
+pub fn png_data_url(width: u32, height: u32) -> String {
     format!(
         "data:image/png;base64,{}",
-        STANDARD.encode(bytes.into_inner())
+        STANDARD.encode(png(width, height))
     )
 }
 

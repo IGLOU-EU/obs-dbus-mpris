@@ -13,7 +13,7 @@ use std::time::Instant;
 
 use mpris_core::model::{Service, Settings, Track};
 use mpris_core::network::look_up_online;
-use mpris_core::online::request;
+use mpris_core::online::{decode, request};
 use mpris_core::settings::SettingValue;
 
 /// Prints the requests of the network module.
@@ -61,14 +61,15 @@ fn main() {
         fail("nothing to look up: no artist, or no YouTube page");
     };
     let started = Instant::now();
-    match look_up_online(&request, &AtomicBool::new(false)) {
-        Some(image) => println!(
-            "found a {}x{} cover in {:?}",
-            image.width,
-            image.height,
-            started.elapsed()
+    let found = look_up_online(&request, &AtomicBool::new(false));
+    let elapsed = started.elapsed();
+    match found.map(|cover| decode(&request, &cover)) {
+        Some(Ok(image)) => println!(
+            "found a {}x{} cover in {elapsed:?}",
+            image.width, image.height
         ),
-        None => println!("no cover, after {:?}", started.elapsed()),
+        Some(Err(error)) => println!("found no image but {error}, after {elapsed:?}"),
+        None => println!("no cover, after {elapsed:?}"),
     }
 }
 

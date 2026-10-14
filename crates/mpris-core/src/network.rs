@@ -20,7 +20,6 @@ use std::time::{Duration, Instant};
 use async_channel::{Receiver, Sender};
 
 use crate::art::MAX_FILE_BYTES;
-use crate::model::ArtImage;
 use crate::online::{self, Request};
 
 /// Where the plugin can be reached, which MusicBrainz asks every client
@@ -48,13 +47,14 @@ const MAX_RETRY_DELAY: Duration = Duration::from_secs(10);
 /// How often a wait checks whether the core is stopping.
 const STOP_CHECK: Duration = Duration::from_millis(100);
 
-/// What runs one lookup: [`look_up_online`] in the plugin, a stand-in in
-/// tests, which must never reach the network. It gives up early once the
-/// flag is set.
-pub type LookUp = fn(&Request, &AtomicBool) -> Option<ArtImage>;
+/// What runs one lookup and answers the cover as downloaded:
+/// [`look_up_online`] in the plugin, a stand-in in tests, which must never
+/// reach the network. It gives up early once the flag is set.
+pub type LookUp = fn(&Request, &AtomicBool) -> Option<Vec<u8>>;
 
-/// The outcome of a lookup, as the network thread sends it back.
-pub type Looked = (Request, Option<Arc<ArtImage>>);
+/// The outcome of a lookup, as the network thread sends it back. The core
+/// decodes the cover when a track shows it.
+pub type Looked = (Request, Option<Arc<[u8]>>);
 
 /// The core thread's handle on the network thread, which starts on the
 /// first request (B-48). Dropping it stops the thread at its next check,
@@ -142,21 +142,17 @@ fn serve(
     look_up: LookUp,
 ) {
     while let Ok(request) = requests.recv_blocking() {
-        let image = panic::catch_unwind(AssertUnwindSafe(|| look_up(&request, stopped)))
+        let cover = panic::catch_unwind(AssertUnwindSafe(|| look_up(&request, stopped)))
             .unwrap_or_else(|_| {
                 log::error!("MPRIS: an online lookup panicked, the cover counts as not found");
                 None
             });
-        match &image {
-            Some(image) => log::debug!(
-                "MPRIS: {request:?} found a {}x{} cover",
-                image.width,
-                image.height
-            ),
+        match &cover {
+            Some(cover) => log::debug!("MPRIS: {request:?} found {} bytes", cover.len()),
             None => log::debug!("MPRIS: {request:?} found no cover"),
         }
         if results
-            .send_blocking((request, image.map(Arc::new)))
+            .send_blocking((request, cover.map(Arc::from)))
             .is_err()
         {
             break;
@@ -171,13 +167,8 @@ thread_local! {
 }
 
 /// Runs `request` against the real services.
-pub fn look_up_online(request: &Request, stopped: &AtomicBool) -> Option<ArtImage> {
-    HTTP.with_borrow_mut(|http| {
-        let bytes = online::look_up(request, |url| http.get(url, stopped))?;
-        online::decode(request, &bytes)
-            .inspect_err(|error| log::debug!("MPRIS: online cover unreadable: {error}"))
-            .ok()
-    })
+pub fn look_up_online(request: &Request, stopped: &AtomicBool) -> Option<Vec<u8>> {
+    HTTP.with_borrow_mut(|http| online::look_up(request, |url| http.get(url, stopped)))
 }
 
 struct Http {

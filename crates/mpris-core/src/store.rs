@@ -59,9 +59,15 @@ pub enum Event {
         url: String,
         image: Option<Arc<ArtImage>>,
     },
-    /// Outcome of an online lookup (B-18). `None` when nothing was found,
-    /// or the service could not be reached.
+    /// Outcome of an online lookup (B-18): the cover as downloaded, `None`
+    /// when nothing was found or the service could not be reached.
     OnlineLooked {
+        request: Request,
+        cover: Option<Arc<[u8]>>,
+    },
+    /// A cover found online, decoded for the players whose track it is.
+    /// `None` when it is no image after all.
+    OnlineDecoded {
         request: Request,
         image: Option<Arc<ArtImage>>,
     },
@@ -74,10 +80,21 @@ pub struct Store {
     /// key (B-04) and still needs its own entry. Ordered, so the same state
     /// always gives the same snapshot.
     players: BTreeMap<String, Player>,
-    /// Every online lookup of the session, by what it asked: pending while
-    /// it runs, then ready or failed for good, so that a track is never
-    /// asked twice of a service (B-18).
-    online: HashMap<Request, Art>,
+    /// Every online lookup of the session, by what it asked, failures
+    /// included, so that a track is never asked twice of a service (B-18).
+    online: HashMap<Request, Lookup>,
+}
+
+/// An online lookup of the session.
+#[derive(Debug, Clone, PartialEq)]
+enum Lookup {
+    Asked,
+    /// Nothing found, or nothing readable.
+    Missing,
+    /// The cover as downloaded, a few dozen kilobytes where the decoded
+    /// image weighs a megabyte: over a long session, only the players
+    /// showing its track hold it decoded (study, section 8).
+    Found(Arc<[u8]>),
 }
 
 impl Store {
@@ -151,11 +168,60 @@ impl Store {
                 url,
                 image,
             } => self.update(&unique_name, |player| load_art(player, &url, image.clone())),
-            Event::OnlineLooked { request, image } => {
-                let found = image.map_or(Art::Failed, Art::Ready);
-                self.online.insert(request, found.clone()) != Some(found)
+            Event::OnlineLooked { request, cover } => {
+                let lookup = cover.map_or(Lookup::Missing, Lookup::Found);
+                self.online.insert(request, lookup.clone()) != Some(lookup)
+            }
+            Event::OnlineDecoded {
+                request,
+                image: Some(image),
+            } => {
+                let mut changed = false;
+                for player in self.players.values_mut() {
+                    changed |= show_online(player, &request, &image);
+                }
+                changed
+            }
+            Event::OnlineDecoded {
+                request,
+                image: None,
+            } => self.online.insert(request, Lookup::Missing) != Some(Lookup::Missing),
+        }
+    }
+
+    /// The covers found online that a shown track needs decoded, with what
+    /// each is decoded from. A player with its own cover needs none.
+    pub fn pending_covers(&self) -> Vec<(Request, Arc<[u8]>)> {
+        // The usual case, where no source looks covers up, skips the work
+        // of building each request.
+        if !self
+            .online
+            .values()
+            .any(|lookup| matches!(lookup, Lookup::Found(_)))
+        {
+            return Vec::new();
+        }
+        let mut pending: Vec<(Request, Arc<[u8]>)> = Vec::new();
+        for player in self
+            .players
+            .values()
+            .filter(|player| needs_lookup(&player.art))
+        {
+            for service in Service::ALL {
+                if player.online.iter().any(|(shown, _)| *shown == service) {
+                    continue;
+                }
+                let Some(request) = request(service, &player.track) else {
+                    continue;
+                };
+                if let Some(Lookup::Found(cover)) = self.online.get(&request) {
+                    if !pending.iter().any(|(listed, _)| *listed == request) {
+                        pending.push((request, Arc::clone(cover)));
+                    }
+                }
             }
         }
+        pending
     }
 
     /// The online lookups to run for `wishes`, each marked as asked, so
@@ -179,43 +245,20 @@ impl Store {
             };
             if let Entry::Vacant(entry) = self.online.entry(request) {
                 started.push(entry.key().clone());
-                entry.insert(Art::Pending);
+                entry.insert(Lookup::Asked);
             }
         }
         started
     }
 
-    /// Immutable copy of every player, ordered by bus name, each with the
-    /// covers found online for its current track. Decoded images are
-    /// shared, but each `art_url` is copied, and mpv puts its whole cover
-    /// there as a base64 `data:` URI. One such string copy per published
-    /// change is acceptable at the rate bus events arrive.
+    /// Immutable copy of every player, ordered by bus name. Decoded images
+    /// are shared, but each `art_url` is copied, and mpv puts its whole
+    /// cover there as a base64 `data:` URI. One such string copy per
+    /// published change is acceptable at the rate bus events arrive.
     pub fn snapshot(&self) -> Snapshot {
-        let players = self.players.values().map(|player| Player {
-            online: self.online_covers(&player.track),
-            ..player.clone()
-        });
         Snapshot {
-            players: players.collect(),
+            players: self.players.values().cloned().collect(),
         }
-    }
-
-    /// The covers found for `track`, one per service that found one.
-    fn online_covers(&self, track: &Track) -> Vec<(Service, Arc<ArtImage>)> {
-        // The usual case, where no source looks covers up, skips the work
-        // of building each request.
-        if self.online.is_empty() {
-            return Vec::new();
-        }
-        Service::ALL
-            .into_iter()
-            .filter_map(
-                |service| match self.online.get(&request(service, track)?)? {
-                    Art::Ready(image) => Some((service, Arc::clone(image))),
-                    Art::None | Art::Pending | Art::Failed => None,
-                },
-            )
-            .collect()
     }
 
     /// Art the adapter has to load, as `(unique_name, url)`. Each pair comes
@@ -319,7 +362,31 @@ fn set_track(player: &mut Player, track: &Track, at: Instant) {
     if new_track || track.art_url != player.track.art_url {
         player.art = art_for(track);
     }
+    // A cover found online stays only while it is the one of the track.
+    let previous = &player.track;
+    player
+        .online
+        .retain(|(service, _)| request(*service, track) == request(*service, previous));
     player.track = track.clone();
+}
+
+/// Shows `image`, found for `asked`, on `player` if it is the cover of
+/// its track. Returns `true` when it was not shown yet.
+fn show_online(player: &mut Player, asked: &Request, image: &Arc<ArtImage>) -> bool {
+    let mut shown = false;
+    for service in Service::ALL {
+        let mine = request(service, &player.track).as_ref() == Some(asked);
+        if mine
+            && !player
+                .online
+                .iter()
+                .any(|(found_by, _)| *found_by == service)
+        {
+            player.online.push((service, Arc::clone(image)));
+            shown = true;
+        }
+    }
+    shown
 }
 
 /// Players send metadata updates for the playing track too (length found,
@@ -1358,8 +1425,28 @@ mod tests {
         request(service, track).expect("a request")
     }
 
-    fn online_looked(request: Request, image: Option<Arc<ArtImage>>) -> Event {
-        Event::OnlineLooked { request, image }
+    fn online_looked(request: Request, cover: Option<&[u8]>) -> Event {
+        Event::OnlineLooked {
+            request,
+            cover: cover.map(Arc::from),
+        }
+    }
+
+    fn online_decoded(request: Request, image: Option<Arc<ArtImage>>) -> Event {
+        Event::OnlineDecoded { request, image }
+    }
+
+    /// Looks the shown track up with `service`, finds `bytes`, and decodes
+    /// them into `image`, as the adapter does.
+    fn found(store: &mut Store, service: Service, bytes: &[u8], image: &Arc<ArtImage>) -> Request {
+        let request = store.start_lookups(&[wish(service)]).remove(0);
+        store.apply(online_looked(request.clone(), Some(bytes)));
+        assert_eq!(
+            store.pending_covers(),
+            [(request.clone(), Arc::from(bytes))]
+        );
+        store.apply(online_decoded(request.clone(), Some(image.clone())));
+        request
     }
 
     /// A playing mpv whose own cover could not be read.
@@ -1459,13 +1546,21 @@ mod tests {
     }
 
     #[test]
-    fn a_cover_found_shows_for_its_service_only() {
+    fn a_cover_found_is_decoded_then_shown_for_its_service() {
         let t0 = Instant::now();
         let mut store = store_without_art(t0);
         let request = store.start_lookups(&[wish(Service::MusicBrainz)]).remove(0);
+        assert!(store.apply(online_looked(request.clone(), Some(b"jpeg"))));
+        assert!(player(&store, BUS).online.is_empty());
+        assert_eq!(
+            store.pending_covers(),
+            [(request.clone(), Arc::from(&b"jpeg"[..]))]
+        );
+
         let image = image();
-        assert!(store.apply(online_looked(request, Some(image.clone()))));
+        assert!(store.apply(online_decoded(request, Some(image.clone()))));
         assert_eq!(player(&store, BUS).online, [(Service::MusicBrainz, image)]);
+        assert!(store.pending_covers().is_empty());
     }
 
     #[test]
@@ -1475,14 +1570,30 @@ mod tests {
         let wishes = [wish(Service::MusicBrainz)];
         let request = store.start_lookups(&wishes).remove(0);
         assert!(store.apply(online_looked(request.clone(), None)));
+        assert!(store.pending_covers().is_empty());
         assert!(player(&store, BUS).online.is_empty());
         assert!(store.start_lookups(&wishes).is_empty());
         assert!(!store.apply(online_looked(request, None)));
     }
 
-    /// Acceptance scenario 9: changing tracks then coming back asks nothing.
     #[test]
-    fn coming_back_to_a_track_shows_its_cover_without_asking_again() {
+    fn a_cover_that_cannot_be_decoded_counts_as_not_found() {
+        let t0 = Instant::now();
+        let mut store = store_without_art(t0);
+        let wishes = [wish(Service::Wikipedia)];
+        let request = store.start_lookups(&wishes).remove(0);
+        store.apply(online_looked(request.clone(), Some(b"<html>")));
+        assert!(store.apply(online_decoded(request, None)));
+        assert!(store.pending_covers().is_empty());
+        assert!(player(&store, BUS).online.is_empty());
+        assert!(store.start_lookups(&wishes).is_empty());
+    }
+
+    /// Acceptance scenario 9: changing tracks then coming back asks nothing,
+    /// and only the shown track keeps a decoded cover, so that a long session
+    /// holds a few kilobytes per track found rather than a whole image.
+    #[test]
+    fn coming_back_to_a_track_decodes_its_cover_again_without_asking() {
         let t0 = Instant::now();
         let wishes = [wish(Service::MusicBrainz)];
         let first = track("a", None);
@@ -1495,23 +1606,50 @@ mod tests {
             secs(0),
             t0,
         ));
-        let asked = store.start_lookups(&wishes);
         let image = image();
-        store.apply(online_looked(asked[0].clone(), Some(image.clone())));
+        let request = found(&mut store, Service::MusicBrainz, b"jpeg", &image);
 
         store.apply(track_changed(track("b", None), t0 + secs(1)));
         assert!(player(&store, BUS).online.is_empty());
+        assert!(store.pending_covers().is_empty());
         assert_eq!(store.start_lookups(&wishes).len(), 1);
 
         store.apply(track_changed(first, t0 + secs(2)));
         assert!(store.start_lookups(&wishes).is_empty());
+        assert_eq!(
+            store.pending_covers(),
+            [(request.clone(), Arc::from(&b"jpeg"[..]))]
+        );
+        store.apply(online_decoded(request, Some(image.clone())));
         assert_eq!(player(&store, BUS).online, [(Service::MusicBrainz, image)]);
+    }
+
+    #[test]
+    fn an_update_of_the_same_track_keeps_its_decoded_cover() {
+        let t0 = Instant::now();
+        let mut store = Store::new();
+        store.apply(appeared(
+            UNIQUE,
+            BUS,
+            PlaybackStatus::Playing,
+            track("a", None),
+            secs(0),
+            t0,
+        ));
+        let image = image();
+        found(&mut store, Service::MusicBrainz, b"jpeg", &image);
+        let longer = Track {
+            length: Some(secs(180)),
+            ..track("a", None)
+        };
+        store.apply(track_changed(longer, t0 + secs(1)));
+        assert_eq!(player(&store, BUS).online, [(Service::MusicBrainz, image)]);
+        assert!(store.pending_covers().is_empty());
     }
 
     #[test]
     fn a_cover_found_after_the_track_changed_waits_for_its_track() {
         let t0 = Instant::now();
-        let wishes = [wish(Service::MusicBrainz)];
         let first = track("a", None);
         let mut store = Store::new();
         store.apply(appeared(
@@ -1522,13 +1660,16 @@ mod tests {
             secs(0),
             t0,
         ));
-        let asked = store.start_lookups(&wishes).remove(0);
+        let request = store.start_lookups(&[wish(Service::MusicBrainz)]).remove(0);
         store.apply(track_changed(track("b", None), t0 + secs(1)));
-        let image = image();
-        store.apply(online_looked(asked, Some(image.clone())));
+        store.apply(online_looked(request.clone(), Some(b"jpeg")));
+        assert!(store.pending_covers().is_empty());
+        // A late decode for a track no longer shown is dropped too.
+        store.apply(online_decoded(request.clone(), Some(image())));
         assert!(player(&store, BUS).online.is_empty());
+
         store.apply(track_changed(first, t0 + secs(2)));
-        assert_eq!(player(&store, BUS).online, [(Service::MusicBrainz, image)]);
+        assert_eq!(store.pending_covers(), [(request, Arc::from(&b"jpeg"[..]))]);
     }
 
     #[test]
@@ -1536,9 +1677,8 @@ mod tests {
         let t0 = Instant::now();
         let mut store = store_with_two_names(t0);
         store.apply(art_loaded("file:///a.png", None));
-        let request = store.start_lookups(&[wish(Service::Wikipedia)]).remove(0);
         let image = image();
-        store.apply(online_looked(request, Some(image.clone())));
+        found(&mut store, Service::Wikipedia, b"jpeg", &image);
         for p in store.snapshot().players {
             assert_eq!(
                 p.online,
@@ -1547,5 +1687,52 @@ mod tests {
                 p.bus_name
             );
         }
+    }
+
+    #[test]
+    fn covers_of_several_services_live_side_by_side() {
+        let t0 = Instant::now();
+        let mut store = store_without_art(t0);
+        let (a, b) = (
+            image(),
+            Arc::new(ArtImage {
+                width: 2,
+                height: 1,
+                rgba: vec![0; 8],
+            }),
+        );
+        found(&mut store, Service::Wikipedia, b"wiki", &a);
+        found(&mut store, Service::MusicBrainz, b"mb", &b);
+        assert_eq!(
+            player(&store, BUS).online,
+            [(Service::Wikipedia, a), (Service::MusicBrainz, b)]
+        );
+    }
+
+    #[test]
+    fn a_player_appearing_with_a_track_found_before_decodes_its_cover() {
+        let t0 = Instant::now();
+        let mut store = Store::new();
+        store.apply(appeared(
+            UNIQUE,
+            BUS,
+            PlaybackStatus::Playing,
+            track("a", None),
+            secs(0),
+            t0,
+        ));
+        let request = found(&mut store, Service::MusicBrainz, b"jpeg", &image());
+        store.apply(Event::Vanished {
+            bus_name: BUS.into(),
+        });
+        store.apply(appeared(
+            ":1.99",
+            BUS,
+            PlaybackStatus::Playing,
+            track("a", None),
+            secs(0),
+            t0,
+        ));
+        assert_eq!(store.pending_covers(), [(request, Arc::from(&b"jpeg"[..]))]);
     }
 }

@@ -42,11 +42,11 @@ use zbus::message::Type as MessageType;
 use zbus::zvariant::{DynamicDeserialize, DynamicType, OwnedValue, Value};
 use zbus::{Connection, MatchRule, Message, MessageStream, connection};
 
-use crate::art::load_art;
+use crate::art::{ArtError, load_art};
 use crate::metadata::parse_track;
 use crate::model::{ArtImage, PlaybackStatus, Snapshot};
 use crate::network::{self, LookUp, Looked, Network};
-use crate::online::{Request, Wish};
+use crate::online::{self, Request, Wish};
 use crate::player::{
     player_key, read_identity, read_position, read_rate, read_status, unwrap_variant,
 };
@@ -386,8 +386,8 @@ impl<'a> Watcher<'a> {
 
     /// The outcome of an online lookup, which the network thread sends
     /// back, since only this thread writes the store.
-    async fn on_looked(&mut self, request: Request, image: Option<Arc<ArtImage>>) {
-        let changed = self.store.apply(Event::OnlineLooked { request, image });
+    async fn on_looked(&mut self, request: Request, cover: Option<Arc<[u8]>>) {
+        let changed = self.store.apply(Event::OnlineLooked { request, cover });
         self.commit(changed).await;
     }
 
@@ -567,26 +567,23 @@ impl<'a> Watcher<'a> {
             .any(|player| player.unique_name == owner)
     }
 
-    /// Loads the art the store waits for, then publishes, if anything
-    /// changed. Loading never runs on a render thread (B-41). It runs on
-    /// the `blocking` pool, awaited within the loop that races the stop
-    /// signal, because a cover on a hung network mount can block its reader
-    /// for good: a stop abandons such a load instead of waiting for it, and
-    /// [`ART_TIMEOUT`] gives up on it so the other players keep updating.
-    /// The abandoned read keeps its pool thread until the kernel returns,
-    /// at most one per track since a failed cover is not retried.
+    /// Loads the art the store waits for, starts the online lookups that
+    /// became needed, decodes the covers found online that shown tracks
+    /// need, then publishes, if anything changed. Loading and decoding
+    /// never run on a render thread (B-41). They run on the `blocking`
+    /// pool, awaited within the loop that races the stop signal, because a
+    /// cover on a hung network mount can block its reader for good: a stop
+    /// abandons such a load instead of waiting for it, and [`ART_TIMEOUT`]
+    /// gives up on it so the other players keep updating. The abandoned
+    /// read keeps its pool thread until the kernel returns, at most one per
+    /// track since a failed cover is not retried.
     async fn commit(&mut self, changed: bool) {
         if !changed {
             return;
         }
         for (owner, url) in self.store.pending_art() {
             let loading = url.clone();
-            let load = blocking::unblock(move || load_art(&loading));
-            let give_up = async {
-                Timer::after(ART_TIMEOUT).await;
-                None
-            };
-            let image = match async { Some(load.await) }.or(give_up).await {
+            let image = match off_loop(move || load_art(&loading)).await {
                 Some(Ok(image)) => Some(Arc::new(image)),
                 Some(Err(error)) => {
                     log::debug!("MPRIS: no art for {owner}: {error}");
@@ -605,11 +602,42 @@ impl<'a> Watcher<'a> {
                 image,
             });
         }
-        // A new track, or a cover that failed to load, may call for one.
+        // A new track, or a cover that failed to load, may call for a
+        // lookup, or for a cover found earlier in the session.
         self.look_up();
+        for (request, cover) in self.store.pending_covers() {
+            let decoding = request.clone();
+            let image = match off_loop(move || online::decode(&decoding, &cover)).await {
+                Some(Ok(image)) => Some(Arc::new(image)),
+                Some(Err(error)) => {
+                    log::debug!("MPRIS: online cover unreadable: {error}");
+                    None
+                }
+                None => {
+                    log::warn!(
+                        "MPRIS: an online cover took over {ART_TIMEOUT:?} to decode, shown without it"
+                    );
+                    None
+                }
+            };
+            self.store.apply(Event::OnlineDecoded { request, image });
+        }
         self.current = Arc::new(self.store.snapshot());
         publish(self.shared, self.current.clone());
     }
+}
+
+/// Runs `work`, which reads or decodes a cover, on the `blocking` pool,
+/// `None` once it takes over [`ART_TIMEOUT`].
+async fn off_loop(
+    work: impl FnOnce() -> Result<ArtImage, ArtError> + Send + 'static,
+) -> Option<Result<ArtImage, ArtError>> {
+    let work = blocking::unblock(work);
+    let give_up = async {
+        Timer::after(ART_TIMEOUT).await;
+        None
+    };
+    async { Some(work.await) }.or(give_up).await
 }
 
 /// Unique name of the process that sent `msg`.

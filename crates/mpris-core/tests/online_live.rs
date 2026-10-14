@@ -11,7 +11,7 @@ use std::time::Instant;
 
 use mpris_core::model::{Service, Track};
 use mpris_core::network::look_up_online;
-use mpris_core::online::request;
+use mpris_core::online::{decode, request};
 
 /// Prints the requests of the network module.
 struct StderrLog;
@@ -87,7 +87,8 @@ fn the_study_tracks_against_the_real_services() {
         eprintln!("{service:?} {title:?}");
         let started = Instant::now();
         let found = look_up_online(&request, &running);
-        let outcome = found.map_or("no cover".to_owned(), |image| {
+        let image = found.and_then(|cover| decode(&request, &cover).ok());
+        let outcome = image.map_or("no cover".to_owned(), |image| {
             format!("a {}x{} cover", image.width, image.height)
         });
         eprintln!("  => {outcome} in {:?}", started.elapsed());

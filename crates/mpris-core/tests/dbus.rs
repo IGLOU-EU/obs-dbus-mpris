@@ -8,11 +8,11 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use common::{
-    Fake, FakePlayer, HungFile, PrivateBus, find, metadata, own_name, png_data_url, secs, track,
-    wait_for, wait_until,
+    Fake, FakePlayer, HungFile, PrivateBus, find, metadata, own_name, png, png_data_url, secs,
+    track, wait_for, wait_until,
 };
 use mpris_core::dbus::Core;
-use mpris_core::model::{Art, ArtImage, PlaybackStatus, PlayerKey, Service};
+use mpris_core::model::{Art, PlaybackStatus, PlayerKey, Service};
 use mpris_core::online::{Request, Wish};
 use zbus::zvariant::Value;
 
@@ -622,13 +622,15 @@ fn asked_for(title: &str) -> usize {
 }
 
 /// Finds a 2 by 2 cover for anything.
-fn finds(request: &Request, _stopped: &AtomicBool) -> Option<ArtImage> {
+fn finds(request: &Request, _stopped: &AtomicBool) -> Option<Vec<u8>> {
     asked(request);
-    Some(ArtImage {
-        width: 2,
-        height: 2,
-        rgba: vec![9; 16],
-    })
+    Some(png(2, 2))
+}
+
+/// Finds something that is no image.
+fn finds_garbage(request: &Request, _stopped: &AtomicBool) -> Option<Vec<u8>> {
+    asked(request);
+    Some(b"<html>Not found</html>".to_vec())
 }
 
 fn musicbrainz() -> Option<Wish> {
@@ -728,6 +730,27 @@ fn a_withdrawn_wish_looks_nothing_more_up() {
 }
 
 #[test]
+fn a_cover_found_that_is_no_image_is_not_shown_nor_asked_again() {
+    let bus = PrivateBus::start();
+    let fake = FakePlayer::start(&bus, FAKE, without_cover("Garbage"));
+    let core = Core::start_with(&bus.address, finds_garbage);
+    discovered(&core, FAKE);
+    let mut wish = core.art_wish();
+    wish.set(musicbrainz());
+    wait_until("the lookup", || asked_for("Garbage") == 1);
+
+    fake.set_metadata(track("/fake/2", "After garbage", None));
+    fake.set_metadata(track("/fake/1", "Garbage", None));
+    wait_until("the next lookup", || asked_for("After garbage") == 1);
+    wait_for(&core, "the track back", |s| {
+        find(s, FAKE).is_some_and(|p| p.track.title.as_deref() == Some("Garbage"))
+    });
+    thread::sleep(Duration::from_millis(100));
+    assert_eq!(asked_for("Garbage"), 1);
+    assert!(find(&core.snapshot(), FAKE).is_some_and(|p| p.online.is_empty()));
+}
+
+#[test]
 fn a_player_with_its_own_cover_is_not_looked_up() {
     let bus = PrivateBus::start();
     let cover = png_data_url(4, 4);
@@ -754,7 +777,7 @@ static HANGING: AtomicBool = AtomicBool::new(false);
 static GAVE_UP: AtomicBool = AtomicBool::new(false);
 
 /// A lookup stuck on a service that never answers, until the core stops.
-fn hangs(request: &Request, stopped: &AtomicBool) -> Option<ArtImage> {
+fn hangs(request: &Request, stopped: &AtomicBool) -> Option<Vec<u8>> {
     asked(request);
     HANGING.store(true, Ordering::Relaxed);
     let end = Instant::now() + Duration::from_secs(10);

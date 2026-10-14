@@ -8,22 +8,18 @@ use std::thread;
 use std::time::Duration;
 
 use common::{
-    Fake, FakePlayer, PrivateBus, count, find, thread_names, track, wait_for, wait_until,
+    Fake, FakePlayer, PrivateBus, count, find, png, thread_names, track, wait_for, wait_until,
 };
 use mpris_core::dbus::Core;
-use mpris_core::model::{ArtImage, Service};
+use mpris_core::model::Service;
 use mpris_core::online::{Request, Wish};
 
 const FAKE: &str = "org.mpris.MediaPlayer2.fake.instance1";
 const THREAD: &str = "mpris-online";
 
 /// Finds a cover for anything, without network.
-fn finds(_request: &Request, _stopped: &AtomicBool) -> Option<ArtImage> {
-    Some(ArtImage {
-        width: 1,
-        height: 1,
-        rgba: vec![9; 4],
-    })
+fn finds(_request: &Request, _stopped: &AtomicBool) -> Option<Vec<u8>> {
+    Some(png(1, 1))
 }
 
 /// B-48: the thread waits for the first lookup, and stops with the core.
