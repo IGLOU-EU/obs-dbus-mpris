@@ -9,8 +9,8 @@ use libobs_sys::{
     obs_data_get_int, obs_data_get_string, obs_data_set_default_bool, obs_data_set_default_int,
     obs_data_set_default_string, obs_data_t, obs_properties_add_bool,
     obs_properties_add_color_alpha, obs_properties_add_int, obs_properties_add_list,
-    obs_properties_add_text, obs_properties_create, obs_properties_t, obs_property_list_add_string,
-    obs_property_t,
+    obs_properties_add_text, obs_properties_create, obs_properties_t, obs_property_int_set_suffix,
+    obs_property_list_add_string, obs_property_t,
 };
 use mpris_core::model::{Player, Rgba, Settings};
 use mpris_core::selection::player_choices;
@@ -90,15 +90,19 @@ pub fn properties(players: &[Player], remembered: Option<&str>) -> *mut obs_prop
         let (key, translation) = (c_string(field.key), c_string(&text(field.key)));
         let (name, label) = (key.as_ptr(), translation.as_ptr());
         // SAFETY: `props` is the live object created above, the strings are
-        // C strings alive across each call, which copies them, and the player
-        // list is created of string format, as `add_players` needs.
+        // C strings alive across each call, which copies them, the integer
+        // property is the one just added, and the player list is created of
+        // string format, as `add_players` needs.
         unsafe {
             match field.kind {
                 Kind::Bool => {
                     obs_properties_add_bool(props, name, label);
                 }
-                Kind::Int { min, max, .. } => {
-                    obs_properties_add_int(props, name, label, c_int_of(min), c_int_of(max), 1);
+                Kind::Int { min, max, unit } => {
+                    let property =
+                        obs_properties_add_int(props, name, label, c_int_of(min), c_int_of(max), 1);
+                    let suffix = c_string(&format!(" {}", unit.symbol()));
+                    obs_property_int_set_suffix(property, suffix.as_ptr());
                 }
                 Kind::Color => {
                     obs_properties_add_color_alpha(props, name, label);
