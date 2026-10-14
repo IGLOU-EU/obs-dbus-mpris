@@ -27,7 +27,7 @@ use mpris_core::dbus::Core;
 use mpris_core::model::{Art, Settings};
 use mpris_core::online::wish;
 use mpris_core::player::MPRIS_PREFIX;
-use mpris_core::selection::{GRACE, Phase, followed_after_choice, phase, player_choices, select};
+use mpris_core::selection::{ChoiceState, GRACE, Phase, phase, player_choices, select};
 use mpris_core::settings::SettingValue;
 use mpris_core::time::format_time;
 
@@ -59,13 +59,13 @@ const ONLINE: &str = "--online";
 
 fn main() {
     let mut settings = Settings::default();
-    let (mut settled, mut chosen_by_hand) = (false, false);
+    let (mut settled, mut manual) = (false, false);
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
             STRICT => settings.auto_select = false,
             SETTLED => settled = true,
-            MANUAL => chosen_by_hand = true,
+            MANUAL => manual = true,
             ONLINE => settings.art_online = Some(service(args.next())),
             _ => settings.player = Some(bus_name(arg)),
         }
@@ -79,10 +79,10 @@ fn main() {
     let core = Core::start();
     let mut art_wish = core.art_wish();
     let started = Instant::now();
-    let mut followed = if chosen_by_hand {
-        followed_after_choice(&settings)
+    let mut choice = if manual {
+        ChoiceState::chosen_by_hand(&settings)
     } else {
-        None
+        ChoiceState::default()
     };
     loop {
         thread::sleep(Duration::from_secs(1));
@@ -91,11 +91,12 @@ fn main() {
         let phase = if settled {
             Phase::Settled
         } else {
-            phase(started, chosen_by_hand, now)
+            phase(started, choice.chosen_by_hand, now)
         };
-        let selection = select(&snapshot.players, &settings, followed.as_deref(), phase);
+        let followed = choice.followed.as_deref();
+        let selection = select(&snapshot.players, &settings, followed, phase);
         let player = selection.player;
-        followed = selection.followed;
+        choice.followed = selection.followed;
         art_wish.set(wish(player, &settings));
         match player {
             Some(p) => println!(
@@ -114,7 +115,8 @@ fn main() {
             }
             Phase::Settled => println!("  phase   settled"),
         }
-        println!("  follows {}", followed.as_deref().unwrap_or("nothing"));
+        let followed = choice.followed.as_deref();
+        println!("  follows {}", followed.unwrap_or("nothing"));
         if let Some(url) = player.and_then(|p| p.track.url.as_deref()) {
             println!("  page    {url}");
         }

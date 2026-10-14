@@ -76,18 +76,83 @@ pub fn select<'a>(
     }
 }
 
-/// Whether going from `before` to `after` changes the choice of player,
-/// which is a choice by hand (B-05).
-pub fn choice_changed(before: &Settings, after: &Settings) -> bool {
-    (&before.player, before.auto_select) != (&after.player, after.auto_select)
+/// How a source chooses its player from one frame to the next (B-08).
+/// Held in memory only, never in the settings, so that each start of OBS
+/// gives the remembered player a new grace period.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ChoiceState {
+    /// Bus name of the followed player, handed to [`select`] and taken back
+    /// from it.
+    pub followed: Option<String>,
+    /// Whether a player was chosen by hand, which ends the grace period for
+    /// good (see [`phase`]).
+    pub chosen_by_hand: bool,
 }
 
-/// The followed player once `settings` were chosen by hand (B-05): the
-/// chosen instance at once, so that the source keeps to it from the first
-/// frame, present or not. "No choice" follows nothing, which leaves the
-/// next player to appear to the rule.
-pub fn followed_after_choice(settings: &Settings) -> Option<String> {
-    settings.player.clone()
+impl ChoiceState {
+    /// Right after `settings` were chosen by hand (B-05). The chosen
+    /// instance is followed at once, present or not, so that the source
+    /// keeps to it from the first frame. "No choice" follows nothing, which
+    /// leaves the next player to appear to the rule.
+    pub fn chosen_by_hand(settings: &Settings) -> ChoiceState {
+        ChoiceState {
+            followed: settings.player.clone(),
+            chosen_by_hand: true,
+        }
+    }
+}
+
+/// The choice of player a source had before its properties first changed
+/// it, and its choice state then, which Cancel brings back (B-05).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ChoiceUndo {
+    player: Option<String>,
+    auto_select: bool,
+    state: ChoiceState,
+}
+
+/// The choice state once the settings of a source go from `before` to
+/// `after`, and the record that undoes it (B-05).
+///
+/// OBS applies each edit of the properties at once, then sets the former
+/// settings again on Cancel. A choice that comes back to the recorded one
+/// is taken for that Cancel: the state from before comes back, grace
+/// period included, since cancelling is no choice by hand. Any other change
+/// of the choice is a choice by hand. The record keeps the state from
+/// before the first change, so that Cancel after several edits still finds
+/// it.
+pub fn rechoose(
+    state: ChoiceState,
+    undo: Option<ChoiceUndo>,
+    before: &Settings,
+    after: &Settings,
+) -> (ChoiceState, Option<ChoiceUndo>) {
+    if !choice_changed(before, after) {
+        return (state, undo);
+    }
+    match undo {
+        Some(undo) if (undo.player.as_deref(), undo.auto_select) == choice(after) => {
+            (undo.state, None)
+        }
+        undo => {
+            let undo = undo.unwrap_or_else(|| ChoiceUndo {
+                player: before.player.clone(),
+                auto_select: before.auto_select,
+                state,
+            });
+            (ChoiceState::chosen_by_hand(after), Some(undo))
+        }
+    }
+}
+
+fn choice_changed(before: &Settings, after: &Settings) -> bool {
+    choice(before) != choice(after)
+}
+
+/// The settings that choose the player (B-05), the others only change how
+/// it is drawn.
+fn choice(settings: &Settings) -> (Option<&str>, bool) {
+    (settings.player.as_deref(), settings.auto_select)
 }
 
 /// The steps of B-05, in their order.
@@ -339,27 +404,26 @@ mod tests {
     use Moment::{Choose, Frame};
 
     /// A source as the OBS glue drives it, its start instant, its choice
-    /// by hand and its followed player held beside its settings (B-08).
+    /// state and what undoes it held beside its settings (B-08).
     struct Source {
         settings: Settings,
         started: Instant,
-        chosen_by_hand: bool,
-        followed: Option<String>,
+        choice: ChoiceState,
+        undo: Option<ChoiceUndo>,
     }
 
     impl Source {
         fn choose(&mut self, settings: Settings) {
-            if choice_changed(&self.settings, &settings) {
-                self.chosen_by_hand = true;
-                self.followed = followed_after_choice(&settings);
-            }
+            let state = std::mem::take(&mut self.choice);
+            (self.choice, self.undo) = rechoose(state, self.undo.take(), &self.settings, &settings);
             self.settings = settings;
         }
 
         fn frame(&mut self, players: &[Player], now: Instant) -> Option<String> {
-            let phase = phase(self.started, self.chosen_by_hand, now);
-            let selection = select(players, &self.settings, self.followed.as_deref(), phase);
-            self.followed = selection.followed;
+            let phase = phase(self.started, self.choice.chosen_by_hand, now);
+            let followed = self.choice.followed.as_deref();
+            let selection = select(players, &self.settings, followed, phase);
+            self.choice.followed = selection.followed;
             selection.player.map(|p| p.bus_name.clone())
         }
     }
@@ -378,8 +442,8 @@ mod tests {
             let mut source = Source {
                 settings: settings(remembered, auto_select),
                 started,
-                chosen_by_hand: false,
-                followed: None,
+                choice: ChoiceState::default(),
+                undo: None,
             };
             let mut shown = Vec::new();
             for moment in moments {
@@ -457,8 +521,11 @@ mod tests {
         for remembered in [bus("mpv.instance-a"), bus("vlc")] {
             for auto_select in [true, false] {
                 assert_eq!(
-                    followed_after_choice(&settings(remembered.as_deref(), auto_select)),
-                    remembered,
+                    ChoiceState::chosen_by_hand(&settings(remembered.as_deref(), auto_select)),
+                    ChoiceState {
+                        followed: remembered.clone(),
+                        chosen_by_hand: true,
+                    },
                     "{auto_select}"
                 );
             }
@@ -469,11 +536,109 @@ mod tests {
     fn choosing_no_player_by_hand_follows_nothing() {
         for auto_select in [true, false] {
             assert_eq!(
-                followed_after_choice(&settings(None, auto_select)),
-                None,
+                ChoiceState::chosen_by_hand(&settings(None, auto_select)),
+                ChoiceState {
+                    followed: None,
+                    chosen_by_hand: true,
+                },
                 "{auto_select}"
             );
         }
+    }
+
+    // Cancel in the properties (B-05)
+
+    /// How a source chooses in grace once it has shown Chromium.
+    fn showing_chromium() -> ChoiceState {
+        ChoiceState {
+            followed: bus("chromium"),
+            chosen_by_hand: false,
+        }
+    }
+
+    #[test]
+    fn other_settings_leave_the_choice_state_alone() {
+        let mpv = settings(bus("mpv.instance-a").as_deref(), true);
+        let restyled = Settings {
+            width: 900,
+            fallback_text: "Rien".into(),
+            ..mpv.clone()
+        };
+        let undo = ChoiceUndo {
+            player: bus("vlc"),
+            auto_select: true,
+            state: ChoiceState::default(),
+        };
+        for undo in [None, Some(undo)] {
+            assert_eq!(
+                rechoose(showing_chromium(), undo.clone(), &mpv, &restyled),
+                (showing_chromium(), undo),
+            );
+        }
+    }
+
+    #[test]
+    fn a_new_choice_is_made_by_hand_and_recorded_for_cancel() {
+        let mpv = settings(bus("mpv.instance-a").as_deref(), true);
+        for after in [
+            settings(bus("vlc").as_deref(), true),
+            settings(None, true),
+            settings(bus("mpv.instance-a").as_deref(), false),
+        ] {
+            assert_eq!(
+                rechoose(showing_chromium(), None, &mpv, &after),
+                (
+                    ChoiceState::chosen_by_hand(&after),
+                    Some(ChoiceUndo {
+                        player: bus("mpv.instance-a"),
+                        auto_select: true,
+                        state: showing_chromium(),
+                    })
+                ),
+                "{after:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn coming_back_to_the_recorded_choice_restores_the_state_before_it() {
+        let mpv = settings(bus("mpv.instance-a").as_deref(), true);
+        for edited in [
+            settings(bus("vlc").as_deref(), true),
+            settings(None, true),
+            settings(bus("mpv.instance-a").as_deref(), false),
+        ] {
+            let (state, undo) = rechoose(showing_chromium(), None, &mpv, &edited);
+            assert_eq!(
+                rechoose(state, undo, &edited, &mpv),
+                (showing_chromium(), None),
+                "{edited:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn further_edits_keep_the_state_before_the_first_one() {
+        let mpv = settings(bus("mpv.instance-a").as_deref(), true);
+        let vlc = settings(bus("vlc").as_deref(), true);
+        let strict = settings(bus("audacious").as_deref(), false);
+        let (state, undo) = rechoose(showing_chromium(), None, &mpv, &vlc);
+        let (state, undo) = rechoose(state, undo, &vlc, &strict);
+        assert_eq!(
+            (&state, &undo),
+            (
+                &ChoiceState::chosen_by_hand(&strict),
+                &Some(ChoiceUndo {
+                    player: bus("mpv.instance-a"),
+                    auto_select: true,
+                    state: showing_chromium(),
+                })
+            )
+        );
+        assert_eq!(
+            rechoose(state, undo, &strict, &mpv),
+            (showing_chromium(), None)
+        );
     }
 
     // Scenario 13 (besoins.md, section 7)
@@ -771,22 +936,20 @@ mod tests {
     fn a_player_chosen_by_hand_while_closed_waits_for_its_launch() {
         let moments = [
             Frame(Duration::ZERO, vec![player("chromium", Playing)]),
-            // Another entry, then back to the remembered one, listed as
-            // unavailable.
-            Choose(bus("chromium"), true),
-            Choose(bus("mpv.instance-a"), true),
+            Choose(bus("vlc"), true),
             Frame(minutes(1), vec![player("chromium", Playing)]),
+            // Another entry, then back to VLC, listed as unavailable.
+            Choose(bus("chromium"), true),
+            Choose(bus("vlc"), true),
+            Frame(minutes(2), vec![player("chromium", Playing)]),
             Frame(
-                minutes(2),
-                vec![
-                    player("chromium", Playing),
-                    instance("mpv", "instance-b", Paused),
-                ],
+                minutes(3),
+                vec![player("chromium", Playing), player("vlc", Paused)],
             ),
         ];
         assert_eq!(
             shown_over(&moments, bus("mpv.instance-a").as_deref(), true),
-            [bus("chromium"), None, bus("mpv.instance-b")]
+            [bus("chromium"), None, None, bus("vlc")]
         );
     }
 
@@ -794,18 +957,197 @@ mod tests {
     fn checking_automatic_selection_by_hand_opens_no_grace_period() {
         let moments = [
             Frame(Duration::ZERO, vec![player("chromium", Playing)]),
-            Choose(None, false),
-            Frame(minutes(1), vec![player("chromium", Playing)]),
             Choose(None, true),
-            Frame(minutes(2), vec![player("chromium", Playing)]),
+            Frame(minutes(1), vec![player("chromium", Playing)]),
             Frame(
-                minutes(3),
+                minutes(2),
                 vec![player("chromium", Paused), player("audacious", Playing)],
             ),
         ];
         assert_eq!(
-            shown_over(&moments, None, true),
-            [bus("chromium"), None, bus("chromium"), bus("chromium")]
+            shown_over(&moments, None, false),
+            [None, bus("chromium"), bus("chromium")]
+        );
+    }
+
+    #[test]
+    fn cancel_in_grace_keeps_the_grace_period() {
+        let moments = [
+            Frame(Duration::ZERO, vec![player("chromium", Playing)]),
+            Choose(bus("vlc"), true),
+            Frame(
+                minutes(1),
+                vec![player("chromium", Playing), player("vlc", Paused)],
+            ),
+            Choose(bus("mpv.instance-a"), true),
+            Frame(
+                minutes(2),
+                vec![
+                    player("chromium", Playing),
+                    instance("mpv", "instance-b", Paused),
+                ],
+            ),
+            Frame(minutes(3), vec![player("chromium", Playing)]),
+            Frame(
+                minutes(6),
+                vec![
+                    player("chromium", Playing),
+                    instance("mpv", "instance-c", Playing),
+                ],
+            ),
+        ];
+        assert_eq!(
+            shown_over(&moments, bus("mpv.instance-a").as_deref(), true),
+            [
+                bus("chromium"),
+                bus("vlc"),
+                bus("mpv.instance-b"),
+                bus("chromium"),
+                bus("chromium"),
+            ]
+        );
+    }
+
+    #[test]
+    fn cancel_after_grace_keeps_the_followed_player() {
+        let usual = || instance("mpv", "instance-a", Playing);
+        let moments = [
+            Frame(Duration::ZERO, vec![player("chromium", Playing)]),
+            Frame(minutes(6), vec![player("chromium", Playing), usual()]),
+            Choose(bus("vlc"), true),
+            Frame(
+                minutes(7),
+                vec![player("chromium", Playing), usual(), player("vlc", Paused)],
+            ),
+            Choose(bus("mpv.instance-a"), true),
+            Frame(
+                minutes(8),
+                vec![player("chromium", Paused), usual(), player("vlc", Paused)],
+            ),
+        ];
+        assert_eq!(
+            shown_over(&moments, bus("mpv.instance-a").as_deref(), true),
+            [
+                bus("chromium"),
+                bus("chromium"),
+                bus("vlc"),
+                bus("chromium")
+            ]
+        );
+    }
+
+    #[test]
+    fn cancel_after_several_edits_restores_the_state_before_the_first() {
+        let usual = || instance("mpv", "instance-a", Playing);
+        let moments = [
+            Frame(Duration::ZERO, vec![player("chromium", Playing)]),
+            Frame(minutes(6), vec![player("chromium", Playing), usual()]),
+            Choose(bus("vlc"), true),
+            Frame(
+                minutes(7),
+                vec![player("chromium", Playing), usual(), player("vlc", Paused)],
+            ),
+            Choose(bus("audacious"), false),
+            Frame(
+                minutes(8),
+                vec![player("chromium", Playing), usual(), player("vlc", Paused)],
+            ),
+            Choose(None, true),
+            Choose(bus("mpv.instance-a"), true),
+            Frame(
+                minutes(9),
+                vec![player("chromium", Paused), usual(), player("vlc", Paused)],
+            ),
+        ];
+        assert_eq!(
+            shown_over(&moments, bus("mpv.instance-a").as_deref(), true),
+            [
+                bus("chromium"),
+                bus("chromium"),
+                bus("vlc"),
+                None,
+                bus("chromium"),
+            ]
+        );
+    }
+
+    #[test]
+    fn an_edit_kept_stays_a_choice_by_hand() {
+        let moments = [
+            Frame(Duration::ZERO, vec![player("chromium", Playing)]),
+            Choose(bus("vlc"), true),
+            Frame(
+                minutes(1),
+                vec![player("chromium", Playing), player("vlc", Paused)],
+            ),
+            Frame(
+                minutes(2),
+                vec![
+                    player("chromium", Playing),
+                    instance("mpv", "instance-a", Playing),
+                ],
+            ),
+            Choose(bus("chromium"), true),
+            Frame(minutes(3), vec![player("chromium", Paused)]),
+            Frame(
+                minutes(4),
+                vec![player("audacious", Playing), player("vlc", Playing)],
+            ),
+        ];
+        assert_eq!(
+            shown_over(&moments, bus("mpv.instance-a").as_deref(), true),
+            [bus("chromium"), bus("vlc"), None, bus("chromium"), None]
+        );
+    }
+
+    #[test]
+    fn the_defaults_button_then_ok_is_a_choice_of_no_player_by_hand() {
+        let moments = [
+            Frame(Duration::ZERO, vec![player("chromium", Playing)]),
+            // Defaults sets every setting back to its default, then OK sets
+            // the same again.
+            Choose(None, true),
+            Choose(None, true),
+            Frame(
+                minutes(1),
+                vec![player("chromium", Paused), player("vlc", Playing)],
+            ),
+            Frame(
+                minutes(2),
+                vec![
+                    player("chromium", Playing),
+                    player("vlc", Paused),
+                    instance("mpv", "instance-a", Playing),
+                ],
+            ),
+        ];
+        assert_eq!(
+            shown_over(&moments, bus("mpv.instance-a").as_deref(), true),
+            [bus("chromium"), bus("vlc"), bus("vlc")]
+        );
+    }
+
+    #[test]
+    fn the_defaults_button_then_cancel_changes_nothing() {
+        let moments = [
+            Frame(Duration::ZERO, vec![player("chromium", Playing)]),
+            Choose(None, true),
+            Choose(bus("mpv.instance-a"), true),
+            Frame(
+                minutes(1),
+                vec![player("chromium", Paused), player("vlc", Playing)],
+            ),
+            Frame(
+                minutes(2),
+                vec![
+                    player("vlc", Playing),
+                    instance("mpv", "instance-b", Paused),
+                ],
+            ),
+        ];
+        assert_eq!(
+            shown_over(&moments, bus("mpv.instance-a").as_deref(), true),
+            [bus("chromium"), bus("vlc"), bus("mpv.instance-b")]
         );
     }
 

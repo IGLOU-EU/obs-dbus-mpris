@@ -21,7 +21,7 @@ use mpris_core::content::content;
 use mpris_core::dbus::ArtWish;
 use mpris_core::model::Settings;
 use mpris_core::online::wish;
-use mpris_core::selection::{choice_changed, followed_after_choice, phase, select};
+use mpris_core::selection::{ChoiceState, ChoiceUndo, phase, rechoose, select};
 use render::draw::{Picture, RedrawKey, redraw_key};
 use render::frame::Frame;
 use render::layout::layout;
@@ -51,16 +51,14 @@ struct Source {
 
 /// What the source last asked the worker for, and what it shows.
 struct View {
-    /// Bus name of the player the source keeps to (B-08), `None` until one
-    /// shows or is chosen by hand. This and the two below live in memory
-    /// only, never in the settings, so that each start of OBS gives the
-    /// remembered player a new grace period.
-    followed: Option<String>,
     /// When the source was created, which opens its grace period (B-05).
+    /// In memory only, like the two below, so that each start of OBS gives
+    /// the remembered player a new grace period (B-08).
     started: Instant,
-    /// Whether a player was chosen by hand in the properties, which ends
-    /// the grace period for good (B-05).
-    chosen_by_hand: bool,
+    /// The followed player, and whether a player was chosen by hand.
+    choice: ChoiceState,
+    /// What Cancel in the properties brings back (B-05).
+    undo: Option<ChoiceUndo>,
     /// Tells the core which online cover the source wants, if any (B-18).
     /// `None` without a core. Dropped with the source, which withdraws it.
     art_wish: Option<ArtWish>,
@@ -185,9 +183,9 @@ unsafe extern "C" fn create(data: *mut obs_data_t, _source: *mut obs_source_t) -
         // SAFETY: OBS passes the live settings of the new source.
         let settings = unsafe { settings::read(data) };
         let view = View {
-            followed: None,
             started: Instant::now(),
-            chosen_by_hand: false,
+            choice: ChoiceState::default(),
+            undo: None,
             art_wish: art_wish(),
             asked: None,
             texture: None,
@@ -241,18 +239,11 @@ unsafe extern "C" fn update(data: *mut c_void, obs_settings: *mut obs_data_t) {
         let Some(source) = source else {
             return;
         };
-        let followed = followed_after_choice(&settings);
-        let rechosen = {
-            let mut current = source.settings();
-            let rechosen = choice_changed(&current, &settings);
-            *current = settings;
-            rechosen
-        };
-        if rechosen {
-            let mut view = source.view();
-            view.chosen_by_hand = true;
-            view.followed = followed;
-        }
+        let before = std::mem::replace(&mut *source.settings(), settings.clone());
+        let mut view = source.view();
+        let state = std::mem::take(&mut view.choice);
+        let undo = view.undo.take();
+        (view.choice, view.undo) = rechoose(state, undo, &before, &settings);
     });
 }
 
@@ -301,14 +292,14 @@ unsafe extern "C" fn video_tick(data: *mut c_void, _seconds: f32) {
         let snapshot = snapshot();
         let now = Instant::now();
         let mut view = source.view();
-        let phase = phase(view.started, view.chosen_by_hand, now);
+        let phase = phase(view.started, view.choice.chosen_by_hand, now);
         let selection = select(
             &snapshot.players,
             &settings,
-            view.followed.as_deref(),
+            view.choice.followed.as_deref(),
             phase,
         );
-        view.followed = selection.followed;
+        view.choice.followed = selection.followed;
         if let Some(art_wish) = &mut view.art_wish {
             art_wish.set(wish(selection.player, &settings));
         }
