@@ -294,7 +294,7 @@ async fn watch(
             Input::Owner(msg) => watcher.on_owner_changed(&msg).await,
             Input::Player(msg) => watcher.on_player_signal(&msg).await,
             Input::Wish((source, wish)) => watcher.on_wish(source, wish),
-            Input::Looked((request, image)) => watcher.on_looked(request, image).await,
+            Input::Looked((request, cover)) => watcher.on_looked(request, cover).await,
             Input::Poll => {
                 watcher.poll_positions().await;
                 // Counted from the end of the poll, so a slow player never

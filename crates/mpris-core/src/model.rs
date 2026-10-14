@@ -108,9 +108,9 @@ pub struct Player {
     pub track: Track,
     pub anchor: PositionAnchor,
     pub art: Art,
-    /// Covers found online for the current track, one per service that
-    /// found one (B-18). Filled when a snapshot is taken, from the cache
-    /// of the session, so that it always follows the track.
+    /// Covers found online for the current track, decoded, one per service
+    /// that found one (B-18). Dropped when the track changes, so that only
+    /// the shown tracks hold a decoded cover.
     pub online: Vec<(Service, Arc<ArtImage>)>,
 }
 
