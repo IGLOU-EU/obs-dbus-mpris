@@ -11,12 +11,12 @@ Les validations se font dans OBS Flatpak. Le build natif est produit à chaque p
 | Phase | Objet | État |
 |-------|-------|------|
 | 0 | Cadrage | fait |
-| 1 | Squelette marchant, natif et Flatpak | fait, essai dans OBS en attente |
+| 1 | Squelette marchant, natif et Flatpak | fait, validé dans OBS |
 | 2 | Cœur MPRIS, hors OBS | fait, lecteur local (Strawberry ou Elisa) à vérifier à l'occasion |
 | 3 | Rendu et disposition | fait, validé dans OBS |
 | 4 | Source complète | fait, validé dans OBS |
 | 5 | Pochette en ligne, en option | fait, essai dans OBS en attente |
-| 6 | Réglages visuels | fait, essai dans OBS en attente |
+| 6 | Réglages visuels | fait, validé dans OBS |
 | 7 | Distribution, version 1.0 | à faire |
 
 ## Phase 0. Cadrage
@@ -113,7 +113,7 @@ Demandés le 2026-10-14 après l'essai de la phase 3 dans OBS, et traités avant
 
 Rendus vérifiés hors d'OBS le 2026-10-14, identiques sur l'hôte et dans le bac à sable Flatpak. Coût mesuré : 5,2 ms pour le premier dessin d'une piste avec deux bandes, puis 0,65 ms par seconde, les bandes étant réutilisées. Par image, le rendu ne fait que décaler les bandes.
 
-Puis, demandés après l'essai de ces réglages dans OBS : sélection automatique limitée à un délai de grâce de 5 minutes avec un lecteur suivi par source (B-05 à B-08), vitesse de défilement à 0 pour le désactiver (B-36), textes d'aide (B-52), liste « Pochette en ligne » en fin de groupe, épaisseur de la barre (B-50) et propriétés rangées en groupes (B-51). Groupes, ordre et textes d'aide vérifiés sans interface dans le bac à sable le 2026-10-14 (étude `~/Sourcery/Etudes/obs-dbus-mpris-groupes-proprietes/`). Le délai de grâce (scénario 13) reste à valider dans OBS.
+Puis, demandés après l'essai de ces réglages dans OBS : sélection automatique limitée à un délai de grâce de 5 minutes avec un lecteur suivi par source (B-05 à B-08), vitesse de défilement à 0 pour le désactiver (B-36), textes d'aide (B-52), liste « Pochette en ligne » en fin de groupe, épaisseur de la barre (B-50) et propriétés rangées en groupes (B-51). Groupes, ordre et textes d'aide vérifiés sans interface dans le bac à sable le 2026-10-14 (étude `~/Sourcery/Etudes/obs-dbus-mpris-groupes-proprietes/`). Le délai de grâce (scénario 13), le choix manuel définitif et « Annuler » ont été validés dans OBS le 2026-10-14.
 
 Besoins couverts : B-05 à B-08, B-19, B-36, B-38, B-39, B-50, B-51, B-52.
 
