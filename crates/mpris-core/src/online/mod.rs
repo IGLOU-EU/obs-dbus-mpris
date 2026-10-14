@@ -6,6 +6,7 @@
 pub mod cleanup;
 pub mod musicbrainz;
 pub mod wikipedia;
+pub mod youtube;
 
 use percent_encoding::{AsciiSet, NON_ALPHANUMERIC, utf8_percent_encode};
 
