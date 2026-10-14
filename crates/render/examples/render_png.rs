@@ -395,7 +395,7 @@ fn variants(now: Instant) -> Vec<Variant> {
         Variant {
             name: "21-long-title-ellipsis",
             settings: Settings {
-                scroll_speed: 0,
+                scroll_enabled: false,
                 ..Settings::default()
             },
             player: Some(long_player(now)),

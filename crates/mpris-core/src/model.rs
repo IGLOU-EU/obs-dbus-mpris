@@ -157,8 +157,11 @@ pub struct Settings {
     pub font_size_time: u32,
     /// Corners of the panel and the thumbnail, 0 for square ones (B-38).
     pub corner_radius: u32,
-    /// Pixels per second at which a text too long for its line scrolls, 0
-    /// to cut it with an ellipsis instead (B-36).
+    /// Whether a text too long for its line scrolls, rather than ends with
+    /// an ellipsis (B-36).
+    pub scroll_enabled: bool,
+    /// Pixels per second at which a text too long for its line scrolls
+    /// (B-36).
     pub scroll_speed: u32,
     /// The stop of a scrolling text at its start, before each round (B-36).
     pub scroll_pause: Duration,

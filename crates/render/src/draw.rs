@@ -75,7 +75,7 @@ pub fn draw(
 /// Whether a text too long for its line scrolls, rather than ends with an
 /// ellipsis (B-36).
 fn scrolls(settings: &Settings) -> bool {
-    settings.scroll_speed > 0
+    settings.scroll_enabled
 }
 
 /// Filled part of a bar `width` pixels wide, in whole pixels, so that a
@@ -361,7 +361,7 @@ mod tests {
     fn no_bar_no_scroll() -> Settings {
         with(|s| {
             s.show_progress = false;
-            s.scroll_speed = 0;
+            s.scroll_enabled = false;
         })
     }
 
@@ -943,13 +943,26 @@ mod tests {
     }
 
     #[test]
-    fn zero_speed_cuts_a_long_title_with_an_ellipsis_instead() {
+    fn scrolling_off_cuts_a_long_title_with_an_ellipsis_instead() {
         let Some(mut fonts) = test_fonts() else {
             return;
         };
         let (layout, picture) = picture_of(&mut fonts, &no_bar_no_scroll(), &texts(LONG, false));
         assert!(picture.strips.is_empty());
         assert!(!ink(&picture.frame, some(layout.title)).is_empty());
+    }
+
+    #[test]
+    fn the_slowest_speed_still_scrolls() {
+        let Some(mut fonts) = test_fonts() else {
+            return;
+        };
+        let slowest = with(|s| {
+            s.show_progress = false;
+            s.scroll_speed = 1;
+        });
+        let (layout, picture) = picture_of(&mut fonts, &slowest, &texts(LONG, false));
+        assert_eq!(lines(&picture), [some(layout.title)]);
     }
 
     #[test]
@@ -1163,7 +1176,7 @@ mod tests {
     #[test]
     fn turning_the_scrolling_on_or_off_changes_the_key() {
         let base = key(&settings(), &playing(10, 0.5));
-        let still = with(|s| s.scroll_speed = 0);
+        let still = with(|s| s.scroll_enabled = false);
         assert_ne!(key(&still, &playing(10, 0.5)), base);
     }
 
