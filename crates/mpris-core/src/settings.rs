@@ -114,6 +114,17 @@ pub struct Field {
     pub group: Group,
     pub kind: Kind,
     pub default: DefaultValue,
+    /// Whether OBS shows a help text beside the property (B-52), found
+    /// under [`Field::help_key`] in the locale files.
+    pub help: bool,
+}
+
+impl Field {
+    /// Derived from the setting key, so that a help text cannot drift
+    /// from its setting. The dot keeps it apart from every setting key.
+    pub fn help_key(&self) -> Option<String> {
+        self.help.then(|| format!("{}.Help", self.key))
+    }
 }
 
 /// A setting value as read from OBS.
@@ -150,6 +161,7 @@ const PLAYER: Field = Field {
     group: Group::Player,
     kind: Kind::Player,
     default: DefaultValue::Text(""),
+    help: false,
 };
 const AUTO_SELECT: Field = flag(Group::Player, "auto_select", true);
 const SHOW_ART: Field = flag(Group::Elements, "show_art", true);
@@ -167,6 +179,8 @@ const ART_ONLINE: Field = Field {
     group: Group::Elements,
     kind: Kind::Choice(&ART_ONLINE_CHOICES),
     default: DefaultValue::Text(NO_SERVICE),
+    // What each service does and is sent, so that the choice is informed.
+    help: true,
 };
 const NO_SERVICE: &str = "none";
 /// The services in the order of B-18.
@@ -198,15 +212,18 @@ const FONT_SIZE_TITLE: Field = size(Group::Text, "font_size_title", 32, MAX_FONT
 const FONT_SIZE_SUBTITLE: Field = size(Group::Text, "font_size_subtitle", 24, MAX_FONT_SIZE);
 const FONT_SIZE_TIME: Field = size(Group::Text, "font_size_time", 20, MAX_FONT_SIZE);
 /// Down to 0, the one way to stop the scrolling: a long text then ends with
-/// an ellipsis (B-36).
-const SCROLL_SPEED: Field = int(
-    Group::Text,
-    "scroll_speed",
-    40,
-    0,
-    MAX_SCROLL_SPEED,
-    Unit::PixelPerSecond,
-);
+/// an ellipsis (B-36). Its help text says so, since nothing else would.
+const SCROLL_SPEED: Field = Field {
+    help: true,
+    ..int(
+        Group::Text,
+        "scroll_speed",
+        40,
+        0,
+        MAX_SCROLL_SPEED,
+        Unit::PixelPerSecond,
+    )
+};
 const SCROLL_PAUSE: Field = int(
     Group::Text,
     "scroll_pause",
@@ -223,6 +240,7 @@ const FALLBACK_TEXT: Field = Field {
         locale_key: "FallbackText",
         english: "Nothing playing",
     },
+    help: false,
 };
 const COLOR_BACKGROUND: Field = color("color_background", Rgba::new(0x00, 0x00, 0x00, 153));
 const COLOR_TEXT: Field = color("color_text", Rgba::new(0xFF, 0xFF, 0xFF, 255));
@@ -267,6 +285,7 @@ const fn flag(group: Group, key: &'static str, default: bool) -> Field {
         group,
         kind: Kind::Bool,
         default: DefaultValue::Bool(default),
+        help: false,
     }
 }
 
@@ -277,6 +296,7 @@ const fn color(key: &'static str, default: Rgba) -> Field {
         group: Group::Colors,
         kind: Kind::Color,
         default: DefaultValue::Color(default),
+        help: false,
     }
 }
 
@@ -293,6 +313,7 @@ const fn int(
         group,
         kind: Kind::Int { min, max, unit },
         default: DefaultValue::Int(default),
+        help: false,
     }
 }
 
@@ -732,6 +753,25 @@ mod tests {
         let flag =
             Settings::from_lookup(|k| (k == "art_online").then_some(SettingValue::Bool(true)));
         assert_eq!(flag.art_online, None);
+    }
+
+    /// B-52: what a speed of 0 does, and what each online service is sent.
+    #[test]
+    fn only_the_scroll_speed_and_the_online_cover_have_a_help_text() {
+        let helped: Vec<&str> = FIELDS.iter().filter(|f| f.help).map(|f| f.key).collect();
+        assert_eq!(helped, ["art_online", "scroll_speed"]);
+    }
+
+    #[test]
+    fn a_help_text_is_found_under_the_setting_key_and_help() {
+        let help_key = |key: &str| field(key).and_then(Field::help_key);
+        assert_eq!(
+            help_key("scroll_speed").as_deref(),
+            Some("scroll_speed.Help")
+        );
+        assert_eq!(help_key("art_online").as_deref(), Some("art_online.Help"));
+        assert_eq!(help_key("width"), None);
+        assert_eq!(help_key("scroll_pause"), None);
     }
 
     #[test]

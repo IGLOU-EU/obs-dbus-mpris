@@ -10,7 +10,8 @@ use libobs_sys::{
     obs_data_set_default_int, obs_data_set_default_string, obs_data_t, obs_properties_add_bool,
     obs_properties_add_color_alpha, obs_properties_add_group, obs_properties_add_int,
     obs_properties_add_list, obs_properties_add_text, obs_properties_create, obs_properties_t,
-    obs_property_int_set_suffix, obs_property_list_add_string, obs_property_t,
+    obs_property_int_set_suffix, obs_property_list_add_string, obs_property_set_long_description,
+    obs_property_t,
 };
 use mpris_core::model::{Player, Rgba, Settings};
 use mpris_core::selection::player_choices;
@@ -82,8 +83,9 @@ pub unsafe fn read(data: *mut obs_data_t) -> Settings {
 
 /// The properties of a source, one per schema field in the titled group of
 /// that field, the groups in their order (B-51), each property labelled by
-/// the translation of its key. The player list offers `players` and the
-/// `remembered` instance, present or not (B-02, B-03).
+/// the translation of its key, with the help text the schema gives it
+/// (B-52). The player list offers `players` and the `remembered` instance,
+/// present or not (B-02, B-03).
 ///
 /// OBS keeps the values of grouped properties among the settings of the
 /// source itself, so the groups change nothing to how settings are stored
@@ -128,7 +130,8 @@ unsafe fn add_group(props: *mut obs_properties_t, group: Group) -> *mut obs_prop
     }
 }
 
-/// Adds the property that declares `field` to `props`.
+/// Adds the property that declares `field` to `props`, with its help text
+/// if the schema gives it one.
 ///
 /// # Safety
 ///
@@ -145,23 +148,18 @@ unsafe fn add_property(
     // are C strings alive across each call, which copies them, the integer
     // property is the one just added, and both lists are created of string
     // format, as `add_players` and `add_choices` need.
-    unsafe {
+    let property = unsafe {
         match field.kind {
-            Kind::Bool => {
-                obs_properties_add_bool(props, name, label);
-            }
+            Kind::Bool => obs_properties_add_bool(props, name, label),
             Kind::Int { min, max, unit } => {
                 let property =
                     obs_properties_add_int(props, name, label, c_int_of(min), c_int_of(max), 1);
                 let suffix = c_string(&format!(" {}", unit.symbol()));
                 obs_property_int_set_suffix(property, suffix.as_ptr());
+                property
             }
-            Kind::Color => {
-                obs_properties_add_color_alpha(props, name, label);
-            }
-            Kind::Text => {
-                obs_properties_add_text(props, name, label, OBS_TEXT_DEFAULT);
-            }
+            Kind::Color => obs_properties_add_color_alpha(props, name, label),
+            Kind::Text => obs_properties_add_text(props, name, label, OBS_TEXT_DEFAULT),
             Kind::Player => {
                 let list = obs_properties_add_list(
                     props,
@@ -171,6 +169,7 @@ unsafe fn add_property(
                     OBS_COMBO_FORMAT_STRING,
                 );
                 add_players(list, players, remembered);
+                list
             }
             Kind::Choice(choices) => {
                 let list = obs_properties_add_list(
@@ -181,8 +180,15 @@ unsafe fn add_property(
                     OBS_COMBO_FORMAT_STRING,
                 );
                 add_choices(list, choices);
+                list
             }
         }
+    };
+    if let Some(help_key) = field.help_key() {
+        let help = c_string(&text(&help_key));
+        // SAFETY: `property` is the one just added to the live `props`, and
+        // the help is a C string alive across the call, which copies it.
+        unsafe { obs_property_set_long_description(property, help.as_ptr()) };
     }
 }
 

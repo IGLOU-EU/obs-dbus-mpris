@@ -16,9 +16,10 @@ const LOCALES: [&str; 2] = ["en-US", "fr-FR"];
 const GLUE_KEYS: [&str; 3] = ["SourceName", "PlayerNone", "PlayerUnavailable"];
 
 /// Every key the plugin looks up: each field labels its property with its
-/// own key, a translated default adds its locale key, each choice of a
-/// list labels itself with its own, each group titles itself with its key,
-/// and the glue adds its own.
+/// own key, a field with a help text adds its help key, a translated
+/// default adds its locale key, each choice of a list labels itself with
+/// its own, each group titles itself with its key, and the glue adds its
+/// own.
 fn expected_keys() -> Vec<String> {
     let mut keys: Vec<String> = FIELDS
         .iter()
@@ -31,11 +32,14 @@ fn expected_keys() -> Vec<String> {
                 Kind::Choice(choices) => choices.iter().map(|choice| choice.locale_key).collect(),
                 _ => Vec::new(),
             };
-            std::iter::once(field.key).chain(translated).chain(choices)
+            std::iter::once(field.key)
+                .chain(translated)
+                .chain(choices)
+                .map(str::to_owned)
+                .chain(field.help_key())
         })
-        .chain(Group::ALL.map(Group::key))
-        .chain(GLUE_KEYS)
-        .map(str::to_owned)
+        .chain(Group::ALL.map(Group::key).map(str::to_owned))
+        .chain(GLUE_KEYS.map(str::to_owned))
         .collect();
     keys.sort();
     keys
@@ -63,7 +67,10 @@ fn entries(locale: &str) -> BTreeMap<String, String> {
             .and_then(|(key, rest)| Some((key, rest.strip_suffix('"')?)))
             .unwrap_or_else(|| panic!("{locale}: malformed line {line:?}"));
         assert!(
-            !key.is_empty() && key.chars().all(|c| c.is_ascii_alphanumeric() || c == '_'),
+            !key.is_empty()
+                && key
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '.'),
             "{locale}: bad key in {line:?}"
         );
         assert!(
