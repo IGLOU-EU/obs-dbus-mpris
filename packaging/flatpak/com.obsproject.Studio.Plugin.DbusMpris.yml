@@ -36,6 +36,7 @@ modules:
         skip:
           - .git
           - .flatpak-builder
+          - .claude
           - target
           - tools/gen-libobs-bindings/target
       - cargo-sources.json
