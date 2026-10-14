@@ -76,6 +76,18 @@ pub enum Art {
     Failed,
 }
 
+/// A service a source may look a missing cover up with (B-18).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum Service {
+    MusicBrainz,
+    Wikipedia,
+    YouTube,
+}
+
+impl Service {
+    pub const ALL: [Service; 3] = [Service::MusicBrainz, Service::Wikipedia, Service::YouTube];
+}
+
 /// One player present on the bus.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Player {

@@ -158,8 +158,8 @@ pub fn load_art(url: &str) -> Result<ArtImage, ArtError> {
 const MAX_ART_SIDE: u32 = 1024;
 
 /// Generous for any cover, small enough to refuse a video or a disk image
-/// named by mistake.
-const MAX_FILE_BYTES: u64 = 32 * 1024 * 1024;
+/// named by mistake. Downloaded covers are held to it too.
+pub(crate) const MAX_FILE_BYTES: u64 = 32 * 1024 * 1024;
 
 /// Larger than any real cover. A header claiming more is refused before
 /// its pixel buffer is allocated.
@@ -202,7 +202,9 @@ fn read_file(path: &Path, max_bytes: u64) -> Result<Vec<u8>, ArtError> {
     Ok(bytes)
 }
 
-fn decode(bytes: &[u8]) -> Result<ArtImage, ArtError> {
+/// Decodes the bytes of a cover, whatever their origin, within the limits
+/// above.
+pub(crate) fn decode(bytes: &[u8]) -> Result<ArtImage, ArtError> {
     let mut reader = ImageReader::new(Cursor::new(bytes)).with_guessed_format()?;
     reader.limits(decode_limits());
     let image = reader.decode().map_err(ArtError::Decode)?;
