@@ -1,0 +1,41 @@
+# Flatpak extension of OBS Studio, built offline (architecture.md, Flatpak).
+# scripts/build-flatpak.sh builds it, checks the library and packs the bundle.
+#
+# cargo-sources.json lists every crate of Cargo.lock, so that the build never
+# reaches the network. Regenerate it whenever Cargo.lock changes, with
+# flatpak-cargo-generator.py from flatpak-builder-tools (cargo folder):
+#   python3 flatpak-cargo-generator.py Cargo.lock -o packaging/flatpak/cargo-sources.json
+id: com.obsproject.Studio.Plugin.DbusMpris
+branch: stable
+runtime: com.obsproject.Studio
+runtime-version: stable
+sdk: org.freedesktop.Sdk//25.08
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.rust-stable
+build-extension: true
+separate-locales: false
+build-options:
+  # Where OBS Flatpak mounts the extensions of its extension point.
+  prefix: /app/plugins/DbusMpris
+  append-path: /usr/lib/sdk/rust-stable/bin
+  env:
+    # The vendored crates and the cargo config that points at them, both
+    # laid out by cargo-sources.json.
+    CARGO_HOME: /run/build/obs-dbus-mpris/cargo
+modules:
+  - name: obs-dbus-mpris
+    buildsystem: simple
+    build-commands:
+      - cargo --offline build --release --locked -p obs-mpris
+      - install -Dm755 target/release/libobs_mpris.so ${FLATPAK_DEST}/lib/obs-plugins/obs-dbus-mpris.so
+      - install -Dm644 -t ${FLATPAK_DEST}/share/obs/obs-plugins/obs-dbus-mpris/locale crates/obs-mpris/data/locale/*.ini
+      - install -Dm644 packaging/flatpak/${FLATPAK_ID}.metainfo.xml ${FLATPAK_DEST}/share/metainfo/${FLATPAK_ID}.metainfo.xml
+    sources:
+      - type: dir
+        path: ../..
+        skip:
+          - .git
+          - .flatpak-builder
+          - target
+          - tools/gen-libobs-bindings/target
+      - cargo-sources.json

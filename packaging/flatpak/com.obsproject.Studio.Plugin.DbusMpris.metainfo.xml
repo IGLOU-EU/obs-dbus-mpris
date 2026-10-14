@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Lets software centers list the extension as an add-on of OBS Studio. -->
+<component type="addon">
+  <id>com.obsproject.Studio.Plugin.DbusMpris</id>
+  <extends>com.obsproject.Studio</extends>
+  <name>Now Playing (MPRIS)</name>
+  <summary>Show what a media player is playing, read over MPRIS</summary>
+  <description>
+    <p>A source that shows the title, artist, album, cover and progress of the track a media player is playing, read from the D-Bus session bus.</p>
+  </description>
+  <developer id="eu.iglou">
+    <name>Adrien Kara</name>
+  </developer>
+  <url type="homepage">https://gitlab.com/iglou.eu/obs-dbus-mpris</url>
+  <url type="bugtracker">https://gitlab.com/iglou.eu/obs-dbus-mpris/-/issues</url>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+</component>
