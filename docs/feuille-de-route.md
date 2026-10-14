@@ -17,7 +17,7 @@ Les validations se font dans OBS Flatpak. Le build natif est produit à chaque p
 | 4 | Source complète | fait, validé dans OBS |
 | 5 | Pochette en ligne, en option | fait, validé dans OBS |
 | 6 | Réglages visuels | fait, validé dans OBS |
-| 7 | Distribution, version 1.0 | fait, v1.0.0 taguée le 2026-10-15, essai à partir des fichiers de la release en attente |
+| 7 | Distribution, version 1.0 | fait, v1.0.0 publiée le 2026-10-15, essai à partir des fichiers de la release en attente |
 
 ## Phase 0. Cadrage
 
@@ -128,7 +128,9 @@ Fait le 2026-10-14, sans rien publier :
 
 Puis le 2026-10-15 : capture d'écran dans `docs/captures/` et dans les README, premier push sur GitLab avec des pipelines de test et de build verts, intégration continue limitée aux changements de code ou d'empaquetage (un tag construit toujours), entrée 1.0.0 du `CHANGELOG.md` datée, tag `v1.0.0`.
 
-Reste à faire : vérifier la release créée par le pipeline du tag, puis jouer les scénarios d'acceptation à partir de ses fichiers.
+Pipeline du tag vert, release `v1.0.0` créée avec ses notes et ses deux fichiers, téléchargeables sans authentification depuis le registre de paquets. Archive vérifiée (structure, glibc 2.35 au plus) et bundle vérifié (en-tête, ref `com.obsproject.Studio.Plugin.DbusMpris` sur la branche stable).
+
+Reste à faire : installer le bundle de la release à la place de la copie de développement, et jouer les scénarios d'acceptation avec lui.
 
 **Fini quand** la version 1.0 est publiée et que tous les scénarios d'acceptation passent dans OBS Flatpak à partir des artefacts de la release.
 
