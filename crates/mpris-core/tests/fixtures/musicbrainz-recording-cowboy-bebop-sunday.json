@@ -1,0 +1,1068 @@
+{
+ "recordings": [
+  {
+   "id": "a84a7146-6fef-4559-8528-bddb8ffc0218",
+   "score": 100,
+   "title": "Cowboy Hat",
+   "artist-credit": [
+    {
+     "name": "Caffeine Sunday",
+     "artist": {
+      "id": "1c2d6c79-8519-4629-9906-7077c751c7a1",
+      "name": "Caffeine Sunday",
+      "sort-name": "Caffeine Sunday"
+     }
+    }
+   ],
+   "first-release-date": "2009",
+   "releases": [
+    {
+     "id": "42e97da7-8a61-40fc-b533-db9aa338a47e",
+     "title": "I Wish I Could Film Tonight in Black and White",
+     "status": "Official",
+     "release-group": {
+      "id": "5897a29a-131f-419a-af79-06e6491cab78",
+      "title": "I Wish I Could Film Tonight in Black and White",
+      "primary-type": "Album"
+     },
+     "date": "2009"
+    }
+   ]
+  },
+  {
+   "id": "414238f5-43fa-45ff-b49d-24428578fe44",
+   "score": 89,
+   "title": "Week by Week",
+   "artist-credit": [
+    {
+     "name": "Sunday",
+     "artist": {
+      "id": "e95d767e-8304-4a6a-b7b8-c1051d259992",
+      "name": "Sunday",
+      "sort-name": "Sunday"
+     }
+    }
+   ],
+   "first-release-date": "1980-12",
+   "releases": [
+    {
+     "id": "c9bf49ee-6738-4bfb-b766-b21d7425dbb5",
+     "title": "Disco ’81",
+     "status": "Official",
+     "artist-credit": [
+      {
+       "name": "Various Artists",
+       "artist": {
+        "id": "89ad4ac3-39f7-470e-963a-56509c546377",
+        "name": "Various Artists",
+        "sort-name": "Various Artists"
+       }
+      }
+     ],
+     "release-group": {
+      "id": "3b34204a-0558-43f7-9cc8-ff7e42fc55a8",
+      "title": "Disco ’81",
+      "primary-type": "Album",
+      "secondary-types": [
+       "Compilation"
+      ]
+     },
+     "date": "1980-12"
+    }
+   ]
+  },
+  {
+   "id": "38be02c7-82dd-4f39-b761-bb5690a54a61",
+   "score": 80,
+   "title": "Argo (Original Mix)",
+   "artist-credit": [
+    {
+     "name": "Sunday Bath",
+     "artist": {
+      "id": "21e2baa9-1952-493a-8365-4de1383901f0",
+      "name": "Sunday Bath",
+      "sort-name": "Sunday Bath",
+      "aliases": [
+       {
+        "sort-name": "Ochiuzzo, Giacomo",
+        "name": "Giacomo Ochiuzzo"
+       }
+      ]
+     }
+    }
+   ],
+   "first-release-date": "2026-06-19",
+   "releases": [
+    {
+     "id": "2b9f9926-ee6a-4201-8ac5-6524ea91e758",
+     "title": "Pignora Imperii, Capitolo I – Lo scettro di Priamo",
+     "status": "Official",
+     "artist-credit": [
+      {
+       "name": "Various Artists",
+       "artist": {
+        "id": "89ad4ac3-39f7-470e-963a-56509c546377",
+        "name": "Various Artists",
+        "sort-name": "Various Artists"
+       }
+      }
+     ],
+     "release-group": {
+      "id": "dd06a58a-fec6-4500-9e13-28161584476b",
+      "title": "Pignora Imperii, Capitolo I – Lo scettro di Priamo",
+      "primary-type": "Album",
+      "secondary-types": [
+       "Compilation"
+      ]
+     },
+     "date": "2026-06-19"
+    }
+   ]
+  },
+  {
+   "id": "cc3cd329-fbdc-4953-98ec-e2141f70d776",
+   "score": 80,
+   "title": "Friend (original extended)",
+   "artist-credit": [
+    {
+     "name": "Silky Sunday",
+     "artist": {
+      "id": "16b8309d-dee1-401e-b2b8-d02319fb29b7",
+      "name": "Silky Sunday",
+      "sort-name": "Silky Sunday"
+     }
+    }
+   ],
+   "first-release-date": "2009-06-26",
+   "releases": [
+    {
+     "id": "9e7c230e-2a1f-43e0-878b-4b8b088e5f53",
+     "title": "Release Yourself, Volume 8",
+     "status": "Official",
+     "artist-credit": [
+      {
+       "name": "Roger Sanchez",
+       "artist": {
+        "id": "1c513fb9-e6b7-4915-b4d3-026681c83065",
+        "name": "Roger Sanchez",
+        "sort-name": "Sanchez, Roger"
+       }
+      }
+     ],
+     "release-group": {
+      "id": "3ee579ba-0250-40ae-84bb-7ab28b7d3428",
+      "title": "Release Yourself, Volume 8",
+      "primary-type": "Album",
+      "secondary-types": [
+       "Compilation",
+       "DJ-mix"
+      ]
+     },
+     "date": "2009-06-26"
+    }
+   ]
+  },
+  {
+   "id": "d268520e-4a2c-42d1-bed5-11ec7cffbfcf",
+   "score": 79,
+   "title": "Missed by Anyone",
+   "artist-credit": [
+    {
+     "name": "Sunday Morning",
+     "artist": {
+      "id": "2a6e9f15-23e4-4e05-8392-a82d5c840129",
+      "name": "Sunday Morning",
+      "sort-name": "Morning, Sunday"
+     }
+    }
+   ],
+   "first-release-date": "2025-10-31",
+   "releases": [
+    {
+     "id": "79c7ed18-6c58-4a30-afe9-d683e0e90427",
+     "title": "Eternal Grief",
+     "status": "Official",
+     "release-group": {
+      "id": "284c99c9-e9d7-4b68-9c8c-c01a6e3490db",
+      "title": "Eternal Grief",
+      "primary-type": "Album"
+     },
+     "date": "2025-10-31"
+    }
+   ]
+  },
+  {
+   "id": "cd59fbd1-c530-467f-a240-25d7ed1cc900",
+   "score": 79,
+   "title": "Days Go By",
+   "artist-credit": [
+    {
+     "name": "Terrific Sunday",
+     "artist": {
+      "id": "fd24abfa-ac52-4fbb-ae36-e5bd04b5eb1d",
+      "name": "Terrific Sunday",
+      "sort-name": "Terrific Sunday"
+     }
+    }
+   ],
+   "first-release-date": "2015-10-09",
+   "releases": [
+    {
+     "id": "d0cc9f28-e36c-459e-81ac-1307f08d8edb",
+     "title": "Strangers, Lovers",
+     "status": "Official",
+     "release-group": {
+      "id": "6e42032c-1899-4127-baa3-e8a6eb1c334d",
+      "title": "Strangers, Lovers",
+      "primary-type": "Album"
+     },
+     "date": "2015-10-09"
+    },
+    {
+     "id": "3f479028-a517-461f-81ac-9510d07b81cc",
+     "title": "Strangers, Lovers",
+     "status": "Official",
+     "release-group": {
+      "id": "6e42032c-1899-4127-baa3-e8a6eb1c334d",
+      "title": "Strangers, Lovers",
+      "primary-type": "Album"
+     },
+     "date": "2015-10-09"
+    }
+   ]
+  },
+  {
+   "id": "d0e86b0d-a56d-4f1b-b672-73a527a23001",
+   "score": 79,
+   "title": "Step by Step",
+   "artist-credit": [
+    {
+     "name": "Sunday’s Best",
+     "artist": {
+      "id": "14d6c0a4-c315-48fa-97b1-4266ba8c7933",
+      "name": "Sunday’s Best",
+      "sort-name": "Sunday’s Best",
+      "aliases": [
+       {
+        "sort-name": "Sundays Best",
+        "name": "Sundays Best"
+       }
+      ]
+     }
+    }
+   ],
+   "first-release-date": "2018-05-15",
+   "releases": [
+    {
+     "id": "e47c5dbf-f9ba-40fb-8c58-1e99678fbdd2",
+     "title": "Step by Step",
+     "status": "Official",
+     "artist-credit": [
+      {
+       "name": "Sunday’s Best",
+       "artist": {
+        "id": "14d6c0a4-c315-48fa-97b1-4266ba8c7933",
+        "name": "Sunday’s Best",
+        "sort-name": "Sunday’s Best"
+       }
+      }
+     ],
+     "release-group": {
+      "id": "ff63347a-1972-46f8-8d36-69337e2db338",
+      "title": "Step by Step",
+      "primary-type": "Single"
+     }
+    }
+   ]
+  },
+  {
+   "id": "285fc92f-e0ea-410e-a5b8-6f5eb6596988",
+   "score": 77,
+   "title": "Midsummer Night (original mix)",
+   "artist-credit": [
+    {
+     "name": "Sunday Brunch",
+     "artist": {
+      "id": "2851d75d-2cc3-47f4-9849-bba7052362ef",
+      "name": "Sunday Brunch",
+      "sort-name": "Sunday Brunch"
+     }
+    }
+   ],
+   "first-release-date": "1999-04",
+   "releases": [
+    {
+     "id": "a490919d-04dd-4ea4-aa8f-c386466f0fb7",
+     "title": "Midsummer",
+     "status": "Official",
+     "release-group": {
+      "id": "cb1df034-1a82-3c73-8a87-0e2bda58e20c",
+      "title": "Midsummer",
+      "primary-type": "EP"
+     },
+     "date": "1999-04"
+    }
+   ]
+  },
+  {
+   "id": "aaab06fa-c1e3-41d2-9d93-806616b1cef7",
+   "score": 77,
+   "title": "Healing Dream (original mix)",
+   "artist-credit": [
+    {
+     "name": "Sunday Club",
+     "artist": {
+      "id": "e83dec1c-6ccc-43f2-b6e4-5ddc29e09ed1",
+      "name": "Sunday Club",
+      "sort-name": "Sunday Club"
+     }
+    }
+   ],
+   "first-release-date": "1997",
+   "releases": [
+    {
+     "id": "51dd8425-cfd3-4e0e-8cf6-814a4e4051ce",
+     "title": "A Collection of Stress Classics",
+     "status": "Official",
+     "artist-credit": [
+      {
+       "name": "Various Artists",
+       "artist": {
+        "id": "89ad4ac3-39f7-470e-963a-56509c546377",
+        "name": "Various Artists",
+        "sort-name": "Various Artists"
+       }
+      }
+     ],
+     "release-group": {
+      "id": "8625ab79-a98e-4755-983e-bbf7dabe6dfd",
+      "title": "A Collection of Stress Classics",
+      "primary-type": "Album",
+      "secondary-types": [
+       "Compilation"
+      ]
+     },
+     "date": "2019-12-20"
+    },
+    {
+     "id": "2ed97029-dfe7-4acb-b66f-a26c795a890e",
+     "title": "Healing Dream",
+     "status": "Official",
+     "release-group": {
+      "id": "7644170a-42d1-4630-aac3-498b3df61aa0",
+      "title": "Healing Dream",
+      "primary-type": "Single"
+     },
+     "date": "1997"
+    }
+   ]
+  },
+  {
+   "id": "0edce4f7-bc75-4eb7-822b-c2c0d1e69a08",
+   "score": 76,
+   "title": "Down by the Den",
+   "artist-credit": [
+    {
+     "name": "Sunday Driver",
+     "artist": {
+      "id": "d8472bf8-42bd-4f0a-af86-68a8236dfcd4",
+      "name": "Sunday Driver",
+      "sort-name": "Sunday Driver"
+     }
+    }
+   ],
+   "first-release-date": "2008",
+   "releases": [
+    {
+     "id": "6b5c09ce-8ff1-4a11-8cc9-3a120e87b3e0",
+     "title": "In the City of Dreadful Night",
+     "status": "Official",
+     "release-group": {
+      "id": "361f4d3d-16e9-413b-8bb4-7a4de705e1b8",
+      "title": "In the City of Dreadful Night",
+      "primary-type": "Album"
+     },
+     "date": "2010-10-31"
+    },
+    {
+     "id": "22cf698a-ebd1-49bc-8d08-eafc2bc2339b",
+     "title": "In the City of Dreadful Night",
+     "status": "Official",
+     "release-group": {
+      "id": "361f4d3d-16e9-413b-8bb4-7a4de705e1b8",
+      "title": "In the City of Dreadful Night",
+      "primary-type": "Album"
+     },
+     "date": "2008"
+    }
+   ]
+  },
+  {
+   "id": "295fdc9a-b305-41db-926b-571ee5314de4",
+   "score": 76,
+   "title": "Standing By Your Side",
+   "artist-credit": [
+    {
+     "name": "Sunday Speedtrap",
+     "artist": {
+      "id": "d56271f3-1f3b-4325-984e-71737b955ef6",
+      "name": "Sunday Speedtrap",
+      "sort-name": "Sunday Speedtrap"
+     }
+    }
+   ],
+   "first-release-date": "2012-07-16",
+   "releases": [
+    {
+     "id": "1cdcaeb4-9a0f-4933-bee1-5efc4ea638fe",
+     "title": "Chasing Dreams",
+     "status": "Official",
+     "release-group": {
+      "id": "f69ea9df-9f3c-4588-9674-6120d210876b",
+      "title": "Chasing Dreams",
+      "primary-type": "Album"
+     },
+     "date": "2012-07-16"
+    }
+   ]
+  },
+  {
+   "id": "a1f2f4e6-cf71-4abb-b50b-8ca38fd11d84",
+   "score": 74,
+   "title": "Models At Work (Original Mix)",
+   "artist-credit": [
+    {
+     "name": "Sunday Cinema",
+     "artist": {
+      "id": "cfc2d47c-f527-4afb-a47b-b5c2571dfec1",
+      "name": "Sunday Cinema",
+      "sort-name": "Sunday Cinema"
+     }
+    }
+   ],
+   "first-release-date": "2009-06-29",
+   "releases": [
+    {
+     "id": "4cfe14cd-4387-4d22-92da-ab9742ef60ed",
+     "title": "Models At Work",
+     "status": "Official",
+     "release-group": {
+      "id": "5e3ba1b7-08e6-404d-a911-c9e90c66031b",
+      "title": "Models At Work"
+     },
+     "date": "2009-06-29"
+    }
+   ]
+  },
+  {
+   "id": "82696cf8-dbb2-4d93-ac74-267aff352cb2",
+   "score": 72,
+   "title": "House Is a Feeling (original mix)",
+   "artist-credit": [
+    {
+     "name": "Sunday School",
+     "artist": {
+      "id": "8039c3a1-4770-47f3-aef8-7f43f66248b1",
+      "name": "Sunday School",
+      "sort-name": "Sunday School"
+     }
+    }
+   ],
+   "first-release-date": "1998",
+   "releases": [
+    {
+     "id": "5fc62943-4598-40e3-8154-6fe3ff0eaf94",
+     "title": "The Sound of the Underground: UK",
+     "status": "Official",
+     "artist-credit": [
+      {
+       "name": "The Lisa Marie Experience",
+       "artist": {
+        "id": "d59e2677-bc72-46eb-9864-28da62b66b7a",
+        "name": "Lisa Marie Experience",
+        "sort-name": "Lisa Marie Experience"
+       }
+      }
+     ],
+     "release-group": {
+      "id": "06a6f6a5-6114-4dc0-b6c1-2fb0bf55ee7c",
+      "title": "The Sound of the Underground: UK",
+      "primary-type": "Album",
+      "secondary-types": [
+       "DJ-mix"
+      ]
+     },
+     "date": "1998"
+    }
+   ]
+  },
+  {
+   "id": "44db5fbd-e0aa-43d9-ad5a-cef54fccbea8",
+   "score": 72,
+   "title": "I Wanna Feel It! (original mix)",
+   "artist-credit": [
+    {
+     "name": "Sunday Adams",
+     "artist": {
+      "id": "31ca771f-bfc9-435c-be8c-090012405976",
+      "name": "Sunday Adams",
+      "sort-name": "Sunday Adams"
+     }
+    }
+   ],
+   "first-release-date": "1992",
+   "releases": [
+    {
+     "id": "35543d3c-2826-42d6-aa9c-ab3ad8d8db00",
+     "title": "(Oohh Ohh Ah Ha) I Wanna Feel It ! Remixes",
+     "status": "Official",
+     "release-group": {
+      "id": "4eb3a4f6-2eea-46b1-9719-951c6388035b",
+      "title": "(Oohh Ohh Ah Ha) I Wanna Feel It ! Remixes",
+      "primary-type": "Single",
+      "secondary-types": [
+       "Remix"
+      ]
+     },
+     "date": "1992"
+    }
+   ]
+  },
+  {
+   "id": "13f236db-af1e-47f3-a58f-a64773f894a0",
+   "score": 72,
+   "title": "Track-by-Track Commentary by the Band",
+   "artist-credit": [
+    {
+     "name": "Taking Back Sunday",
+     "artist": {
+      "id": "350bce49-c21b-4137-b50a-0766ded07e4d",
+      "name": "Taking Back Sunday",
+      "sort-name": "Taking Back Sunday"
+     }
+    }
+   ],
+   "first-release-date": "2009",
+   "releases": [
+    {
+     "id": "5451a8af-98b5-4901-957c-65efbd45e03e",
+     "title": "New Again",
+     "status": "Official",
+     "release-group": {
+      "id": "03fd5fa4-3647-37a9-8313-71f65ea86ae1",
+      "title": "New Again",
+      "primary-type": "Album"
+     },
+     "date": "2009"
+    }
+   ]
+  },
+  {
+   "id": "a8d5b685-ad05-4a66-b062-3033efc1120b",
+   "score": 72,
+   "title": "Seduced by Madness",
+   "artist-credit": [
+    {
+     "name": "Never on Sunday",
+     "artist": {
+      "id": "aacbebe9-267f-4cbb-a9a5-a26598f23853",
+      "name": "Never on Sunday",
+      "sort-name": "Never on Sunday",
+      "aliases": [
+       {
+        "sort-name": "Never on a Sunday",
+        "name": "Never on a Sunday"
+       }
+      ]
+     }
+    }
+   ],
+   "first-release-date": "1992-05",
+   "releases": [
+    {
+     "id": "6e95ae03-4e22-4fae-ace6-f879a93035d6",
+     "title": "Day-By-Day",
+     "status": "Official",
+     "artist-credit": [
+      {
+       "name": "Never on Sunday",
+       "artist": {
+        "id": "aacbebe9-267f-4cbb-a9a5-a26598f23853",
+        "name": "Never on Sunday",
+        "sort-name": "Never on Sunday"
+       }
+      }
+     ],
+     "release-group": {
+      "id": "922f8597-6823-3275-a52f-e9f1de445f95",
+      "title": "Day by Day",
+      "primary-type": "EP"
+     }
+    },
+    {
+     "id": "5b2d51ec-3a95-44cc-b687-c72336bc600f",
+     "title": "Day by Day",
+     "status": "Official",
+     "artist-credit": [
+      {
+       "name": "Never on Sunday",
+       "artist": {
+        "id": "aacbebe9-267f-4cbb-a9a5-a26598f23853",
+        "name": "Never on Sunday",
+        "sort-name": "Never on Sunday"
+       }
+      }
+     ],
+     "release-group": {
+      "id": "922f8597-6823-3275-a52f-e9f1de445f95",
+      "title": "Day by Day",
+      "primary-type": "EP"
+     },
+     "date": "1992-05"
+    }
+   ]
+  },
+  {
+   "id": "4471500b-cb39-4fe7-b4ab-ee476ff59f73",
+   "score": 72,
+   "title": "Passing You By",
+   "artist-credit": [
+    {
+     "name": "The Sunday Drivers",
+     "artist": {
+      "id": "857963d5-146c-41ed-b151-51eabd38c5b7",
+      "name": "The Sunday Drivers",
+      "sort-name": "Sunday Drivers, The",
+      "aliases": [
+       {
+        "sort-name": "Sunday Drivers",
+        "name": "Sunday Drivers"
+       }
+      ]
+     }
+    }
+   ],
+   "first-release-date": "2009",
+   "releases": [
+    {
+     "id": "350d5140-2215-45b7-b140-b67c4bf8dc7b",
+     "title": "The End of Maiden Trip",
+     "status": "Official",
+     "artist-credit": [
+      {
+       "name": "The Sunday Drivers",
+       "artist": {
+        "id": "857963d5-146c-41ed-b151-51eabd38c5b7",
+        "name": "The Sunday Drivers",
+        "sort-name": "Sunday Drivers, The"
+       }
+      }
+     ],
+     "release-group": {
+      "id": "de48448b-b10a-49a1-af50-6a0b087582fd",
+      "title": "The End of Maiden Trip",
+      "primary-type": "Album"
+     },
+     "date": "2009"
+    }
+   ]
+  },
+  {
+   "id": "961f445b-243e-44da-bd23-4e94a84ce9a3",
+   "score": 72,
+   "title": "Love by Numbers",
+   "artist-credit": [
+    {
+     "name": "The Sunday Blues",
+     "artist": {
+      "id": "6c9fc887-7669-431b-a21e-7226488a5222",
+      "name": "The Sunday Blues",
+      "sort-name": "Sunday Blues"
+     }
+    }
+   ],
+   "first-release-date": "2013-08-10",
+   "releases": [
+    {
+     "id": "df5b0571-ecc6-4b9f-b0c6-60189d1ec6f0",
+     "title": "City Folklore",
+     "status": "Official",
+     "release-group": {
+      "id": "d33078ab-e779-4880-9e02-3cc215660f4c",
+      "title": "City Folklore",
+      "primary-type": "Album"
+     },
+     "date": "2013-08-10"
+    }
+   ]
+  },
+  {
+   "id": "65cf53b3-894f-4c3b-99cb-671f75e34a3e",
+   "score": 71,
+   "title": "Reflection I. Struck by a Lightning",
+   "artist-credit": [
+    {
+     "name": "Sunday,June",
+     "artist": {
+      "id": "c08ad333-a81c-4aa0-8436-704defae61f1",
+      "name": "Sunday,June",
+      "sort-name": "Sunday,June"
+     }
+    }
+   ],
+   "first-release-date": "2025-03-14",
+   "releases": [
+    {
+     "id": "4ec925ef-d23e-4bb5-845c-2574b02b1324",
+     "title": "Sun Glitter and Other Reflections",
+     "status": "Official",
+     "release-group": {
+      "id": "ab3ce508-73d1-4526-ae30-d987283f9f77",
+      "title": "Sun Glitter and Other Reflections",
+      "primary-type": "Album"
+     }
+    }
+   ]
+  },
+  {
+   "id": "bd28631f-c242-418b-94a8-f876b06db1c7",
+   "score": 70,
+   "title": "House Is a Feeling (original Hardtrax mix)",
+   "artist-credit": [
+    {
+     "name": "Sunday School",
+     "artist": {
+      "id": "8039c3a1-4770-47f3-aef8-7f43f66248b1",
+      "name": "Sunday School",
+      "sort-name": "Sunday School"
+     }
+    }
+   ],
+   "first-release-date": "1996",
+   "releases": [
+    {
+     "id": "c1098c3d-59ef-40bc-b018-d8b7ac2cbecb",
+     "title": "House Is A Feeling (Remix '96)",
+     "release-group": {
+      "id": "3e8babc7-a6f8-410f-a81b-d361d7b299a2",
+      "title": "House Is A Feeling (Remix '96)",
+      "primary-type": "Single"
+     },
+     "date": "1996"
+    }
+   ]
+  },
+  {
+   "id": "ce83fe91-fca5-4828-a411-2695329c6dd2",
+   "score": 70,
+   "title": "BBeats Inspired By A Bitch Pt. 2",
+   "artist-credit": [
+    {
+     "name": "Black Sunday",
+     "artist": {
+      "id": "1bde3be1-1838-46ab-a304-aa56d1f9d106",
+      "name": "Black Sunday",
+      "sort-name": "Black Sunday"
+     }
+    }
+   ],
+   "first-release-date": "2011",
+   "releases": [
+    {
+     "id": "8acea992-492d-40ca-b83b-93dd078bf6e3",
+     "title": "Mask Of The Demon",
+     "status": "Official",
+     "release-group": {
+      "id": "83415d3c-1e2c-4820-8470-f6d20d11248f",
+      "title": "Mask Of The Demon",
+      "primary-type": "Album"
+     },
+     "date": "2011"
+    }
+   ]
+  },
+  {
+   "id": "c36b1f9f-d376-4fcd-9ef3-73f2affd93d7",
+   "score": 69,
+   "title": "One-Eighty by Summer",
+   "artist-credit": [
+    {
+     "name": "Taking Back Sunday",
+     "artist": {
+      "id": "350bce49-c21b-4137-b50a-0766ded07e4d",
+      "name": "Taking Back Sunday",
+      "sort-name": "Taking Back Sunday"
+     }
+    }
+   ],
+   "first-release-date": "2010-08-13",
+   "releases": [
+    {
+     "id": "a7c269f6-6017-420b-bce9-3f1e6ab3d68d",
+     "title": "Live from Orensanz",
+     "status": "Official",
+     "release-group": {
+      "id": "2e1dfc40-def2-410c-873c-8e7444465a10",
+      "title": "Live From Orensanz",
+      "primary-type": "Album",
+      "secondary-types": [
+       "Live"
+      ]
+     },
+     "date": "2010-08-16"
+    },
+    {
+     "id": "7d1f0217-9ee4-4983-a2cd-53bf60b5594b",
+     "title": "Live From Orensanz",
+     "status": "Official",
+     "release-group": {
+      "id": "2e1dfc40-def2-410c-873c-8e7444465a10",
+      "title": "Live From Orensanz",
+      "primary-type": "Album",
+      "secondary-types": [
+       "Live"
+      ]
+     },
+     "date": "2010-08-13"
+    },
+    {
+     "id": "24a716c4-62ab-446c-8dfa-99a8c395ca8e",
+     "title": "Live From Orensanz",
+     "status": "Official",
+     "release-group": {
+      "id": "2e1dfc40-def2-410c-873c-8e7444465a10",
+      "title": "Live From Orensanz",
+      "primary-type": "Album",
+      "secondary-types": [
+       "Live"
+      ]
+     },
+     "date": "2010-08-13"
+    }
+   ]
+  },
+  {
+   "id": "36d69cb1-93da-463b-82bc-3e7c9774595f",
+   "score": 69,
+   "title": "One‐Eighty by Summer",
+   "artist-credit": [
+    {
+     "name": "Taking Back Sunday",
+     "artist": {
+      "id": "350bce49-c21b-4137-b50a-0766ded07e4d",
+      "name": "Taking Back Sunday",
+      "sort-name": "Taking Back Sunday"
+     }
+    }
+   ],
+   "first-release-date": "2004-07-27",
+   "releases": [
+    {
+     "id": "17f88c72-99db-495c-8fbd-37610350c785",
+     "title": "Where You Want to Be",
+     "status": "Official",
+     "release-group": {
+      "id": "753c1e50-f4ca-39c4-be5f-09e10bd17cd4",
+      "title": "Where You Want to Be",
+      "primary-type": "Album"
+     },
+     "date": "2004-07-27"
+    },
+    {
+     "id": "ecb9789f-1c52-4a67-b6c7-994b8894bd68",
+     "title": "Where You Want to Be",
+     "status": "Official",
+     "release-group": {
+      "id": "753c1e50-f4ca-39c4-be5f-09e10bd17cd4",
+      "title": "Where You Want to Be",
+      "primary-type": "Album"
+     },
+     "date": "2011-10-01"
+    },
+    {
+     "id": "00ff863d-587a-4811-b025-5459c24eb53f",
+     "title": "Twenty",
+     "status": "Official",
+     "release-group": {
+      "id": "e8984ad9-6403-4449-96f8-24a13cd39243",
+      "title": "Twenty",
+      "primary-type": "Album",
+      "secondary-types": [
+       "Compilation"
+      ]
+     },
+     "date": "2019-01-11"
+    },
+    {
+     "id": "f886f0fd-8c2c-439d-a7de-ccc7c7b8e078",
+     "title": "Twenty",
+     "status": "Official",
+     "release-group": {
+      "id": "e8984ad9-6403-4449-96f8-24a13cd39243",
+      "title": "Twenty",
+      "primary-type": "Album",
+      "secondary-types": [
+       "Compilation"
+      ]
+     },
+     "date": "2019-01-19"
+    },
+    {
+     "id": "fafb5e32-666e-4303-a7c7-8dd17097b5aa",
+     "title": "Twenty",
+     "status": "Official",
+     "release-group": {
+      "id": "e8984ad9-6403-4449-96f8-24a13cd39243",
+      "title": "Twenty",
+      "primary-type": "Album",
+      "secondary-types": [
+       "Compilation"
+      ]
+     },
+     "date": "2019-01-11"
+    },
+    {
+     "id": "8d3d3c68-f324-4b9e-a412-736e81dcb7bb",
+     "title": "Twenty",
+     "status": "Official",
+     "release-group": {
+      "id": "e8984ad9-6403-4449-96f8-24a13cd39243",
+      "title": "Twenty",
+      "primary-type": "Album",
+      "secondary-types": [
+       "Compilation"
+      ]
+     },
+     "date": "2019-01-11"
+    },
+    {
+     "id": "7df8d1f8-50c3-4ad8-8931-f371c833f998",
+     "title": "Where You Want to Be",
+     "status": "Official",
+     "release-group": {
+      "id": "753c1e50-f4ca-39c4-be5f-09e10bd17cd4",
+      "title": "Where You Want to Be",
+      "primary-type": "Album"
+     },
+     "date": "2004"
+    },
+    {
+     "id": "b4b4ed17-323e-4104-a850-d0fab83a6c6f",
+     "title": "Notes From the Past",
+     "status": "Official",
+     "release-group": {
+      "id": "80a44f42-4bd4-3b07-8612-e2aac1069af6",
+      "title": "Notes From the Past",
+      "primary-type": "Album",
+      "secondary-types": [
+       "Compilation"
+      ]
+     },
+     "date": "2007-10-30"
+    }
+   ]
+  },
+  {
+   "id": "e5d1380e-70f3-41da-a24f-94ae0edd5cb7",
+   "score": 69,
+   "title": "One-Eighty by Summer",
+   "artist-credit": [
+    {
+     "name": "Taking Back Sunday",
+     "artist": {
+      "id": "350bce49-c21b-4137-b50a-0766ded07e4d",
+      "name": "Taking Back Sunday",
+      "sort-name": "Taking Back Sunday"
+     }
+    }
+   ],
+   "first-release-date": "2009-10-02",
+   "releases": [
+    {
+     "id": "437a7297-fdf2-48da-ae35-1245ef62ad4e",
+     "title": "Live from Bamboozle '09",
+     "status": "Official",
+     "release-group": {
+      "id": "ced4c7d7-8cc4-491d-8574-0b075f5e1fac",
+      "title": "Live from Bamboozle '09",
+      "primary-type": "Album",
+      "secondary-types": [
+       "Live"
+      ]
+     },
+     "date": "2009-10-02"
+    },
+    {
+     "id": "16ee596b-cce4-4fb9-a92c-ed415469e148",
+     "title": "Live from Bamboozle '09",
+     "status": "Official",
+     "release-group": {
+      "id": "ced4c7d7-8cc4-491d-8574-0b075f5e1fac",
+      "title": "Live from Bamboozle '09",
+      "primary-type": "Album",
+      "secondary-types": [
+       "Live"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "6bf4043b-dbb6-415f-bd49-7dcab119cf52",
+   "score": 67,
+   "title": "Aenēas (Original Mix)",
+   "artist-credit": [
+    {
+     "joinphrase": " & ",
+     "name": "Worg",
+     "artist": {
+      "id": "eb46d271-20ae-4bcd-b3c4-dfa7718feae6",
+      "name": "Worg",
+      "sort-name": "Worg"
+     }
+    },
+    {
+     "name": "Sunday Bath",
+     "artist": {
+      "id": "21e2baa9-1952-493a-8365-4de1383901f0",
+      "name": "Sunday Bath",
+      "sort-name": "Sunday Bath",
+      "aliases": [
+       {
+        "sort-name": "Ochiuzzo, Giacomo",
+        "name": "Giacomo Ochiuzzo"
+       }
+      ]
+     }
+    }
+   ],
+   "first-release-date": "2026-06-19",
+   "releases": [
+    {
+     "id": "2b9f9926-ee6a-4201-8ac5-6524ea91e758",
+     "title": "Pignora Imperii, Capitolo I – Lo scettro di Priamo",
+     "status": "Official",
+     "artist-credit": [
+      {
+       "name": "Various Artists",
+       "artist": {
+        "id": "89ad4ac3-39f7-470e-963a-56509c546377",
+        "name": "Various Artists",
+        "sort-name": "Various Artists"
+       }
+      }
+     ],
+     "release-group": {
+      "id": "dd06a58a-fec6-4500-9e13-28161584476b",
+      "title": "Pignora Imperii, Capitolo I – Lo scettro di Priamo",
+      "primary-type": "Album",
+      "secondary-types": [
+       "Compilation"
+      ]
+     },
+     "date": "2026-06-19"
+    }
+   ]
+  }
+ ]
+}

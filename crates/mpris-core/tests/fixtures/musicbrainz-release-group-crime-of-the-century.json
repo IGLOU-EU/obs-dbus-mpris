@@ -1,0 +1,451 @@
+{
+ "release-groups": [
+  {
+   "id": "c3749af5-0d0c-3ed1-b1c0-8b4a8f6c3436",
+   "score": 100,
+   "title": "Crime of the Century",
+   "first-release-date": "1974-09-13",
+   "primary-type": "Album",
+   "artist-credit": [
+    {
+     "name": "Supertramp",
+     "artist": {
+      "id": "d2ff6b6b-fc30-48dc-8952-06f9d8fc64f8",
+      "name": "Supertramp",
+      "sort-name": "Supertramp",
+      "aliases": [
+       {
+        "sort-name": "슈퍼트램프",
+        "name": "슈퍼트램프"
+       },
+       {
+        "sort-name": "スーパートランプ",
+        "name": "スーパートランプ"
+       },
+       {
+        "sort-name": "Daddy",
+        "name": "Daddy"
+       },
+       {
+        "sort-name": "Supetramp",
+        "name": "Supetramp"
+       }
+      ]
+     }
+    }
+   ],
+   "releases": [
+    {
+     "id": "fcef8072-2d4e-42b2-adec-2f12cb637d47",
+     "title": "Crime of the Century",
+     "status": "Official"
+    },
+    {
+     "id": "7822bee5-0068-4eb7-ad41-f9cee2683a86",
+     "title": "Crime of the Century",
+     "status": "Official"
+    },
+    {
+     "id": "6b9495fb-4a3b-475f-b5f9-374f6e4c8d99",
+     "title": "Crime of the Century",
+     "status": "Official"
+    },
+    {
+     "id": "164d8f4d-2aeb-424d-81c8-47ff23b07557",
+     "title": "Crime of the Century",
+     "status": "Official"
+    },
+    {
+     "id": "44b78f47-af43-4165-8c8a-3301356431f2",
+     "title": "Crime of the Century",
+     "status": "Official"
+    },
+    {
+     "id": "0c0e7bb6-fddc-466b-a115-b9f97879af5e",
+     "title": "Crime of the Century (deluxe edition)",
+     "status": "Official"
+    },
+    {
+     "id": "85a4aa74-30f2-456f-a088-cfb8709cc319",
+     "title": "Crime of the Century",
+     "status": "Official"
+    },
+    {
+     "id": "ec4958e6-3584-4cc1-ac28-251df77e48ba",
+     "title": "Crime of the Century",
+     "status": "Official"
+    },
+    {
+     "id": "033a3259-84fd-40c8-a37d-8e8f548d24cc",
+     "title": "Crime of the Century",
+     "status": "Official"
+    },
+    {
+     "id": "9992c9b6-7813-42f6-8530-da829cb4e791",
+     "title": "Crime of the Century",
+     "status": "Official"
+    },
+    {
+     "id": "127554eb-7b3d-45ba-a33b-6fd40ccfbf92",
+     "title": "Crime of the Century",
+     "status": "Official"
+    },
+    {
+     "id": "fe4f3797-98b0-37cf-8a26-61968c314c3e",
+     "title": "Crime of the Century",
+     "status": "Official"
+    },
+    {
+     "id": "76b5b536-41ff-4f95-9e2e-5abccb35353b",
+     "title": "Crime of the Century",
+     "status": "Official"
+    },
+    {
+     "id": "ba3bd53b-83b5-47bb-99ad-f848f345a819",
+     "title": "Crime of the Century",
+     "status": "Official"
+    },
+    {
+     "id": "ea2b692d-bdc0-42b1-9222-cbc13ea31239",
+     "title": "Crime of the Century",
+     "status": "Official"
+    },
+    {
+     "id": "729475e4-78b4-42f3-b660-f9fb63697dda",
+     "title": "Crime of the Century",
+     "status": "Official"
+    },
+    {
+     "id": "a358a756-fafa-4e29-9fd9-b5c79d7905f0",
+     "title": "Crime of the Century",
+     "status": "Official"
+    },
+    {
+     "id": "11081834-7338-489a-894e-3915f917e029",
+     "title": "Crime of the Century",
+     "status": "Official"
+    },
+    {
+     "id": "f91dcb35-1afe-4e25-b408-f4cb04f6d661",
+     "title": "Crime of the Century",
+     "status": "Official"
+    },
+    {
+     "id": "a0e2d61e-7566-4497-99b6-a8b3a8777ac4",
+     "title": "Crime of the Century",
+     "status": "Official"
+    },
+    {
+     "id": "0d418084-9a91-4c7b-a080-0fd92d81516c",
+     "title": "Crime of the Century",
+     "status": "Official"
+    },
+    {
+     "id": "8e37667d-1034-4d44-8434-6437391b4f21",
+     "title": "Crime of the Century",
+     "status": "Official"
+    },
+    {
+     "id": "c56e3e4f-4040-4155-9b96-ccfd637b719c",
+     "title": "Crime of the Century",
+     "status": "Official"
+    },
+    {
+     "id": "3d38e1ff-7544-4b2a-b874-4270c3d1948f",
+     "title": "Crime of the Century",
+     "status": "Official"
+    },
+    {
+     "id": "b4b00b2d-279b-4173-a698-3e5a273fbd0f",
+     "title": "Crime of the Century",
+     "status": "Official"
+    },
+    {
+     "id": "6f16b8a1-b723-4153-8e54-8620ae0aa13f",
+     "title": "Crime of the Century",
+     "status": "Official"
+    },
+    {
+     "id": "c754fbe7-9878-415f-aba4-4a2bad5d8266",
+     "title": "Crime of the Century",
+     "status": "Official"
+    },
+    {
+     "id": "33df9f1d-3830-36a5-92df-07dcdb04dc2b",
+     "title": "Crime of the Century",
+     "status": "Official"
+    },
+    {
+     "id": "e29c261a-c99e-4ddc-bfc4-48ca8ce9ec58",
+     "title": "Crime of the Century",
+     "status": "Official"
+    },
+    {
+     "id": "8be100e7-70fa-4f3a-8688-b8e7a808037f",
+     "title": "Crime of the Century",
+     "status": "Official"
+    },
+    {
+     "id": "411d6c48-c4a0-3667-97d0-d5e3a1ff1097",
+     "title": "Crime of the Century",
+     "status": "Official"
+    },
+    {
+     "id": "fb74a935-28a9-4928-824a-ca1e04d0a0d0",
+     "title": "Crime of the Century",
+     "status": "Official"
+    },
+    {
+     "id": "bfcb3842-aafd-3418-9dc3-7231d25ee469",
+     "title": "Crime of the Century",
+     "status": "Official"
+    },
+    {
+     "id": "473e390a-bd9a-39e0-9576-34b2d8f0da10",
+     "title": "Crime of the Century",
+     "status": "Official"
+    },
+    {
+     "id": "27781396-4850-4579-a93e-4892fa5184ed",
+     "title": "Crime of the Century",
+     "status": "Official"
+    },
+    {
+     "id": "d3da0511-94e0-40f1-a89a-ecaf6db7197a",
+     "title": "Crime of the Century",
+     "status": "Official"
+    },
+    {
+     "id": "29c4e229-efe3-4fa5-a98c-5b8a12133f52",
+     "title": "Crime of the Century",
+     "status": "Official"
+    },
+    {
+     "id": "a48289eb-acf6-4795-a922-c8e7532e37e6",
+     "title": "Crime of the Century",
+     "status": "Official"
+    },
+    {
+     "id": "2647fb6e-c838-4524-9b14-d046e0777a48",
+     "title": "Crime of the Century",
+     "status": "Official"
+    },
+    {
+     "id": "9f33a793-2ca8-47e4-8efe-daa5bd03ff8f",
+     "title": "Crime of the Century",
+     "status": "Official"
+    },
+    {
+     "id": "20b4a255-8bcd-481a-8b82-3a50774f985e",
+     "title": "Crime of the Century",
+     "status": "Official"
+    },
+    {
+     "id": "3d9dfd99-51cf-4820-8c68-17aba592b305",
+     "title": "Crime of the Century",
+     "status": "Official"
+    },
+    {
+     "id": "6e9a3b06-2956-4af6-b272-477133253fcd",
+     "title": "Crime of the Century",
+     "status": "Official"
+    }
+   ]
+  },
+  {
+   "id": "492e183c-f604-4fe3-b8dd-e2cf5729316f",
+   "score": 77,
+   "title": "Crime of the Century / Crisis? What Crisis?",
+   "first-release-date": "2009-07-07",
+   "primary-type": "Album",
+   "secondary-types": [
+    "Compilation"
+   ],
+   "artist-credit": [
+    {
+     "name": "Supertramp",
+     "artist": {
+      "id": "d2ff6b6b-fc30-48dc-8952-06f9d8fc64f8",
+      "name": "Supertramp",
+      "sort-name": "Supertramp",
+      "aliases": [
+       {
+        "sort-name": "슈퍼트램프",
+        "name": "슈퍼트램프"
+       },
+       {
+        "sort-name": "スーパートランプ",
+        "name": "スーパートランプ"
+       },
+       {
+        "sort-name": "Daddy",
+        "name": "Daddy"
+       },
+       {
+        "sort-name": "Supetramp",
+        "name": "Supetramp"
+       }
+      ]
+     }
+    }
+   ],
+   "releases": [
+    {
+     "id": "d48aaeec-00c2-4084-a286-c535239058f1",
+     "title": "Crime of the Century / Crisis? What Crisis?",
+     "status": "Official"
+    },
+    {
+     "id": "54636919-d9a4-481e-af25-a6c563600a82",
+     "title": "2 for 1: Crime of the Century / Crisis? What Crisis?",
+     "status": "Official"
+    },
+    {
+     "id": "688b9e2f-be0a-422a-835e-66b2f29c887c",
+     "title": "2 for 1: Crime of the Century / Crisis? What Crisis?",
+     "status": "Official"
+    }
+   ]
+  },
+  {
+   "id": "89694743-3729-4cc6-b392-d399623f96bd",
+   "score": 70,
+   "title": "Crime of the Century (In Concert at Hammersmith Odeon 1975)",
+   "first-release-date": "2026-05-29",
+   "primary-type": "Album",
+   "secondary-types": [
+    "Live"
+   ],
+   "artist-credit": [
+    {
+     "name": "Supertramp",
+     "artist": {
+      "id": "d2ff6b6b-fc30-48dc-8952-06f9d8fc64f8",
+      "name": "Supertramp",
+      "sort-name": "Supertramp",
+      "aliases": [
+       {
+        "sort-name": "슈퍼트램프",
+        "name": "슈퍼트램프"
+       },
+       {
+        "sort-name": "スーパートランプ",
+        "name": "スーパートランプ"
+       },
+       {
+        "sort-name": "Daddy",
+        "name": "Daddy"
+       },
+       {
+        "sort-name": "Supetramp",
+        "name": "Supetramp"
+       }
+      ]
+     }
+    }
+   ],
+   "releases": [
+    {
+     "id": "41152d2c-9049-4698-b297-cea3c5b83e63",
+     "title": "Crime of the Century (In Concert at Hammersmith Odeon 1975)",
+     "status": "Official"
+    },
+    {
+     "id": "d4af8f44-64e1-41f9-b80a-3dad534e9c6d",
+     "title": "Hammersmith Odeon 1975",
+     "status": "Bootleg"
+    }
+   ]
+  },
+  {
+   "id": "58ed1e46-9599-461a-81c4-1ade52962bd6",
+   "score": 59,
+   "title": "Concert of the Century: Live in London 1975: Live Radio Broadcast",
+   "first-release-date": "2020-04-30",
+   "primary-type": "Album",
+   "secondary-types": [
+    "Live"
+   ],
+   "artist-credit": [
+    {
+     "name": "Supertramp",
+     "artist": {
+      "id": "d2ff6b6b-fc30-48dc-8952-06f9d8fc64f8",
+      "name": "Supertramp",
+      "sort-name": "Supertramp",
+      "aliases": [
+       {
+        "sort-name": "슈퍼트램프",
+        "name": "슈퍼트램프"
+       },
+       {
+        "sort-name": "スーパートランプ",
+        "name": "スーパートランプ"
+       },
+       {
+        "sort-name": "Daddy",
+        "name": "Daddy"
+       },
+       {
+        "sort-name": "Supetramp",
+        "name": "Supetramp"
+       }
+      ]
+     }
+    }
+   ],
+   "releases": [
+    {
+     "id": "fed0d1a0-5e72-473e-a4da-571d35613b3e",
+     "title": "Concert of the Century: Live in London 1975: Live Radio Broadcast",
+     "status": "Bootleg"
+    }
+   ]
+  },
+  {
+   "id": "d6420459-8c38-4a1c-905c-6190051b894f",
+   "score": 39,
+   "title": "Crime and Crisis at the BBC",
+   "first-release-date": "2009-07-17",
+   "primary-type": "Album",
+   "secondary-types": [
+    "Live"
+   ],
+   "artist-credit": [
+    {
+     "name": "Supertramp",
+     "artist": {
+      "id": "d2ff6b6b-fc30-48dc-8952-06f9d8fc64f8",
+      "name": "Supertramp",
+      "sort-name": "Supertramp",
+      "aliases": [
+       {
+        "sort-name": "슈퍼트램프",
+        "name": "슈퍼트램프"
+       },
+       {
+        "sort-name": "スーパートランプ",
+        "name": "スーパートランプ"
+       },
+       {
+        "sort-name": "Daddy",
+        "name": "Daddy"
+       },
+       {
+        "sort-name": "Supetramp",
+        "name": "Supetramp"
+       }
+      ]
+     }
+    }
+   ],
+   "releases": [
+    {
+     "id": "a8d4a607-587c-4483-9e60-e43c5f1e618f",
+     "title": "Crime and Crisis at the BBC",
+     "status": "Bootleg"
+    }
+   ]
+  }
+ ]
+}

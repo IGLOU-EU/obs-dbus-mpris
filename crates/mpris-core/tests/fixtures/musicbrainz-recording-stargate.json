@@ -1,0 +1,746 @@
+{
+ "recordings": [
+  {
+   "id": "578d9750-3723-4fbf-8bf5-773e6c133e26",
+   "score": 100,
+   "title": "Ich will sie immer noch (Sie trinkt und raucht zuviel) - Version 2006",
+   "artist-credit": [
+    {
+     "name": "Atlantis",
+     "artist": {
+      "id": "4f907f3b-72fc-479c-b012-43cbd867d088",
+      "name": "Atlantis",
+      "sort-name": "Atlantis"
+     }
+    }
+   ],
+   "first-release-date": "2001",
+   "releases": [
+    {
+     "id": "9e687d3d-3256-4b4d-b188-2c7a008907ef",
+     "title": "Partykracher I Sing A Liad Für Di",
+     "status": "Official",
+     "artist-credit": [
+      {
+       "name": "Various Artists",
+       "artist": {
+        "id": "89ad4ac3-39f7-470e-963a-56509c546377",
+        "name": "Various Artists",
+        "sort-name": "Various Artists"
+       }
+      }
+     ],
+     "release-group": {
+      "id": "d8257dda-2cf5-44e8-a6c2-9ef5c5c6f017",
+      "title": "Partykracher I Sing A Liad Für Di",
+      "primary-type": "Album"
+     },
+     "date": "2001"
+    }
+   ]
+  },
+  {
+   "id": "8fdb3053-2fab-488c-94b7-c40ea1d98939",
+   "score": 89,
+   "title": "Day & Night - StarGate Mix",
+   "artist-credit": [
+    {
+     "joinphrase": " & ",
+     "name": "Billie Piper",
+     "artist": {
+      "id": "77e6c304-599d-46e0-8ba3-238207a43668",
+      "name": "Billie Piper",
+      "sort-name": "Piper, Billie",
+      "aliases": [
+       {
+        "sort-name": "Piper, Billie",
+        "name": "Billie Piper"
+       },
+       {
+        "sort-name": "Billie",
+        "name": "Billie"
+       },
+       {
+        "sort-name": "Billy Piper",
+        "name": "Billy Piper"
+       }
+      ]
+     }
+    },
+    {
+     "name": "StarGate",
+     "artist": {
+      "id": "509d1ba6-dcf4-4ed1-a422-157ecdffef72",
+      "name": "StarGate",
+      "sort-name": "StarGate"
+     }
+    }
+   ],
+   "first-release-date": "2000-01-01",
+   "releases": [
+    {
+     "id": "14e3e31f-8016-440c-b6e5-ed03f7d8e0e3",
+     "title": "Walk Of Life",
+     "status": "Official",
+     "artist-credit": [
+      {
+       "name": "Billie Piper",
+       "artist": {
+        "id": "77e6c304-599d-46e0-8ba3-238207a43668",
+        "name": "Billie Piper",
+        "sort-name": "Piper, Billie"
+       }
+      }
+     ],
+     "release-group": {
+      "id": "341dca7d-2a83-4508-a68e-5116a1862a48",
+      "title": "Walk of Life",
+      "primary-type": "Album"
+     },
+     "date": "2000-01-01"
+    }
+   ]
+  },
+  {
+   "id": "732f37e0-44b0-4d34-b1d8-7fad466d1dc1",
+   "score": 89,
+   "title": "Deju Vudoo - Live Session, Austin, TX, 2019",
+   "artist-credit": [
+    {
+     "name": "Atlantis Aquarius",
+     "artist": {
+      "id": "920879bb-ee9a-46c7-b2fd-f774393a9390",
+      "name": "Atlantis Aquarius",
+      "sort-name": "Atlantis Aquarius"
+     }
+    }
+   ],
+   "first-release-date": "2019",
+   "releases": [
+    {
+     "id": "5fdbdbcd-4b4f-4285-bae6-ef4f84bbad13",
+     "title": "Jam in the Van - Atlantis Aquarius (Live, Session, Austin, TX, 2019)",
+     "release-group": {
+      "id": "e307bbfc-0863-41e4-b173-7d72b8428e41",
+      "title": "Jam in the Van - Atlantis Aquarius (Live, Session, Austin, TX, 2019)",
+      "primary-type": "EP"
+     },
+     "date": "2019"
+    }
+   ]
+  },
+  {
+   "id": "be320453-42b9-4a1d-8250-c90423a74b66",
+   "score": 87,
+   "title": "I Am a Centaur - Live Session, Austin, TX, 2019",
+   "artist-credit": [
+    {
+     "name": "Atlantis Aquarius",
+     "artist": {
+      "id": "920879bb-ee9a-46c7-b2fd-f774393a9390",
+      "name": "Atlantis Aquarius",
+      "sort-name": "Atlantis Aquarius"
+     }
+    }
+   ],
+   "first-release-date": "2019",
+   "releases": [
+    {
+     "id": "5fdbdbcd-4b4f-4285-bae6-ef4f84bbad13",
+     "title": "Jam in the Van - Atlantis Aquarius (Live, Session, Austin, TX, 2019)",
+     "release-group": {
+      "id": "e307bbfc-0863-41e4-b173-7d72b8428e41",
+      "title": "Jam in the Van - Atlantis Aquarius (Live, Session, Austin, TX, 2019)",
+      "primary-type": "EP"
+     },
+     "date": "2019"
+    }
+   ]
+  },
+  {
+   "id": "69d9e6e6-f640-481c-8e3f-29dd3e119470",
+   "score": 86,
+   "title": "Waiting On The Next Life - Live Session, Austin, TX, 2019",
+   "artist-credit": [
+    {
+     "name": "Atlantis Aquarius",
+     "artist": {
+      "id": "920879bb-ee9a-46c7-b2fd-f774393a9390",
+      "name": "Atlantis Aquarius",
+      "sort-name": "Atlantis Aquarius"
+     }
+    }
+   ],
+   "first-release-date": "2019",
+   "releases": [
+    {
+     "id": "5fdbdbcd-4b4f-4285-bae6-ef4f84bbad13",
+     "title": "Jam in the Van - Atlantis Aquarius (Live, Session, Austin, TX, 2019)",
+     "release-group": {
+      "id": "e307bbfc-0863-41e4-b173-7d72b8428e41",
+      "title": "Jam in the Van - Atlantis Aquarius (Live, Session, Austin, TX, 2019)",
+      "primary-type": "EP"
+     },
+     "date": "2019"
+    }
+   ]
+  },
+  {
+   "id": "bed1433c-e67e-498b-a679-7b0672a4fd68",
+   "score": 83,
+   "title": "Fiji (Mixed) - ReOrder Remix",
+   "artist-credit": [
+    {
+     "joinphrase": " & ",
+     "name": "Atlantis",
+     "artist": {
+      "id": "8da5095b-d9a7-4722-9ab2-35f2d1246e1d",
+      "name": "Atlantis",
+      "sort-name": "Atlantis"
+     }
+    },
+    {
+     "name": "ReOrder",
+     "artist": {
+      "id": "64e1d93f-dd16-4fce-8e52-a5fcf12e8a8e",
+      "name": "ReOrder",
+      "sort-name": "ReOrder",
+      "aliases": [
+       {
+        "sort-name": "Tomecko, Tibor",
+        "name": "Tibor Tomecko"
+       },
+       {
+        "sort-name": "Reorder",
+        "name": "Reorder"
+       }
+      ]
+     }
+    }
+   ],
+   "first-release-date": "2024-09-12",
+   "releases": [
+    {
+     "id": "9b517a6a-6f32-40b6-95f8-11c641fb581f",
+     "title": "ASOT 1190 - A State of Trance Episode 1190 [Including Live at ASOT 900 (Mexico City, Mexico) [Highlights]]",
+     "status": "Official",
+     "artist-credit": [
+      {
+       "name": "Armin van Buuren",
+       "artist": {
+        "id": "477b8c0c-c5fc-4ad2-b5b2-191f0bf2a9df",
+        "name": "Armin van Buuren",
+        "sort-name": "Buuren, Armin van"
+       }
+      }
+     ],
+     "release-group": {
+      "id": "e18ab28a-2c86-41cb-906f-042f31200bd6",
+      "title": "2024-09-12: A State of Trance #1190",
+      "primary-type": "Broadcast",
+      "secondary-types": [
+       "DJ-mix"
+      ]
+     },
+     "date": "2024-09-12"
+    }
+   ]
+  },
+  {
+   "id": "b02ef13a-b140-4667-8c86-8e5d158d175a",
+   "score": 80,
+   "title": "Beyond Horizon – The Poem, Part II",
+   "artist-credit": [
+    {
+     "name": "Visions of Atlantis",
+     "artist": {
+      "id": "24ac23ce-93a2-4605-adb3-c59f1147a245",
+      "name": "Visions of Atlantis",
+      "sort-name": "Visions of Atlantis",
+      "aliases": [
+       {
+        "sort-name": "VoA",
+        "name": "VoA"
+       }
+      ]
+     }
+    }
+   ],
+   "first-release-date": "2011-10-21",
+   "releases": [
+    {
+     "id": "9d0f742b-38a2-48dc-88b5-61e6aedf3d61",
+     "title": "Maria Magdalena",
+     "status": "Official",
+     "artist-credit": [
+      {
+       "name": "Visions of Atlantis",
+       "artist": {
+        "id": "24ac23ce-93a2-4605-adb3-c59f1147a245",
+        "name": "Visions of Atlantis",
+        "sort-name": "Visions of Atlantis"
+       }
+      }
+     ],
+     "release-group": {
+      "id": "d4286273-eb4f-42d9-b06b-2410c7613831",
+      "title": "Maria Magdalena",
+      "primary-type": "EP"
+     },
+     "date": "2011-10-21"
+    },
+    {
+     "id": "c0f5c9ba-ef9e-49a2-854b-b87a96550b87",
+     "title": "Maria Magdalena",
+     "status": "Official",
+     "artist-credit": [
+      {
+       "name": "Visions of Atlantis",
+       "artist": {
+        "id": "24ac23ce-93a2-4605-adb3-c59f1147a245",
+        "name": "Visions of Atlantis",
+        "sort-name": "Visions of Atlantis"
+       }
+      }
+     ],
+     "release-group": {
+      "id": "d4286273-eb4f-42d9-b06b-2410c7613831",
+      "title": "Maria Magdalena",
+      "primary-type": "EP"
+     },
+     "date": "2011-10-21"
+    },
+    {
+     "id": "1d1ba56d-4ed5-44fa-8f60-cddf7a9cdf53",
+     "title": "Maria Magdalena",
+     "status": "Official",
+     "artist-credit": [
+      {
+       "name": "Visions of Atlantis",
+       "artist": {
+        "id": "24ac23ce-93a2-4605-adb3-c59f1147a245",
+        "name": "Visions of Atlantis",
+        "sort-name": "Visions of Atlantis"
+       }
+      }
+     ],
+     "release-group": {
+      "id": "d4286273-eb4f-42d9-b06b-2410c7613831",
+      "title": "Maria Magdalena",
+      "primary-type": "EP"
+     },
+     "date": "2011-10-21"
+    }
+   ]
+  },
+  {
+   "id": "e70f2985-67b5-49d0-9b0c-3ba99f21f983",
+   "score": 78,
+   "title": "Octet: Adagio - Allegro",
+   "artist-credit": [
+    {
+     "joinphrase": ", ",
+     "name": "Atlantis Ensemble",
+     "artist": {
+      "id": "7fe6f7a0-e0b5-4d4c-b5e2-97834a4a225a",
+      "name": "Atlantis Ensemble",
+      "sort-name": "Classical ensemble",
+      "aliases": [
+       {
+        "sort-name": "Atlantis Trio",
+        "name": "Atlantis Trio"
+       }
+      ]
+     }
+    },
+    {
+     "name": "Jaap Schröder",
+     "artist": {
+      "id": "b69c8f14-4ef0-47ab-8c27-96ec6f711c8d",
+      "name": "Jaap Schröder",
+      "sort-name": "Schröder, Jaap"
+     }
+    }
+   ],
+   "first-release-date": "1990",
+   "releases": [
+    {
+     "id": "aaabdd1f-d366-416a-93e7-124efdd011bd",
+     "title": "Schubert Octet",
+     "status": "Official",
+     "artist-credit": [
+      {
+       "joinphrase": "; ",
+       "name": "Franz Schubert",
+       "artist": {
+        "id": "f91e3a88-24ee-4563-8963-fab73d2765ed",
+        "name": "Franz Schubert",
+        "sort-name": "Schubert, Franz"
+       }
+      },
+      {
+       "joinphrase": ", ",
+       "name": "Atlantis Ensemble",
+       "artist": {
+        "id": "7fe6f7a0-e0b5-4d4c-b5e2-97834a4a225a",
+        "name": "Atlantis Ensemble",
+        "sort-name": "Classical ensemble"
+       }
+      },
+      {
+       "name": "Jaap Schröder",
+       "artist": {
+        "id": "b69c8f14-4ef0-47ab-8c27-96ec6f711c8d",
+        "name": "Jaap Schröder",
+        "sort-name": "Schröder, Jaap"
+       }
+      }
+     ],
+     "release-group": {
+      "id": "29aef0e2-92de-49da-8dae-e98c74f4f5fe",
+      "title": "Schubert Octet"
+     },
+     "date": "1990"
+    }
+   ]
+  },
+  {
+   "id": "695a80ac-cb79-4d21-aa3b-8f3c1a29b435",
+   "score": 77,
+   "title": "Apparently Nothing - Stargate Mix",
+   "artist-credit": [
+    {
+     "joinphrase": " & ",
+     "name": "The Brand New Heavies",
+     "artist": {
+      "id": "9b8d6e2c-2b4e-4924-82ae-226b4e701f6b",
+      "name": "The Brand New Heavies",
+      "sort-name": "Brand New Heavies, The",
+      "aliases": [
+       {
+        "sort-name": "Brand New Heavies",
+        "name": "Brand New Heavies"
+       }
+      ]
+     }
+    },
+    {
+     "name": "Stargate",
+     "artist": {
+      "id": "509d1ba6-dcf4-4ed1-a422-157ecdffef72",
+      "name": "StarGate",
+      "sort-name": "StarGate"
+     }
+    }
+   ],
+   "first-release-date": "2023-09-29",
+   "releases": [
+    {
+     "id": "f2fd63e6-1933-4771-8b3c-a2b41ce92262",
+     "title": "Never Stop… The Best of",
+     "status": "Official",
+     "artist-credit": [
+      {
+       "name": "The Brand New Heavies",
+       "artist": {
+        "id": "9b8d6e2c-2b4e-4924-82ae-226b4e701f6b",
+        "name": "The Brand New Heavies",
+        "sort-name": "Brand New Heavies, The"
+       }
+      }
+     ],
+     "release-group": {
+      "id": "5579cf37-5d7a-4096-bb5b-3ad6c9c89dcb",
+      "title": "Never Stop… The Best of The Brand New Heavies (The Definitive Singles Collection 1991–1999)",
+      "primary-type": "Album",
+      "secondary-types": [
+       "Compilation"
+      ]
+     },
+     "date": "2023-09-29"
+    }
+   ]
+  },
+  {
+   "id": "9d52c220-7b91-474e-bb1e-0ce626d0d742",
+   "score": 75,
+   "title": "Octet: Allegro vivace - Trio",
+   "artist-credit": [
+    {
+     "joinphrase": ", ",
+     "name": "Atlantis Ensemble",
+     "artist": {
+      "id": "7fe6f7a0-e0b5-4d4c-b5e2-97834a4a225a",
+      "name": "Atlantis Ensemble",
+      "sort-name": "Classical ensemble",
+      "aliases": [
+       {
+        "sort-name": "Atlantis Trio",
+        "name": "Atlantis Trio"
+       }
+      ]
+     }
+    },
+    {
+     "name": "Jaap Schröder",
+     "artist": {
+      "id": "b69c8f14-4ef0-47ab-8c27-96ec6f711c8d",
+      "name": "Jaap Schröder",
+      "sort-name": "Schröder, Jaap"
+     }
+    }
+   ],
+   "first-release-date": "1990",
+   "releases": [
+    {
+     "id": "aaabdd1f-d366-416a-93e7-124efdd011bd",
+     "title": "Schubert Octet",
+     "status": "Official",
+     "artist-credit": [
+      {
+       "joinphrase": "; ",
+       "name": "Franz Schubert",
+       "artist": {
+        "id": "f91e3a88-24ee-4563-8963-fab73d2765ed",
+        "name": "Franz Schubert",
+        "sort-name": "Schubert, Franz"
+       }
+      },
+      {
+       "joinphrase": ", ",
+       "name": "Atlantis Ensemble",
+       "artist": {
+        "id": "7fe6f7a0-e0b5-4d4c-b5e2-97834a4a225a",
+        "name": "Atlantis Ensemble",
+        "sort-name": "Classical ensemble"
+       }
+      },
+      {
+       "name": "Jaap Schröder",
+       "artist": {
+        "id": "b69c8f14-4ef0-47ab-8c27-96ec6f711c8d",
+        "name": "Jaap Schröder",
+        "sort-name": "Schröder, Jaap"
+       }
+      }
+     ],
+     "release-group": {
+      "id": "29aef0e2-92de-49da-8dae-e98c74f4f5fe",
+      "title": "Schubert Octet"
+     },
+     "date": "1990"
+    }
+   ]
+  },
+  {
+   "id": "5e4af9d0-a659-4701-a72d-f26d74914b68",
+   "score": 75,
+   "title": "Octet: Menuetto. Allegretto - Trio",
+   "artist-credit": [
+    {
+     "joinphrase": ", ",
+     "name": "Atlantis Ensemble",
+     "artist": {
+      "id": "7fe6f7a0-e0b5-4d4c-b5e2-97834a4a225a",
+      "name": "Atlantis Ensemble",
+      "sort-name": "Classical ensemble",
+      "aliases": [
+       {
+        "sort-name": "Atlantis Trio",
+        "name": "Atlantis Trio"
+       }
+      ]
+     }
+    },
+    {
+     "name": "Jaap Schröder",
+     "artist": {
+      "id": "b69c8f14-4ef0-47ab-8c27-96ec6f711c8d",
+      "name": "Jaap Schröder",
+      "sort-name": "Schröder, Jaap"
+     }
+    }
+   ],
+   "first-release-date": "1990",
+   "releases": [
+    {
+     "id": "aaabdd1f-d366-416a-93e7-124efdd011bd",
+     "title": "Schubert Octet",
+     "status": "Official",
+     "artist-credit": [
+      {
+       "joinphrase": "; ",
+       "name": "Franz Schubert",
+       "artist": {
+        "id": "f91e3a88-24ee-4563-8963-fab73d2765ed",
+        "name": "Franz Schubert",
+        "sort-name": "Schubert, Franz"
+       }
+      },
+      {
+       "joinphrase": ", ",
+       "name": "Atlantis Ensemble",
+       "artist": {
+        "id": "7fe6f7a0-e0b5-4d4c-b5e2-97834a4a225a",
+        "name": "Atlantis Ensemble",
+        "sort-name": "Classical ensemble"
+       }
+      },
+      {
+       "name": "Jaap Schröder",
+       "artist": {
+        "id": "b69c8f14-4ef0-47ab-8c27-96ec6f711c8d",
+        "name": "Jaap Schröder",
+        "sort-name": "Schröder, Jaap"
+       }
+      }
+     ],
+     "release-group": {
+      "id": "29aef0e2-92de-49da-8dae-e98c74f4f5fe",
+      "title": "Schubert Octet"
+     },
+     "date": "1990"
+    }
+   ]
+  },
+  {
+   "id": "445ef6d2-2239-4bce-a628-963c9d20a5a4",
+   "score": 75,
+   "title": "Octet: Andante molto - Allegro",
+   "artist-credit": [
+    {
+     "joinphrase": ", ",
+     "name": "Atlantis Ensemble",
+     "artist": {
+      "id": "7fe6f7a0-e0b5-4d4c-b5e2-97834a4a225a",
+      "name": "Atlantis Ensemble",
+      "sort-name": "Classical ensemble",
+      "aliases": [
+       {
+        "sort-name": "Atlantis Trio",
+        "name": "Atlantis Trio"
+       }
+      ]
+     }
+    },
+    {
+     "name": "Jaap Schröder",
+     "artist": {
+      "id": "b69c8f14-4ef0-47ab-8c27-96ec6f711c8d",
+      "name": "Jaap Schröder",
+      "sort-name": "Schröder, Jaap"
+     }
+    }
+   ],
+   "first-release-date": "1990",
+   "releases": [
+    {
+     "id": "aaabdd1f-d366-416a-93e7-124efdd011bd",
+     "title": "Schubert Octet",
+     "status": "Official",
+     "artist-credit": [
+      {
+       "joinphrase": "; ",
+       "name": "Franz Schubert",
+       "artist": {
+        "id": "f91e3a88-24ee-4563-8963-fab73d2765ed",
+        "name": "Franz Schubert",
+        "sort-name": "Schubert, Franz"
+       }
+      },
+      {
+       "joinphrase": ", ",
+       "name": "Atlantis Ensemble",
+       "artist": {
+        "id": "7fe6f7a0-e0b5-4d4c-b5e2-97834a4a225a",
+        "name": "Atlantis Ensemble",
+        "sort-name": "Classical ensemble"
+       }
+      },
+      {
+       "name": "Jaap Schröder",
+       "artist": {
+        "id": "b69c8f14-4ef0-47ab-8c27-96ec6f711c8d",
+        "name": "Jaap Schröder",
+        "sort-name": "Schröder, Jaap"
+       }
+      }
+     ],
+     "release-group": {
+      "id": "29aef0e2-92de-49da-8dae-e98c74f4f5fe",
+      "title": "Schubert Octet"
+     },
+     "date": "1990"
+    }
+   ]
+  },
+  {
+   "id": "07913586-da13-4f7a-824a-f563e23052f8",
+   "score": 48,
+   "title": "Mix 6: Fröhliche Schlittenfahrt – Schad’, das du nicht da bist / Alle Jahre wieder / Kling, Glöckchen, kling",
+   "artist-credit": [
+    {
+     "joinphrase": " / ",
+     "name": "Atlantis",
+     "artist": {
+      "id": "4f907f3b-72fc-479c-b012-43cbd867d088",
+      "name": "Atlantis",
+      "sort-name": "Atlantis"
+     }
+    },
+    {
+     "joinphrase": " / ",
+     "name": "Andy Borg",
+     "artist": {
+      "id": "02b21439-02f9-4d46-9938-27da30088ef4",
+      "name": "Andy Borg",
+      "sort-name": "Borg, Andy",
+      "aliases": [
+       {
+        "sort-name": "Meyer, Adolf Andreas",
+        "name": "Adolf Andreas Meyer"
+       }
+      ]
+     }
+    },
+    {
+     "name": "Gottlieb Wendehals",
+     "artist": {
+      "id": "74c56b4c-8c6a-4648-bb3f-93177a51fb1a",
+      "name": "Gottlieb Wendehals",
+      "sort-name": "Wendehals, Gottlieb",
+      "aliases": [
+       {
+        "sort-name": "Gottfried Wendehals",
+        "name": "Gottfried Wendehals"
+       }
+      ]
+     }
+    }
+   ],
+   "releases": [
+    {
+     "id": "356b3e1a-f051-4ebb-b450-ac37b86a8a5d",
+     "title": "Weihnachts Hitmix",
+     "status": "Official",
+     "artist-credit": [
+      {
+       "name": "Various Artists",
+       "artist": {
+        "id": "89ad4ac3-39f7-470e-963a-56509c546377",
+        "name": "Various Artists",
+        "sort-name": "Various Artists"
+       }
+      }
+     ],
+     "release-group": {
+      "id": "7bde8199-e745-47a9-9e99-93a425af3a84",
+      "title": "Weihnachts Hitmix",
+      "primary-type": "Album"
+     },
+     "date": ""
+    }
+   ]
+  }
+ ]
+}

@@ -1,0 +1,208 @@
+{
+ "recordings": [
+  {
+   "id": "3b68fc91-e739-4bb3-8050-081e07ede81c",
+   "score": 100,
+   "title": "Vieilles courroies",
+   "artist-credit": [
+    {
+     "name": "Harmonium",
+     "artist": {
+      "id": "0310f78a-3395-46e9-9986-342480de490e",
+      "name": "Harmonium",
+      "sort-name": "Harmonium"
+     }
+    }
+   ],
+   "first-release-date": "2019-12-06",
+   "releases": [
+    {
+     "id": "42cd7441-6004-47a1-856b-fead893d9dc7",
+     "title": "Harmonium XLV",
+     "status": "Official",
+     "release-group": {
+      "id": "dac6bc96-0d9f-315a-974f-e5ab2d685d90",
+      "title": "Harmonium",
+      "primary-type": "Album"
+     },
+     "date": "2019-12-06"
+    },
+    {
+     "id": "a78a328b-61bb-4364-9932-2f72b5d10329",
+     "title": "Harmonium XLV",
+     "status": "Official",
+     "release-group": {
+      "id": "dac6bc96-0d9f-315a-974f-e5ab2d685d90",
+      "title": "Harmonium",
+      "primary-type": "Album"
+     },
+     "date": "2019-12-06"
+    },
+    {
+     "id": "a78a328b-61bb-4364-9932-2f72b5d10329",
+     "title": "Harmonium XLV",
+     "status": "Official",
+     "release-group": {
+      "id": "dac6bc96-0d9f-315a-974f-e5ab2d685d90",
+      "title": "Harmonium",
+      "primary-type": "Album"
+     },
+     "date": "2019-12-06"
+    },
+    {
+     "id": "c1b0ec2f-d327-4ff9-8246-67a3dcde1c4f",
+     "title": "Harmonium XLV",
+     "status": "Official",
+     "release-group": {
+      "id": "dac6bc96-0d9f-315a-974f-e5ab2d685d90",
+      "title": "Harmonium",
+      "primary-type": "Album"
+     },
+     "date": "2019-12-06"
+    },
+    {
+     "id": "45608909-6c5a-4ad9-83d9-b026c66b6c9b",
+     "title": "Harmonium XLV",
+     "status": "Official",
+     "release-group": {
+      "id": "dac6bc96-0d9f-315a-974f-e5ab2d685d90",
+      "title": "Harmonium",
+      "primary-type": "Album"
+     },
+     "date": "2019-12-06"
+    }
+   ]
+  },
+  {
+   "id": "5b7a8b26-5554-4b79-8bf9-ca73d1a1dc98",
+   "score": 100,
+   "title": "Vieilles courroies",
+   "artist-credit": [
+    {
+     "name": "Harmonium",
+     "artist": {
+      "id": "0310f78a-3395-46e9-9986-342480de490e",
+      "name": "Harmonium",
+      "sort-name": "Harmonium"
+     }
+    }
+   ],
+   "first-release-date": "1974-04",
+   "releases": [
+    {
+     "id": "32d46491-53a9-42cb-8538-9d5d1b80b51d",
+     "title": "Harmonium",
+     "status": "Official",
+     "release-group": {
+      "id": "dac6bc96-0d9f-315a-974f-e5ab2d685d90",
+      "title": "Harmonium",
+      "primary-type": "Album"
+     },
+     "date": "1992"
+    },
+    {
+     "id": "36c7f715-e90f-44a4-8bdc-14cfc990b88f",
+     "title": "Harmonium / Si on avait besoin d’une cinquième saison",
+     "status": "Official",
+     "release-group": {
+      "id": "8c304a5d-5e3d-4ecd-8343-a3a3b4a7e9d4",
+      "title": "Harmonium / Si on avait besoin d’une cinquième saison",
+      "primary-type": "Album",
+      "secondary-types": [
+       "Compilation"
+      ]
+     },
+     "date": "2001-10"
+    },
+    {
+     "id": "1b995553-22c7-4ba5-991e-5dea9217704a",
+     "title": "Harmonium",
+     "status": "Official",
+     "release-group": {
+      "id": "dac6bc96-0d9f-315a-974f-e5ab2d685d90",
+      "title": "Harmonium",
+      "primary-type": "Album"
+     },
+     "date": "2014-04-22"
+    },
+    {
+     "id": "342e4b05-ec7b-4a95-92cf-7ba4e2f7f433",
+     "title": "Harmonium",
+     "status": "Official",
+     "release-group": {
+      "id": "dac6bc96-0d9f-315a-974f-e5ab2d685d90",
+      "title": "Harmonium",
+      "primary-type": "Album"
+     },
+     "date": "1974-04"
+    },
+    {
+     "id": "c5413ace-dbb1-469f-867c-e600063f0397",
+     "title": "Harmonium",
+     "status": "Official",
+     "release-group": {
+      "id": "dac6bc96-0d9f-315a-974f-e5ab2d685d90",
+      "title": "Harmonium",
+      "primary-type": "Album"
+     },
+     "date": ""
+    },
+    {
+     "id": "6d2073db-3180-4b46-aa06-f84564ac994d",
+     "title": "Harmonium",
+     "status": "Official",
+     "release-group": {
+      "id": "dac6bc96-0d9f-315a-974f-e5ab2d685d90",
+      "title": "Harmonium",
+      "primary-type": "Album"
+     },
+     "date": ""
+    },
+    {
+     "id": "960d2da4-fb8c-42c5-901b-03d2f5d2f124",
+     "title": "Harmonium",
+     "status": "Official",
+     "release-group": {
+      "id": "dac6bc96-0d9f-315a-974f-e5ab2d685d90",
+      "title": "Harmonium",
+      "primary-type": "Album"
+     },
+     "date": "1989"
+    },
+    {
+     "id": "5370e904-5775-469e-939c-7d8082352abc",
+     "title": "Harmonium",
+     "status": "Official",
+     "release-group": {
+      "id": "dac6bc96-0d9f-315a-974f-e5ab2d685d90",
+      "title": "Harmonium",
+      "primary-type": "Album"
+     },
+     "date": "1974"
+    },
+    {
+     "id": "88e8392e-74f7-4953-8fb7-d70f0e0759c3",
+     "title": "Harmonium",
+     "status": "Official",
+     "release-group": {
+      "id": "dac6bc96-0d9f-315a-974f-e5ab2d685d90",
+      "title": "Harmonium",
+      "primary-type": "Album"
+     },
+     "date": "1974"
+    },
+    {
+     "id": "74fd0f9b-ff41-3b23-8ba2-1ad2eabac815",
+     "title": "Harmonium",
+     "status": "Official",
+     "release-group": {
+      "id": "dac6bc96-0d9f-315a-974f-e5ab2d685d90",
+      "title": "Harmonium",
+      "primary-type": "Album"
+     },
+     "date": "1989"
+    }
+   ]
+  }
+ ]
+}

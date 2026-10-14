@@ -1,0 +1,156 @@
+{
+ "release-groups": [
+  {
+   "id": "a8a1dad8-f8e5-4755-ab14-1a8a787b987b",
+   "score": 100,
+   "title": "Dziewczyno Ma - Euro Dance Mix",
+   "first-release-date": "1995",
+   "primary-type": "Album",
+   "artist-credit": [
+    {
+     "name": "Atlantis",
+     "artist": {
+      "id": "10023d22-e383-4b53-b163-444b4a434d39",
+      "name": "Atlantis",
+      "sort-name": "Atlantis"
+     }
+    }
+   ],
+   "releases": [
+    {
+     "id": "c922be1b-a025-4e31-a348-7484e3d587f3",
+     "title": "Dziewczyno Ma - Euro Dance Mix"
+    }
+   ]
+  },
+  {
+   "id": "e307bbfc-0863-41e4-b173-7d72b8428e41",
+   "score": 78,
+   "title": "Jam in the Van - Atlantis Aquarius (Live, Session, Austin, TX, 2019)",
+   "first-release-date": "2019",
+   "primary-type": "EP",
+   "artist-credit": [
+    {
+     "name": "Atlantis Aquarius",
+     "artist": {
+      "id": "920879bb-ee9a-46c7-b2fd-f774393a9390",
+      "name": "Atlantis Aquarius",
+      "sort-name": "Atlantis Aquarius"
+     }
+    }
+   ],
+   "releases": [
+    {
+     "id": "5fdbdbcd-4b4f-4285-bae6-ef4f84bbad13",
+     "title": "Jam in the Van - Atlantis Aquarius (Live, Session, Austin, TX, 2019)"
+    }
+   ]
+  },
+  {
+   "id": "237bb5c7-fb96-4071-ab3a-38b421246c21",
+   "score": 76,
+   "title": "Old Routes – New Waters",
+   "first-release-date": "2016-04-29",
+   "primary-type": "EP",
+   "artist-credit": [
+    {
+     "name": "Visions of Atlantis",
+     "artist": {
+      "id": "24ac23ce-93a2-4605-adb3-c59f1147a245",
+      "name": "Visions of Atlantis",
+      "sort-name": "Visions of Atlantis",
+      "aliases": [
+       {
+        "sort-name": "VoA",
+        "name": "VoA"
+       }
+      ]
+     }
+    }
+   ],
+   "releases": [
+    {
+     "id": "8c3edad5-c7f9-42cb-b546-d3f317245c5f",
+     "title": "Old Routes / New Waters",
+     "status": "Official"
+    },
+    {
+     "id": "c60cac77-44ed-4e34-bb48-a153184fae2f",
+     "title": "Old Routes - New Waters",
+     "status": "Official"
+    },
+    {
+     "id": "419c1dbb-47ba-43ac-9549-6cfc782a2a6e",
+     "title": "Old Routes – New Waters",
+     "status": "Official"
+    }
+   ]
+  },
+  {
+   "id": "30f33e7f-b26e-4fdf-a81f-f0b17bfa8569",
+   "score": 73,
+   "title": "Armada Live Over Europe - Pt. 2",
+   "first-release-date": "2025-01-21",
+   "primary-type": "Album",
+   "secondary-types": [
+    "Live"
+   ],
+   "artist-credit": [
+    {
+     "name": "Visions of Atlantis",
+     "artist": {
+      "id": "24ac23ce-93a2-4605-adb3-c59f1147a245",
+      "name": "Visions of Atlantis",
+      "sort-name": "Visions of Atlantis",
+      "aliases": [
+       {
+        "sort-name": "VoA",
+        "name": "VoA"
+       }
+      ]
+     }
+    }
+   ],
+   "releases": [
+    {
+     "id": "ae5ccbed-8436-4306-be57-bd5420012a22",
+     "title": "Armada Live Over Europe - Pt. 2",
+     "status": "Official"
+    }
+   ]
+  },
+  {
+   "id": "da2f1adb-c1ba-4d77-a3ec-d699a28da6cf",
+   "score": 73,
+   "title": "Armada Live Over Europe - Pt. 1",
+   "first-release-date": "2024-12-10",
+   "primary-type": "EP",
+   "secondary-types": [
+    "Live"
+   ],
+   "artist-credit": [
+    {
+     "name": "Visions of Atlantis",
+     "artist": {
+      "id": "24ac23ce-93a2-4605-adb3-c59f1147a245",
+      "name": "Visions of Atlantis",
+      "sort-name": "Visions of Atlantis",
+      "aliases": [
+       {
+        "sort-name": "VoA",
+        "name": "VoA"
+       }
+      ]
+     }
+    }
+   ],
+   "releases": [
+    {
+     "id": "135313af-1932-4bda-8e3a-dcbca307e411",
+     "title": "Armada Live Over Europe - Pt. 1",
+     "status": "Official"
+    }
+   ]
+  }
+ ]
+}
