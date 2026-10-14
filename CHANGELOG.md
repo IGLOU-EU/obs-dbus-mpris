@@ -4,14 +4,14 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.0.0] - Unreleased
+## [1.0.0] - 2026-10-15
 
 First release: an OBS Studio 32 source that shows what an MPRIS media player is playing, read from the D-Bus session bus.
 
 ### Added
 
 - A "Now Playing (MPRIS)" source that discovers players on the session bus as they appear and disappear, without restarting OBS.
-- A player list in the source properties, one entry per running instance, labeled by what it plays. The chosen instance is saved with the scene collection, and stays listed as unavailable while it is gone.
+- A player list in the source properties, one entry per running instance, labeled by the player name and what it plays ("mpv - Mamona"). The chosen instance is saved with the scene collection, and stays listed as unavailable while it is gone.
 - Automatic selection during a five minute grace period after the source starts: the saved instance first, then an instance of the same player, then another playing or paused player. After the grace period, or after a choice made by hand, the source keeps to its player and follows it when it restarts with a new instance name. Cancel in the properties restores the selection as it was.
 - Displayed elements, each one optional: cover, title, artist, album, progress bar, position, and duration or remaining time.
 - Covers from `data:` and `file://` URLs, in JPEG, PNG and WebP, with a default picture when the cover is missing or unreadable.

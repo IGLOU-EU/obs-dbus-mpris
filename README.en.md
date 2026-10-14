@@ -1,14 +1,14 @@
-<p align="center"><img src="assets/logo/logo.svg" alt="" width="128"></p>
-
-# obs-dbus-mpris
+# <img src="assets/logo/logo.svg" alt="" width="40"> obs-dbus-mpris
 
 *Ce README existe aussi en [français](README.md).*
 
 A plugin for OBS Studio on Linux that adds one thing: a "Now Playing (MPRIS)" source, which shows what your media player is playing. Cover, title, artist, album and progress are read from the D-Bus session bus, through the MPRIS interface that mpv, VLC, web browsers, Strawberry, Elisa and many others provide.
 
+<p align="center"><img src="docs/captures/source-variants.png" alt="The source in OBS with four different settings: title and subtitle only, full layout, round cover with the remaining time, colored bar." width="600"></p>
+
 ## What the plugin does
 
-- **One source, nothing else.** No entry in the Tools menu, no dock, no global setting, no file written to disk. Everything is set in the properties of the source, and several sources can each follow their own player, with their own style.
+- **One source, nothing else.** No entry in the Tools menu, no dock, no global setting, no file written to disk. Everything is set in the properties of the source, and several sources can each follow their own player, with their own style. As with any OBS source, a source pasted as a reference (Ctrl+V) or added with "Add Existing" shares its settings with the original: for separate settings, create a new source, or paste it as a duplicate (Edit menu, "Paste (Duplicate)").
 - **A complete source.** Cover, title, an "Album - Artist" subtitle, progress bar, position and duration (or remaining time) are drawn by the source itself. Each element can be shown or hidden.
 - **A careful rendering.** Cover on the left or the right, round or square, rounded corners, four colors with transparency, three font sizes. Texts too long for their line scroll, and Japanese, Chinese or Korean characters show as soon as a font has them.
 - **A player selection designed for live streaming.** At startup the source finds your usual player, then never changes on its own (see below).
@@ -50,7 +50,7 @@ For titles in Japanese, Chinese or Korean, install a CJK font on your system: `n
 
 Add a "Now Playing (MPRIS)" source to a scene. Its properties come in five groups:
 
-- **Player**: the followed player, one entry per running instance, labeled by what it plays, and automatic selection.
+- **Player**: the followed player, one entry per running instance, labeled by the player name and what it plays ("mpv - Mamona"), and automatic selection.
 - **Displayed elements**: whether to show each element, remaining time in place of the duration, and the online cover.
 - **Layout**: total width (the height follows the fonts), cover on the right, round cover, gap between the cover and the panel, corner radius, progress bar thickness.
 - **Text**: the three font sizes, the scrolling speed and pause (0 turns scrolling off, texts too long then end with "…"), and the message shown when nothing plays.

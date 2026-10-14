@@ -1,14 +1,14 @@
-<p align="center"><img src="assets/logo/logo.svg" alt="" width="128"></p>
-
-# obs-dbus-mpris
+# <img src="assets/logo/logo.svg" alt="" width="40"> obs-dbus-mpris
 
 *This README is also available in [English](README.en.md).*
 
 Un plugin pour OBS Studio sous Linux qui ajoute une seule chose : une source « Lecture en cours (MPRIS) », qui affiche ce que joue votre lecteur multimédia. Pochette, titre, artiste, album et progression sont lus sur le bus de session D-Bus, par l'interface MPRIS que proposent mpv, VLC, les navigateurs, Strawberry, Elisa et bien d'autres.
 
+<p align="center"><img src="docs/captures/source-variants.png" alt="La source dans OBS, avec quatre réglages différents : titre et sous-titre seuls, disposition complète, miniature ronde avec le temps restant, barre de couleur." width="600"></p>
+
 ## Ce que fait le plugin
 
-- **Une source, rien d'autre.** Pas d'entrée dans le menu Outils, pas de dock, pas de réglage global, aucun fichier écrit sur disque. Tout se règle dans les propriétés de la source, et plusieurs sources peuvent suivre chacune leur lecteur, avec leur style.
+- **Une source, rien d'autre.** Pas d'entrée dans le menu Outils, pas de dock, pas de réglage global, aucun fichier écrit sur disque. Tout se règle dans les propriétés de la source, et plusieurs sources peuvent suivre chacune leur lecteur, avec leur style. Comme pour toute source OBS, une source collée par référence (Ctrl+V) ou ajoutée par « Ajouter une source existante » partage ses réglages avec l'originale : pour des réglages distincts, créez une nouvelle source, ou collez-la en double (menu Édition, « Coller (dupliquer) »).
 - **Une source complète.** Miniature, titre, sous-titre « Album - Artiste », barre de progression, position et durée (ou temps restant) sont dessinés par la source elle-même. Chaque élément s'affiche ou se masque.
 - **Un rendu soigné.** Miniature à gauche ou à droite, ronde ou carrée, coins arrondis, quatre couleurs avec transparence, trois tailles de police. Les textes trop longs défilent, et les caractères japonais, chinois ou coréens s'affichent dès qu'une police les contient.
 - **Une sélection du lecteur pensée pour le direct.** Au démarrage, la source retrouve votre lecteur habituel, puis ne change plus d'elle-même (voir plus bas).
@@ -50,7 +50,7 @@ Pour les titres en japonais, chinois ou coréen, installez une police CJK sur vo
 
 Ajoutez une source « Lecture en cours (MPRIS) » à une scène. Ses propriétés sont rangées en cinq groupes :
 
-- **Lecteur** : le lecteur suivi, une entrée par instance en cours, libellée par ce qu'elle joue, et la sélection automatique.
+- **Lecteur** : le lecteur suivi, une entrée par instance en cours, libellée par le nom du lecteur et ce qu'il joue (« mpv - Mamona »), et la sélection automatique.
 - **Éléments affichés** : chaque élément à afficher ou non, le temps restant à la place de la durée, et la pochette en ligne.
 - **Disposition** : largeur totale (la hauteur suit les polices), miniature à droite, miniature ronde, écart entre la miniature et le panneau, rayon des coins, épaisseur de la barre.
 - **Texte** : les trois tailles de police, la vitesse et la pause du défilement (0 le désactive, les textes trop longs se terminent alors par « … »), et le message affiché quand rien ne joue.
