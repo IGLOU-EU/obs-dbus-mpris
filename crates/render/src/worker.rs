@@ -14,9 +14,9 @@ use mpris_core::content::Content;
 use mpris_core::model::Settings;
 
 use crate::art::ArtCache;
-use crate::draw::draw;
-use crate::frame::Frame;
+use crate::draw::{Picture, draw};
 use crate::layout::Layout;
+use crate::strip::StripCache;
 use crate::text::Fonts;
 
 /// The drawing thread, shared by every source. Dropping it stops the
@@ -43,10 +43,12 @@ struct Shared {
     /// The latest request not yet drawn. A newer one replaces it, so the
     /// worker never draws a frame already out of date.
     request: Mutex<Option<Request>>,
-    /// The latest frame drawn and not yet collected.
-    done: Mutex<Option<Frame>>,
+    /// The latest picture drawn and not yet collected.
+    done: Mutex<Option<Picture>>,
     /// The cover of this source, scaled.
     art: Mutex<ArtCache>,
+    /// The scrolling texts of this source, drawn.
+    strips: Mutex<StripCache>,
 }
 
 struct Request {
@@ -100,8 +102,8 @@ impl Painter {
         let _ = self.messages.send(Message::Draw(Arc::clone(&self.shared)));
     }
 
-    /// The latest frame drawn since the previous call, if any.
-    pub fn take(&self) -> Option<Frame> {
+    /// The latest picture drawn since the previous call, if any.
+    pub fn take(&self) -> Option<Picture> {
         lock(&self.shared.done).take()
     }
 }
@@ -116,27 +118,29 @@ fn run(mut fonts: Fonts, inbox: &Receiver<Message>) {
         let started = Instant::now();
         let drawn = panic::catch_unwind(AssertUnwindSafe(|| {
             let art = &mut lock(&shared.art);
+            let strips = &mut lock(&shared.strips);
             draw(
                 &request.layout,
                 &request.content,
                 &request.settings,
                 &mut fonts,
                 art,
+                strips,
             )
         }));
         match drawn {
-            Ok(frame) => {
+            Ok(picture) => {
                 // The first frames with a cover tell what drawing costs, the
                 // cover scaled then reused.
                 if timings < 2 && has_art(&request.content) {
                     timings += 1;
-                    let (w, h) = (frame.width(), frame.height());
+                    let (w, h) = (picture.frame.width(), picture.frame.height());
                     log::debug!(
                         "{w}x{h} frame with a cover drawn in {:?}",
                         started.elapsed()
                     );
                 }
-                *lock(&shared.done) = Some(frame);
+                *lock(&shared.done) = Some(picture);
             }
             // One bad frame must not stop every source from updating (B-42).
             Err(_) => log::error!("drawing a frame failed"),
@@ -174,8 +178,8 @@ mod tests {
         painter.request(layout, content, settings);
     }
 
-    /// The next frame of `painter`, waiting for the worker to draw it.
-    fn wait(painter: &Painter) -> Frame {
+    /// The next picture of `painter`, waiting for the worker to draw it.
+    fn wait(painter: &Painter) -> Picture {
         let deadline = Instant::now() + Duration::from_secs(10);
         loop {
             if let Some(frame) = painter.take() {
@@ -208,6 +212,7 @@ mod tests {
             &settings,
             &mut Fonts::none(),
             &mut ArtCache::new(),
+            &mut StripCache::new(),
         );
         assert_eq!(wait(&painter), expected);
         assert!(painter.take().is_none(), "a frame is handed out once");
@@ -220,7 +225,7 @@ mod tests {
         ask(&painter, 300);
         ask(&painter, 400);
         open.send(()).expect("open");
-        assert_eq!(wait(&painter).width(), 400);
+        assert_eq!(wait(&painter).frame.width(), 400);
         thread::sleep(Duration::from_millis(50));
         assert!(painter.take().is_none(), "the older request is dropped");
     }
@@ -231,8 +236,8 @@ mod tests {
         let (first, second) = (worker.painter(), worker.painter());
         ask(&first, 300);
         ask(&second, 400);
-        assert_eq!(wait(&first).width(), 300);
-        assert_eq!(wait(&second).width(), 400);
+        assert_eq!(wait(&first).frame.width(), 300);
+        assert_eq!(wait(&second).frame.width(), 400);
     }
 
     #[test]
@@ -243,7 +248,7 @@ mod tests {
         thread::sleep(Duration::from_millis(50));
         assert!(painter.take().is_none());
         open.send(()).expect("open");
-        assert_eq!(wait(&painter).width(), 300);
+        assert_eq!(wait(&painter).frame.width(), 300);
     }
 
     #[test]

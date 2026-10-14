@@ -92,6 +92,14 @@ impl Fonts {
         }
     }
 
+    /// Width in pixels of `text` read as one line, as [`Fonts::fit`] reads
+    /// it, at `size`. `None` when there is nothing to draw.
+    pub(crate) fn width(&mut self, text: &str, size: u32) -> Option<f32> {
+        let line = one_line(text);
+        self.shape(line.trim(), size, size)
+            .map(|shaped| line_width(&shaped))
+    }
+
     /// Width in pixels of `text` on one line at `size`.
     pub(crate) fn measure(&mut self, text: &str, size: u32) -> f32 {
         self.shape(text, size, size)
@@ -122,6 +130,28 @@ impl Fonts {
             Align::Right => line.right() as f32 - line_width(&shaped),
         };
         self.paint(frame, &shaped, (x, line.y as f32), color, clip, false);
+    }
+
+    /// Draws `text` read as one line and uncut, from the left edge of
+    /// `frame` and again `period` pixels further, centered on its height.
+    /// Both copies sit on the same fraction of a pixel, so that the frame
+    /// holds a loop without a seam (B-36).
+    pub(crate) fn draw_loop(
+        &mut self,
+        frame: &mut Frame,
+        text: &str,
+        size: u32,
+        period: u32,
+        color: Linear,
+    ) {
+        let line = one_line(text);
+        let Some(shaped) = self.shape(line.trim(), size, frame.height()) else {
+            return;
+        };
+        let all = Rect::new(0, 0, frame.width(), frame.height());
+        for x in [0, period] {
+            self.paint(frame, &shaped, (x as f32, 0.0), color, all, false);
+        }
     }
 
     /// Draws `symbol` centered in `area`, every glyph in `color` alone, emoji
@@ -504,6 +534,86 @@ pub(crate) mod tests {
             .filter_map(|(x, y)| frame.pixel(x, y))
             .filter(|p| p[3] == 255);
         assert!(solid.into_iter().all(|p| p == [255, 0, 0, 255]));
+    }
+
+    #[test]
+    fn width_reads_the_text_as_one_trimmed_line() {
+        let Some(mut fonts) = test_fonts() else {
+            return;
+        };
+        let one = fonts.measure("Two lines", 20);
+        assert!(one > 0.0);
+        assert_eq!(fonts.width("Two lines", 20), Some(one));
+        assert_eq!(fonts.width(" Two\nlines\r\n", 20), Some(one));
+        assert!(fonts.width("Two lines", 40).is_some_and(|w| w > one));
+    }
+
+    #[test]
+    fn width_of_nothing_to_draw_is_none() {
+        let Some(mut fonts) = test_fonts() else {
+            return;
+        };
+        for blank in ["", " ", "\n\t "] {
+            assert_eq!(fonts.width(blank, 20), None, "{blank:?}");
+        }
+        assert_eq!(Fonts::none().width("Title", 20), None);
+    }
+
+    /// The columns of `frame` from `x`, `width` of them, row by row.
+    fn columns(frame: &Frame, x: u32, width: u32) -> Vec<[u8; 4]> {
+        (0..frame.height())
+            .flat_map(|y| (x..x + width).map(move |x| (x, y)))
+            .map(|(x, y)| frame.pixel(x, y).expect("inside"))
+            .collect()
+    }
+
+    #[test]
+    fn a_loop_draws_the_text_whole_then_its_copy_a_period_further() {
+        let Some(mut fonts) = test_fonts() else {
+            return;
+        };
+        let width = fonts.width(LONG, 20).expect("a width").ceil() as u32;
+        let period = width + 30;
+        let mut frame = Frame::transparent(period + 100, 25);
+        fonts.draw_loop(&mut frame, LONG, 20, period, white());
+        let ink = inked(&frame);
+        let left = ink.iter().map(|p| p.0).min().expect("ink");
+        assert!(left < 4, "the text starts at the left edge: {left}");
+        let gap = ink
+            .iter()
+            .filter(|p| (width + 2..period - 2).contains(&p.0))
+            .count();
+        assert_eq!(gap, 0, "nothing between the text and its copy");
+        assert_eq!(
+            columns(&frame, 0, 100),
+            columns(&frame, period, 100),
+            "the copy starts like the text"
+        );
+    }
+
+    #[test]
+    fn a_loop_is_centered_on_the_frame_height() {
+        let Some(mut fonts) = test_fonts() else {
+            return;
+        };
+        let mut looped = Frame::transparent(400, 25);
+        fonts.draw_loop(&mut looped, "HHHH", 20, 200, white());
+        let mut drawn = Frame::transparent(400, 25);
+        let line = Rect::new(0, 0, 400, 25);
+        fonts.draw(&mut drawn, "HHHH", 20, line, Align::Left, white(), line);
+        assert_eq!(columns(&looped, 0, 100), columns(&drawn, 0, 100));
+    }
+
+    #[test]
+    fn a_loop_without_font_or_text_draws_nothing() {
+        let mut frame = Frame::transparent(50, 20);
+        Fonts::none().draw_loop(&mut frame, "Title", 20, 30, white());
+        assert_eq!(frame, Frame::transparent(50, 20));
+        let Some(mut fonts) = test_fonts() else {
+            return;
+        };
+        fonts.draw_loop(&mut frame, " ", 20, 30, white());
+        assert_eq!(frame, Frame::transparent(50, 20));
     }
 
     #[test]

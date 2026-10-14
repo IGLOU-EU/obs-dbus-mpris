@@ -153,6 +153,33 @@ impl Frame {
         }
     }
 
+    /// Lays the pixels of `window` in `image` over this frame, the window's
+    /// top left corner on `(x, y)`, blended as OBS blends a texture of this
+    /// form, so that a check outside OBS sees the strips over the frame as
+    /// OBS shows them.
+    pub fn over(&mut self, (x, y): (u32, u32), image: &Frame, window: Rect) {
+        let Some(window) = intersection(window, image.bounds()) else {
+            return;
+        };
+        let target = Rect::new(x, y, window.w, window.h);
+        let Some(area) = intersection(target, self.bounds()) else {
+            return;
+        };
+        let mut memo = Memo::default();
+        for row in area.y..area.bottom() {
+            for column in area.x..area.right() {
+                let from = image.index(window.x + column - x, window.y + row - y);
+                let [r, g, b, a] = [0, 1, 2, 3].map(|c| image.pixels[from + c]);
+                let color = Linear {
+                    rgb: [decode(r), decode(g), decode(b)],
+                    a: f32::from(a) / 255.0,
+                };
+                let i = self.index(column, row);
+                self.blend(i, color, &mut memo);
+            }
+        }
+    }
+
     fn bounds(&self) -> Rect {
         Rect::new(0, 0, self.width, self.height)
     }
@@ -511,6 +538,48 @@ mod tests {
         assert_eq!(at(&frame, 1, 1), [188, 188, 188, 128]);
         assert_eq!(at(&frame, 2, 2), [188, 188, 188, 128]);
         assert_eq!(at(&frame, 3, 2), [255, 0, 0, 255]);
+    }
+
+    #[test]
+    fn over_blends_a_window_of_the_image_in_linear_light() {
+        let mut image = Frame::transparent(4, 1);
+        image.fill(
+            Rect::new(1, 0, 1, 1),
+            0,
+            solid(Rgba::new(255, 255, 255, 128)),
+        );
+        image.fill(Rect::new(2, 0, 1, 1), 0, solid(BLUE));
+        let mut frame = filled(3, 1, Rect::new(0, 0, 3, 1), 0, RED);
+        frame.over((1, 0), &image, Rect::new(1, 0, 2, 1));
+        assert_eq!(at(&frame, 0, 0), [255, 0, 0, 255], "outside the window");
+        assert_eq!(at(&frame, 1, 0), [255, 188, 188, 255], "as a fill blends");
+        assert_eq!(at(&frame, 2, 0), [0, 0, 255, 255], "opaque replaces");
+    }
+
+    #[test]
+    fn over_leaves_the_frame_under_transparent_pixels() {
+        let mut frame = filled(2, 2, Rect::new(0, 0, 2, 2), 0, RED);
+        frame.over((0, 0), &Frame::transparent(2, 2), Rect::new(0, 0, 2, 2));
+        assert_eq!(frame, filled(2, 2, Rect::new(0, 0, 2, 2), 0, RED));
+    }
+
+    #[test]
+    fn over_clips_to_the_frame_and_to_the_image() {
+        let image = filled(3, 3, Rect::new(0, 0, 3, 3), 0, WHITE);
+        let mut frame = Frame::transparent(4, 4);
+        frame.over((2, 2), &image, Rect::new(0, 0, 3, 3));
+        assert_eq!(alpha(&frame, 3, 3), 255);
+        assert_eq!(alpha(&frame, 1, 1), 0);
+        let mut frame = Frame::transparent(4, 4);
+        frame.over((0, 0), &image, Rect::new(2, 2, 10, 10));
+        assert_eq!(alpha(&frame, 0, 0), 255);
+        assert_eq!(
+            alpha(&frame, 1, 1),
+            0,
+            "the window holds one pixel of the image"
+        );
+        frame.over((u32::MAX, u32::MAX), &image, Rect::new(0, 0, 3, 3));
+        frame.over((0, 0), &image, Rect::new(u32::MAX, 0, 3, 3));
     }
 
     #[test]

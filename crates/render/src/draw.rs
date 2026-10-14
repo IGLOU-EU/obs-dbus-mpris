@@ -1,5 +1,8 @@
 //! The whole source in one frame: panel, thumbnail, texts, bar and pause
-//! icon, at the places the layout gives (B-37).
+//! icon, at the places the layout gives (B-37), with the texts too long
+//! for their line apart in strips that scroll over it (B-36).
+
+use std::sync::Arc;
 
 use mpris_core::content::{Content, TrackContent};
 use mpris_core::model::{Rgba, Settings};
@@ -9,6 +12,7 @@ use crate::art::ArtCache;
 use crate::color::Linear;
 use crate::frame::Frame;
 use crate::layout::{Layout, Rect};
+use crate::strip::{Strip, StripCache};
 use crate::text::{Align, Fonts};
 
 /// Stands in for a missing cover (B-10), drawn in the text color alone so
@@ -18,42 +22,60 @@ const NO_COVER: &str = "\u{1F3BC}";
 /// Size of that symbol against the side of its slot.
 const NO_COVER_SCALE: f32 = 0.5;
 
+/// What a source shows: the frame, and the strips of its scrolling texts,
+/// each laid over the frame at its line.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Picture {
+    pub frame: Frame,
+    pub strips: Vec<Arc<Strip>>,
+}
+
 /// Draws `content` at the size of `layout`. Nothing lands outside the
-/// frame, and nothing is drawn for [`Content::Nothing`] (B-23). `art` keeps
-/// the scaled cover of one source between frames.
+/// frame, and nothing is drawn for [`Content::Nothing`] (B-23). `art` and
+/// `strips` keep the scaled cover and the scrolling texts of one source
+/// between frames.
 pub fn draw(
     layout: &Layout,
     content: &Content,
     settings: &Settings,
     fonts: &mut Fonts,
     art: &mut ArtCache,
-) -> Frame {
+    strips: &mut StripCache,
+) -> Picture {
     let mut frame = Frame::transparent(layout.width, layout.height);
     let background = Linear::from(settings.color_background);
-    let text = Linear::from(settings.color_text);
+    let mut texts = Texts {
+        fonts,
+        cache: strips,
+        strips: Vec::new(),
+        scrolls: scrolls(settings),
+        color: Linear::from(settings.color_text),
+        clip: layout.panel,
+    };
     match content {
         Content::Nothing => {}
         Content::Message(message) => {
             frame.fill(layout.panel, layout.corner_radius, |_, _| background);
-            let size = layout.sizes.title;
-            let line = layout.message;
-            fonts.draw(
-                &mut frame,
-                message,
-                size,
-                line,
-                Align::Left,
-                text,
-                layout.panel,
-            );
+            texts.scrolling(&mut frame, message, layout.sizes.title, layout.message);
         }
         Content::Track(track) => {
             frame.fill(layout.panel, layout.corner_radius, |_, _| background);
-            draw_track(&mut frame, layout, track, settings, fonts, art);
-            draw_texts(&mut frame, layout, track, text, fonts);
+            draw_track(&mut frame, layout, track, settings, texts.fonts, art);
+            draw_texts(&mut frame, layout, track, &mut texts);
         }
     }
-    frame
+    let drawn = texts.strips;
+    strips.keep(&drawn);
+    Picture {
+        frame,
+        strips: drawn,
+    }
+}
+
+/// Whether a text too long for its line scrolls, rather than ends with an
+/// ellipsis (B-36).
+fn scrolls(settings: &Settings) -> bool {
+    settings.scroll_speed > 0
 }
 
 /// Filled part of a bar `width` pixels wide, in whole pixels, so that a
@@ -69,6 +91,9 @@ pub fn bar_fill(width: u32, progress: f32) -> u32 {
 pub struct RedrawKey {
     layout: Layout,
     colors: [Rgba; 4],
+    /// Whether long texts go to strips. Their speed and pause only move
+    /// the strips, which the glue does at each frame.
+    scrolls: bool,
     /// With its exact progress left out, which `bar_fill` stands for.
     content: Content,
     bar_fill: Option<u32>,
@@ -99,6 +124,7 @@ pub fn redraw_key(layout: &Layout, content: &Content, settings: &Settings) -> Re
             settings.color_bar_fill,
             settings.color_bar_track,
         ],
+        scrolls: scrolls(settings),
         content,
         bar_fill,
     }
@@ -153,39 +179,63 @@ fn draw_track(
     }
 }
 
-fn draw_texts(
-    frame: &mut Frame,
-    layout: &Layout,
-    track: &TrackContent,
-    color: Linear,
-    fonts: &mut Fonts,
-) {
+fn draw_texts(frame: &mut Frame, layout: &Layout, track: &TrackContent, texts: &mut Texts) {
     let sizes = layout.sizes;
-    let clip = layout.panel;
-    let mut text =
-        |text: &str, size, line, align| fonts.draw(frame, text, size, line, align, color, clip);
     let title_line = match (track.paused, layout.pause) {
         (true, Some(pause)) => Some(pause.title),
         _ => layout.title,
     };
     if let (Some(line), Some(title)) = (title_line, &track.title) {
-        text(title, sizes.title, line, Align::Left);
+        texts.scrolling(frame, title, sizes.title, line);
     }
     let subtitle = subtitle(track.album.as_deref(), track.artist.as_deref());
     if let (Some(line), Some(subtitle)) = (layout.subtitle, subtitle) {
-        text(&subtitle, sizes.subtitle, line, Align::Left);
+        texts.scrolling(frame, &subtitle, sizes.subtitle, line);
     }
     if let Some(row) = layout.times {
         // Each time keeps to its half, so that neither covers the other.
         let half = row.w / 2;
         if let Some(position) = track.position {
             let left = Rect { w: half, ..row };
-            text(&format_time(position), sizes.time, left, Align::Left);
+            texts.fixed(frame, &format_time(position), sizes.time, left, Align::Left);
         }
         if let Some(time) = track.right_time {
             let right = Rect::new(row.x + half, row.y, row.w - half, row.h);
-            text(&time.text(), sizes.time, right, Align::Right);
+            texts.fixed(frame, &time.text(), sizes.time, right, Align::Right);
         }
+    }
+}
+
+/// Where the texts of one picture go: into the frame, or into strips of
+/// their own for those too long for their line while the source scrolls.
+struct Texts<'a> {
+    fonts: &'a mut Fonts,
+    cache: &'a StripCache,
+    /// The strips of this picture, in the order their lines were drawn.
+    strips: Vec<Arc<Strip>>,
+    scrolls: bool,
+    color: Linear,
+    clip: Rect,
+}
+
+impl Texts<'_> {
+    /// A text that scrolls when too long for `line`, and then leaves the
+    /// line of the frame empty for its strip.
+    fn scrolling(&mut self, frame: &mut Frame, text: &str, size: u32, line: Rect) {
+        let strip = self
+            .scrolls
+            .then(|| self.cache.get(self.fonts, text, size, line, self.color))
+            .flatten();
+        match strip {
+            Some(strip) => self.strips.push(strip),
+            None => self.fixed(frame, text, size, line, Align::Left),
+        }
+    }
+
+    /// A text cut with an ellipsis when too long for `line`.
+    fn fixed(&mut self, frame: &mut Frame, text: &str, size: u32, line: Rect, align: Align) {
+        self.fonts
+            .draw(frame, text, size, line, align, self.color, self.clip);
     }
 }
 
@@ -199,6 +249,7 @@ mod tests {
 
     use super::*;
     use crate::layout::layout;
+    use crate::strip::StripCache;
     use crate::text::tests::{emoji_fonts, test_fonts};
 
     const BACKGROUND: Rgba = Rgba::new(0, 0, 0, 255);
@@ -243,9 +294,21 @@ mod tests {
     }
 
     fn render_with(fonts: &mut Fonts, settings: &Settings, content: &Content) -> (Layout, Frame) {
+        let (layout, picture) = picture_of(fonts, settings, content);
+        (layout, picture.frame)
+    }
+
+    fn picture_of(fonts: &mut Fonts, settings: &Settings, content: &Content) -> (Layout, Picture) {
         let layout = layout(settings);
-        let frame = draw(&layout, content, settings, fonts, &mut ArtCache::new());
-        (layout, frame)
+        let picture = draw(
+            &layout,
+            content,
+            settings,
+            fonts,
+            &mut ArtCache::new(),
+            &mut StripCache::new(),
+        );
+        (layout, picture)
     }
 
     /// A track with every text, the progress bar hidden so that any
@@ -292,6 +355,14 @@ mod tests {
 
     fn no_bar() -> Settings {
         with(|s| s.show_progress = false)
+    }
+
+    /// Long texts cut with an ellipsis rather than scrolled.
+    fn no_bar_no_scroll() -> Settings {
+        with(|s| {
+            s.show_progress = false;
+            s.scroll_speed = 0;
+        })
     }
 
     fn with_art(content: Content, image: ArtImage) -> Content {
@@ -799,8 +870,7 @@ mod tests {
         let Some(mut fonts) = test_fonts() else {
             return;
         };
-        let long = "An extremely long title that goes on and on, far beyond the width of any panel";
-        let (layout, frame) = render_with(&mut fonts, &no_bar(), &texts(long, false));
+        let (layout, frame) = render_with(&mut fonts, &no_bar_no_scroll(), &texts(LONG, false));
         let title = some(layout.title);
         let row = Rect::new(layout.panel.x, title.y, layout.panel.w, title.h);
         let (left, right, ..) = span(&ink(&frame, row));
@@ -819,8 +889,7 @@ mod tests {
         let Some(mut fonts) = test_fonts() else {
             return;
         };
-        let long = "An extremely long title that goes on and on, far beyond the width of any panel";
-        let (layout, frame) = render_with(&mut fonts, &no_bar(), &texts(long, true));
+        let (layout, frame) = render_with(&mut fonts, &no_bar_no_scroll(), &texts(LONG, true));
         let pause = layout.pause.expect("pause");
         let before = Rect::new(
             layout.panel.x,
@@ -830,6 +899,141 @@ mod tests {
         );
         let (_, right, ..) = span(&ink(&frame, before));
         assert!(right < pause.title.right() + SPILL, "{right} {pause:?}");
+    }
+
+    // Scrolling (B-36)
+
+    const LONG: &str =
+        "An extremely long title that goes on and on, far beyond the width of any panel";
+
+    fn lines(picture: &Picture) -> Vec<Rect> {
+        picture.strips.iter().map(|strip| strip.line).collect()
+    }
+
+    fn with_album(content: Content, album: &str) -> Content {
+        match content {
+            Content::Track(track) => Content::Track(TrackContent {
+                album: Some(album.into()),
+                ..track
+            }),
+            other => other,
+        }
+    }
+
+    #[test]
+    fn a_long_title_scrolls_in_a_strip_instead_of_the_frame() {
+        let Some(mut fonts) = test_fonts() else {
+            return;
+        };
+        let (layout, picture) = picture_of(&mut fonts, &no_bar(), &texts(LONG, false));
+        let title = some(layout.title);
+        assert_eq!(lines(&picture), [title]);
+        assert_eq!(ink(&picture.frame, title), Vec::new(), "left to the strip");
+        let subtitle = some(layout.subtitle);
+        assert!(!ink(&picture.frame, subtitle).is_empty(), "fits, so drawn");
+    }
+
+    #[test]
+    fn texts_that_fit_have_no_strip() {
+        let Some(mut fonts) = test_fonts() else {
+            return;
+        };
+        let (_, picture) = picture_of(&mut fonts, &no_bar(), &texts("Title", false));
+        assert!(picture.strips.is_empty());
+    }
+
+    #[test]
+    fn zero_speed_cuts_a_long_title_with_an_ellipsis_instead() {
+        let Some(mut fonts) = test_fonts() else {
+            return;
+        };
+        let (layout, picture) = picture_of(&mut fonts, &no_bar_no_scroll(), &texts(LONG, false));
+        assert!(picture.strips.is_empty());
+        assert!(!ink(&picture.frame, some(layout.title)).is_empty());
+    }
+
+    #[test]
+    fn title_and_subtitle_too_long_get_a_strip_each() {
+        let Some(mut fonts) = test_fonts() else {
+            return;
+        };
+        let content = with_album(texts(LONG, false), LONG);
+        let (layout, picture) = picture_of(&mut fonts, &no_bar(), &content);
+        assert_eq!(lines(&picture), [some(layout.title), some(layout.subtitle)]);
+        for strip in &picture.strips {
+            assert_eq!(strip.image.height(), strip.line.h);
+            assert!(layout.panel.contains(&strip.line));
+        }
+    }
+
+    #[test]
+    fn a_paused_long_title_scrolls_before_the_pause_icon() {
+        let Some(mut fonts) = test_fonts() else {
+            return;
+        };
+        let (layout, picture) = picture_of(&mut fonts, &no_bar(), &texts(LONG, true));
+        let pause = layout.pause.expect("pause");
+        assert_eq!(lines(&picture), [pause.title]);
+        for bar in pause.bars {
+            let (x, y) = center(bar);
+            assert_eq!(at(&picture.frame, x, y), rgba(TEXT), "the icon stays");
+        }
+    }
+
+    #[test]
+    fn a_long_message_scrolls_like_a_single_text() {
+        let Some(mut fonts) = test_fonts() else {
+            return;
+        };
+        let message = Content::Message(LONG.into());
+        let (layout, picture) = picture_of(&mut fonts, &settings(), &message);
+        assert_eq!(lines(&picture), [layout.message]);
+        assert_eq!(ink(&picture.frame, layout.panel), Vec::new());
+    }
+
+    #[test]
+    fn a_new_second_keeps_the_strips() {
+        let Some(mut fonts) = test_fonts() else {
+            return;
+        };
+        let s = no_bar();
+        let layout = layout(&s);
+        let (mut art, mut strips) = (ArtCache::new(), StripCache::new());
+        let mut picture = |seconds| {
+            let content = match with_album(texts(LONG, false), LONG) {
+                Content::Track(track) => Content::Track(TrackContent {
+                    position: Some(Duration::from_secs(seconds)),
+                    ..track
+                }),
+                _ => unreachable!(),
+            };
+            draw(&layout, &content, &s, &mut fonts, &mut art, &mut strips)
+        };
+        let (first, next) = (picture(81), picture(82));
+        assert_ne!(first.frame, next.frame);
+        assert_eq!(first.strips.len(), 2);
+        for (a, b) in first.strips.iter().zip(&next.strips) {
+            assert!(Arc::ptr_eq(a, b), "drawn once");
+        }
+    }
+
+    #[test]
+    fn a_strip_at_offset_zero_shows_the_title_where_the_frame_would() {
+        let Some(mut fonts) = test_fonts() else {
+            return;
+        };
+        let (layout, picture) = picture_of(&mut fonts, &no_bar(), &texts(LONG, false));
+        let strip = &picture.strips[0];
+        let mut composed = picture.frame.clone();
+        let window = Rect::new(0, 0, strip.line.w, strip.line.h);
+        composed.over((strip.line.x, strip.line.y), &strip.image, window);
+        let (_, cut) = render_with(&mut fonts, &no_bar_no_scroll(), &texts(LONG, false));
+        let title = some(layout.title);
+        let (left, right, top, bottom) = span(&ink(&composed, title));
+        let (cut_left, _, cut_top, cut_bottom) = span(&ink(&cut, title));
+        assert_eq!(left, cut_left);
+        assert!(top.abs_diff(cut_top) <= 1 && bottom.abs_diff(cut_bottom) <= 1);
+        assert!(right < title.right(), "nothing leaves the line");
     }
 
     #[test]
@@ -954,6 +1158,23 @@ mod tests {
         for (i, change) in changes.iter().enumerate() {
             assert_ne!(key(&with(change), &playing(10, 0.5)), base, "change {i}");
         }
+    }
+
+    #[test]
+    fn turning_the_scrolling_on_or_off_changes_the_key() {
+        let base = key(&settings(), &playing(10, 0.5));
+        let still = with(|s| s.scroll_speed = 0);
+        assert_ne!(key(&still, &playing(10, 0.5)), base);
+    }
+
+    #[test]
+    fn speed_and_pause_of_the_scrolling_keep_the_key() {
+        let base = key(&settings(), &playing(10, 0.5));
+        let other = with(|s| {
+            s.scroll_speed = 80;
+            s.scroll_pause = Duration::from_millis(500);
+        });
+        assert_eq!(key(&other, &playing(10, 0.5)), base);
     }
 
     #[test]

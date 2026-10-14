@@ -24,6 +24,7 @@ use render::art::ArtCache;
 use render::draw::draw;
 use render::frame::Frame;
 use render::layout::layout;
+use render::strip::StripCache;
 use render::text::Fonts;
 
 /// OBS Flatpak runs on a glibc older than the `acosf` the host links by
@@ -64,7 +65,9 @@ fn main() -> ExitCode {
             &variant.settings,
             &mut fonts,
             &mut ArtCache::new(),
-        );
+            &mut StripCache::new(),
+        )
+        .frame;
         let path = out.join(format!("{}.png", variant.name));
         match save(&frame, &path) {
             Ok(()) => println!("{} ({}x{})", path.display(), frame.width(), frame.height()),
@@ -85,7 +88,7 @@ fn time_full_panel(fonts: &mut Fonts, now: Instant) {
     let settings = Settings::default();
     let layout = layout(&settings);
     let player = player(PlaybackStatus::Playing, now);
-    let mut art = ArtCache::new();
+    let (mut art, mut strips) = (ArtCache::new(), StripCache::new());
 
     let started = Instant::now();
     draw(
@@ -94,6 +97,7 @@ fn time_full_panel(fonts: &mut Fonts, now: Instant) {
         &settings,
         fonts,
         &mut art,
+        &mut strips,
     );
     println!("first draw, cover scaled: {:?}", started.elapsed());
 
@@ -104,7 +108,7 @@ fn time_full_panel(fonts: &mut Fonts, now: Instant) {
         let at = now + Duration::from_secs(u64::from(second % 30));
         let shown = content(Some(&player), &settings, at);
         let one = Instant::now();
-        draw(&layout, &shown, &settings, fonts, &mut art);
+        draw(&layout, &shown, &settings, fonts, &mut art, &mut strips);
         slowest = slowest.max(one.elapsed());
     }
     let mean = started.elapsed() / rounds;

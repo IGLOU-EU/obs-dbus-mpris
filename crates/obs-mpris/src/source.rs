@@ -225,9 +225,9 @@ unsafe extern "C" fn video_render(data: *mut c_void, effect: *mut gs_effect_t) {
             return;
         };
         let mut view = source.view();
-        if let Some(frame) = source.painter.as_ref().and_then(Painter::take) {
+        if let Some(picture) = source.painter.as_ref().and_then(Painter::take) {
             // SAFETY: OBS calls `video_render` inside the graphics context.
-            unsafe { replace_texture(&mut view.texture, &frame) };
+            unsafe { replace_texture(&mut view.texture, &picture.frame) };
         }
         if let (Some(texture), false) = (&view.texture, effect.is_null()) {
             // SAFETY: inside the graphics context, with the effect OBS passed.

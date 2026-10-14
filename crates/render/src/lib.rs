@@ -8,5 +8,6 @@ pub mod draw;
 pub mod frame;
 pub mod layout;
 pub mod scroll;
+pub mod strip;
 pub mod text;
 pub mod worker;
