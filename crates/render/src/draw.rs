@@ -121,12 +121,16 @@ fn draw_track(
     art: &mut ArtCache,
 ) {
     let radius = layout.corner_radius;
+    let art_radius = layout.art_radius;
     match (layout.art, &track.art) {
-        (Some(slot), Some(image)) => frame.put((slot.x, slot.y), art.get(image, slot.w, radius)),
-        // The slot keeps its place while no cover is ready (B-10).
+        (Some(slot), Some(image)) => {
+            frame.put((slot.x, slot.y), art.get(image, slot.w, art_radius));
+        }
+        // The slot keeps its place and its shape while no cover is ready
+        // (B-10, B-38).
         (Some(slot), None) => {
             let background = Linear::from(settings.color_background);
-            frame.fill(slot, radius, |_, _| background);
+            frame.fill(slot, art_radius, |_, _| background);
             let size = (slot.w as f32 * NO_COVER_SCALE).round() as u32;
             let text = Linear::from(settings.color_text);
             fonts.draw_symbol(frame, NO_COVER, size, slot, text);
@@ -492,6 +496,91 @@ mod tests {
     }
 
     #[test]
+    fn gap_leaves_the_space_between_art_and_panel_transparent() {
+        for art_right in [false, true] {
+            let s = with(|s| {
+                s.art_gap = 24;
+                s.art_right = art_right;
+            });
+            let (layout, frame) = render(&s, &with_art(track(None, false), cover()));
+            let art = some(layout.art);
+            let between = if art_right {
+                layout.panel.right()..art.x
+            } else {
+                art.right()..layout.panel.x
+            };
+            assert_eq!(between.len(), 24);
+            for x in between {
+                assert_eq!(at(&frame, x, layout.height / 2), [0; 4], "{art_right} {x}");
+            }
+            let (x, y) = center(art);
+            assert_eq!(at(&frame, x, y), [255, 0, 0, 255]);
+            let (x, y) = center(layout.panel);
+            assert_eq!(at(&frame, x, y), rgba(BACKGROUND));
+        }
+    }
+
+    /// A point of the slot inside a square with rounded corners of the
+    /// default radius, but outside the disc the slot holds.
+    fn off_the_disc(art: Rect) -> (u32, u32) {
+        (art.x + art.w / 8, art.y + art.h / 8)
+    }
+
+    #[test]
+    fn round_art_cuts_a_disc_out_of_the_cover() {
+        let s = with(|s| {
+            s.art_round = true;
+            s.corner_radius = 0;
+        });
+        let (layout, frame) = render(&s, &with_art(track(None, false), cover()));
+        let art = some(layout.art);
+        let (x, y) = off_the_disc(art);
+        assert_eq!(at(&frame, x, y), [0; 4], "outside the disc");
+        let (x, y) = center(art);
+        assert_eq!(at(&frame, x, y), [255, 0, 0, 255]);
+        for (x, y) in [
+            (art.x, art.h / 2),
+            (art.right() - 1, art.h / 2),
+            (art.x + art.w / 2, 0),
+        ] {
+            assert!(at(&frame, x, y)[3] > 200, "the disc reaches ({x}, {y})");
+        }
+        assert_eq!(at(&frame, art.x, 0), [0; 4], "corner");
+    }
+
+    #[test]
+    fn round_art_leaves_the_panel_its_corner_radius() {
+        let s = with(|s| {
+            s.art_round = true;
+            s.corner_radius = 0;
+        });
+        let (layout, frame) = render(&s, &with_art(track(None, false), cover()));
+        let corner = (layout.panel.right() - 1, layout.height - 1);
+        assert_eq!(at(&frame, corner.0, corner.1), rgba(BACKGROUND));
+    }
+
+    #[test]
+    fn square_art_keeps_the_corners_off_the_disc() {
+        let (layout, frame) = render(&settings(), &with_art(track(None, false), cover()));
+        let (x, y) = off_the_disc(some(layout.art));
+        assert_eq!(at(&frame, x, y), [255, 0, 0, 255]);
+    }
+
+    #[test]
+    fn round_art_gives_the_empty_slot_the_same_disc() {
+        let round = with(|s| s.art_round = true);
+        let (layout, frame) = render(&round, &track(None, false));
+        let art = some(layout.art);
+        let (x, y) = off_the_disc(art);
+        assert_eq!(at(&frame, x, y), [0; 4]);
+        let (x, y) = center(art);
+        assert_eq!(at(&frame, x, y), rgba(BACKGROUND));
+        let (layout, frame) = render(&settings(), &track(None, false));
+        let (x, y) = off_the_disc(some(layout.art));
+        assert_eq!(at(&frame, x, y), rgba(BACKGROUND), "square slot");
+    }
+
+    #[test]
     fn zero_radius_gives_square_corners() {
         let (layout, frame) = render(&with(|s| s.corner_radius = 0), &track(None, false));
         let art = some(layout.art);
@@ -851,7 +940,7 @@ mod tests {
         let base = key(&s, &playing(10, 0.5));
         assert_ne!(key(&s, &playing(11, 0.5)), base, "position");
         assert_ne!(key(&s, &texts("Title", false)), base, "no progress");
-        let changes: [fn(&mut Settings); 7] = [
+        let changes: [fn(&mut Settings); 9] = [
             |s| s.color_background.a = 1,
             |s| s.color_text.r = 1,
             |s| s.color_bar_fill.g = 1,
@@ -859,6 +948,8 @@ mod tests {
             |s| s.width += 1,
             |s| s.corner_radius += 1,
             |s| s.art_right = true,
+            |s| s.art_round = true,
+            |s| s.art_gap = 10,
         ];
         for (i, change) in changes.iter().enumerate() {
             assert_ne!(key(&with(change), &playing(10, 0.5)), base, "change {i}");

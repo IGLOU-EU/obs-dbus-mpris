@@ -3,7 +3,7 @@
 //! whatever plays.
 
 use mpris_core::model::Settings;
-use mpris_core::settings::{MAX_CORNER_RADIUS, MAX_FONT_SIZE, MAX_SIDE};
+use mpris_core::settings::{MAX_ART_GAP, MAX_CORNER_RADIUS, MAX_FONT_SIZE, MAX_SIDE};
 
 /// A pixel rectangle of the source, origin at its top left corner.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -58,7 +58,8 @@ pub struct Pause {
 pub struct Layout {
     pub width: u32,
     pub height: u32,
-    /// The thumbnail slot, a square as tall as the source.
+    /// The thumbnail slot, a square as tall as the source, apart from the
+    /// panel by the gap of the settings (B-39).
     pub art: Option<Rect>,
     /// The text panel, its background drawn with rounded corners.
     pub panel: Rect,
@@ -72,9 +73,12 @@ pub struct Layout {
     /// The fallback message line (B-23), centered in the panel.
     pub message: Rect,
     pub sizes: FontSizes,
-    /// Of the panel and the thumbnail (B-38). Drawing caps it at half the
-    /// shorter side of each block.
+    /// Of the panel and the bar (B-38). Drawing caps it at half the shorter
+    /// side of each block.
     pub corner_radius: u32,
+    /// Of the thumbnail slot: the corner radius, or half its side for a disc
+    /// (B-38).
+    pub art_radius: u32,
 }
 
 // Proportions, each relative to a font size so that the whole source scales
@@ -149,17 +153,22 @@ pub fn layout(settings: &Settings) -> Layout {
 
     let icon = PauseIcon::new(sizes.title);
     let min_text = scale(sizes.title, MIN_TEXT).max(icon.width + icon.margin + 1);
-    let art_side = if settings.show_art { height } else { 0 };
+    let (art_side, gap) = if settings.show_art {
+        (height, settings.art_gap.min(MAX_ART_GAP))
+    } else {
+        (0, 0)
+    };
     let width = settings
         .width
         .min(MAX_SIDE)
-        .max(art_side + 2 * margin + min_text);
-    let panel_w = width - art_side;
+        .max(art_side + gap + 2 * margin + min_text);
+    let panel_w = width - art_side - gap;
     let (art_x, panel_x) = if settings.art_right {
-        (panel_w, 0)
+        (panel_w + gap, 0)
     } else {
-        (0, art_side)
+        (0, art_side + gap)
     };
+    let corner_radius = settings.corner_radius.min(MAX_CORNER_RADIUS);
 
     let mut column = Column {
         x: panel_x + margin,
@@ -187,7 +196,12 @@ pub fn layout(settings: &Settings) -> Layout {
         pause: title.map(|title| icon.place(title)),
         message: Rect::new(column.x, (height - title_line) / 2, column.w, title_line),
         sizes,
-        corner_radius: settings.corner_radius.min(MAX_CORNER_RADIUS),
+        corner_radius,
+        art_radius: if settings.art_round {
+            art_side / 2
+        } else {
+            corner_radius
+        },
     }
 }
 
@@ -320,11 +334,24 @@ mod tests {
                 assert_eq!(art.w, art.h, "art is square");
                 assert_eq!(art.h, l.height, "art is as tall as the source");
                 assert_eq!(art.y, 0);
-                assert_eq!(art.w + l.panel.w, l.width, "art and panel fill the width");
-                let glued = art.right() == l.panel.x || l.panel.right() == art.x;
-                assert!(glued, "art and panel are glued {l:?}");
+                assert_eq!(
+                    art.w + gap(l) + l.panel.w,
+                    l.width,
+                    "art, gap and panel fill the width"
+                );
             }
             None => assert_eq!(l.panel, frame(l)),
+        }
+    }
+
+    /// The pixels between the art and the panel.
+    fn gap(l: &Layout) -> u32 {
+        let art = some(l.art, "art");
+        if art.right() <= l.panel.x {
+            l.panel.x - art.right()
+        } else {
+            assert!(l.panel.right() <= art.x, "art and panel overlap {l:?}");
+            art.x - l.panel.right()
         }
     }
 
@@ -367,6 +394,125 @@ mod tests {
             assert_eq!(a.x - left.panel.x, b.x - right.panel.x, "{name}");
             assert_eq!((a.y, a.w, a.h), (b.y, b.w, b.h), "{name}");
         }
+    }
+
+    #[test]
+    fn zero_gap_glues_the_art_to_the_panel() {
+        for art_right in [false, true] {
+            let l = layout(&with(|s| s.art_right = art_right));
+            assert_sane(&l);
+            assert_eq!(gap(&l), 0, "{art_right}");
+        }
+    }
+
+    // Gap (B-39)
+
+    #[test]
+    fn gap_sits_between_the_art_and_the_panel() {
+        let l = layout(&with(|s| s.art_gap = 24));
+        assert_sane(&l);
+        let art = some(l.art, "art");
+        assert_eq!(art.x, 0);
+        assert_eq!(l.panel.x, art.right() + 24);
+        assert_eq!(l.panel.right(), 600);
+    }
+
+    #[test]
+    fn gap_sits_between_the_panel_and_the_art_on_the_right() {
+        let l = layout(&with(|s| {
+            s.art_gap = 24;
+            s.art_right = true;
+        }));
+        assert_sane(&l);
+        let art = some(l.art, "art");
+        assert_eq!(l.panel.x, 0);
+        assert_eq!(art.x, l.panel.right() + 24);
+        assert_eq!(art.right(), 600);
+    }
+
+    #[test]
+    fn gap_counts_in_the_total_width() {
+        let glued = layout(&settings());
+        let apart = layout(&with(|s| s.art_gap = 24));
+        assert_eq!(apart.width, glued.width);
+        assert_eq!(apart.height, glued.height);
+        assert_eq!(apart.art.map(|a| a.w), glued.art.map(|a| a.w));
+        assert_eq!(apart.panel.w + 24, glued.panel.w);
+    }
+
+    #[test]
+    fn gap_moves_the_panel_content_with_the_panel() {
+        let glued = layout(&settings());
+        let apart = layout(&with(|s| s.art_gap = 24));
+        let title = some(apart.title, "title");
+        assert_eq!(title.x, some(glued.title, "title").x + 24);
+        assert_eq!(title.w + 24, some(glued.title, "title").w);
+        assert_eq!(apart.message.x, glued.message.x + 24);
+    }
+
+    #[test]
+    fn gap_without_art_is_ignored() {
+        let l = layout(&with(|s| {
+            s.show_art = false;
+            s.art_gap = 100;
+        }));
+        assert_sane(&l);
+        assert_eq!(l.panel, frame(&l));
+        assert_eq!(l.width, 600);
+    }
+
+    #[test]
+    fn gap_is_kept_within_the_schema_bounds() {
+        let l = layout(&with(|s| s.art_gap = u32::MAX));
+        assert_sane(&l);
+        assert_eq!(gap(&l), 512);
+    }
+
+    #[test]
+    fn a_wide_gap_in_a_tiny_width_keeps_a_minimal_panel() {
+        let l = layout(&with(|s| {
+            s.width = 1;
+            s.art_gap = 512;
+        }));
+        assert_sane(&l);
+        assert_eq!(gap(&l), 512);
+        assert!(some(l.title, "title").w >= l.sizes.title, "{l:?}");
+    }
+
+    // Round art (B-38)
+
+    #[test]
+    fn square_art_takes_the_corner_radius() {
+        for radius in [0, 12, 256] {
+            let l = layout(&with(|s| s.corner_radius = radius));
+            assert_eq!(l.art_radius, radius);
+        }
+    }
+
+    #[test]
+    fn round_art_is_a_disc_whatever_the_corner_radius() {
+        for radius in [0, 12, 256] {
+            let l = layout(&with(|s| {
+                s.corner_radius = radius;
+                s.art_round = true;
+            }));
+            assert_sane(&l);
+            assert_eq!(l.art_radius, some(l.art, "art").w / 2, "{radius}");
+            assert_eq!(l.corner_radius, radius, "the panel keeps its radius");
+        }
+    }
+
+    #[test]
+    fn round_art_does_not_move_anything() {
+        let square = layout(&settings());
+        let round = layout(&with(|s| s.art_round = true));
+        assert_eq!(
+            Layout {
+                art_radius: square.art_radius,
+                ..round
+            },
+            square
+        );
     }
 
     #[test]
@@ -723,6 +869,7 @@ mod tests {
         assert_eq!(
             Layout {
                 corner_radius: 12,
+                art_radius: 12,
                 ..round
             },
             base
