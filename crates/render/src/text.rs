@@ -32,6 +32,9 @@ const FILES_LOCALE: &str = "en-US";
 
 const ELLIPSIS: &str = "…";
 
+/// The glyph a font gives for a character it lacks.
+const MISSING_GLYPH: u16 = 0;
+
 impl Fonts {
     /// Every font of the system. Slow, it reads each installed font file:
     /// never call it on OBS's graphics thread (B-41).
@@ -118,9 +121,44 @@ impl Fonts {
             Align::Left => line.x as f32,
             Align::Right => line.right() as f32 - line_width(&shaped),
         };
+        self.paint(frame, &shaped, (x, line.y as f32), color, clip, false);
+    }
+
+    /// Draws `symbol` centered in `area`, every glyph in `color` alone, emoji
+    /// included. Draws nothing when no font has the symbol, rather than the
+    /// empty box that stands for a missing glyph.
+    pub(crate) fn draw_symbol(
+        &mut self,
+        frame: &mut Frame,
+        symbol: &str,
+        size: u32,
+        area: Rect,
+        color: Linear,
+    ) {
+        let Some(shaped) = self.shape(symbol, size, area.h) else {
+            return;
+        };
+        let x = area.x as f32 + (area.w as f32 - line_width(&shaped)) / 2.0;
+        self.paint(frame, &shaped, (x, area.y as f32), color, area, true);
+    }
+
+    /// Rasterizes `shaped` with its first line at `origin`. `one_color`
+    /// draws color glyphs by their coverage alone, in `color`.
+    fn paint(
+        &mut self,
+        frame: &mut Frame,
+        shaped: &Buffer,
+        (x, y): (f32, f32),
+        color: Linear,
+        clip: Rect,
+        one_color: bool,
+    ) {
         for run in shaped.layout_runs() {
             for glyph in run.glyphs {
-                let glyph = glyph.physical((x, line.y as f32 + run.line_y), 1.0);
+                if one_color && glyph.glyph_id == MISSING_GLYPH {
+                    continue;
+                }
+                let glyph = glyph.physical((x, y + run.line_y), 1.0);
                 let Some(image) = self.glyphs.get_image(&mut self.system, glyph.cache_key) else {
                     continue;
                 };
@@ -131,6 +169,10 @@ impl Fonts {
                 let width = image.placement.width;
                 match image.content {
                     SwashContent::Mask => frame.blend_mask(origin, width, &image.data, color, clip),
+                    SwashContent::Color if one_color => {
+                        let coverage: Vec<u8> = image.data.chunks_exact(4).map(|p| p[3]).collect();
+                        frame.blend_mask(origin, width, &coverage, color, clip);
+                    }
                     SwashContent::Color => {
                         frame.blend_image(origin, width, &image.data, color.a, clip);
                     }
@@ -220,6 +262,28 @@ pub(crate) mod tests {
             Some(path) => Some(Fonts::from_files([path])),
             None => {
                 eprintln!("skipped: no test font found, set RENDER_TEST_FONT to a font file");
+                None
+            }
+        }
+    }
+
+    /// Color emoji fonts common on Linux distributions.
+    const EMOJI_CANDIDATES: [&str; 2] = [
+        "/usr/share/fonts/noto/NotoColorEmoji.ttf",
+        "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf",
+    ];
+
+    /// A color emoji font, or `None` with a message saying why the test that
+    /// asked is skipped.
+    pub(crate) fn emoji_fonts() -> Option<Fonts> {
+        match EMOJI_CANDIDATES
+            .iter()
+            .map(PathBuf::from)
+            .find(|p| p.is_file())
+        {
+            Some(path) => Some(Fonts::from_files([path])),
+            None => {
+                eprintln!("skipped: no color emoji font found");
                 None
             }
         }

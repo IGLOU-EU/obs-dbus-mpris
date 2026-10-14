@@ -11,6 +11,13 @@ use crate::frame::Frame;
 use crate::layout::{Layout, Rect};
 use crate::text::{Align, Fonts};
 
+/// Stands in for a missing cover (B-10), drawn in the text color alone so
+/// that it sits on the background like the texts do.
+const NO_COVER: &str = "\u{1F3BC}";
+
+/// Size of that symbol against the side of its slot.
+const NO_COVER_SCALE: f32 = 0.5;
+
 /// Draws `content` at the size of `layout`. Nothing lands outside the
 /// frame, and nothing is drawn for [`Content::Nothing`] (B-23). `art` keeps
 /// the scaled cover of one source between frames.
@@ -42,7 +49,7 @@ pub fn draw(
         }
         Content::Track(track) => {
             frame.fill(layout.panel, layout.corner_radius, |_, _| background);
-            draw_track(&mut frame, layout, track, settings, art);
+            draw_track(&mut frame, layout, track, settings, fonts, art);
             draw_texts(&mut frame, layout, track, text, fonts);
         }
     }
@@ -110,6 +117,7 @@ fn draw_track(
     layout: &Layout,
     track: &TrackContent,
     settings: &Settings,
+    fonts: &mut Fonts,
     art: &mut ArtCache,
 ) {
     let radius = layout.corner_radius;
@@ -119,6 +127,9 @@ fn draw_track(
         (Some(slot), None) => {
             let background = Linear::from(settings.color_background);
             frame.fill(slot, radius, |_, _| background);
+            let size = (slot.w as f32 * NO_COVER_SCALE).round() as u32;
+            let text = Linear::from(settings.color_text);
+            fonts.draw_symbol(frame, NO_COVER, size, slot, text);
         }
         (None, _) => {}
     }
@@ -183,7 +194,7 @@ mod tests {
 
     use super::*;
     use crate::layout::layout;
-    use crate::text::tests::test_fonts;
+    use crate::text::tests::{emoji_fonts, test_fonts};
 
     const BACKGROUND: Rgba = Rgba::new(0, 0, 0, 255);
     const TEXT: Rgba = Rgba::new(255, 255, 255, 255);
@@ -370,6 +381,55 @@ mod tests {
         let (x, y) = center(some(layout.art));
         assert_eq!(at(&frame, x, y), rgba(BACKGROUND));
         assert_eq!(at(&frame, 0, 0), [0; 4], "the slot has rounded corners");
+    }
+
+    #[test]
+    fn art_slot_without_image_shows_a_score_in_the_text_color() {
+        let Some(mut fonts) = emoji_fonts() else {
+            return;
+        };
+        let (layout, frame) = render_with(&mut fonts, &settings(), &track(None, false));
+        let slot = some(layout.art);
+        let ink = ink(&frame, slot);
+        assert!(!ink.is_empty(), "no symbol drawn");
+        // White over black blends to greys only when the emoji keeps one color.
+        for &(x, y) in &ink {
+            let [r, g, b, _] = at(&frame, x, y);
+            assert!(r == g && g == b, "({x}, {y}) is [{r}, {g}, {b}]");
+        }
+        let (left, right, top, bottom) = span(&ink);
+        let (cx, cy) = center(slot);
+        let tolerance = slot.w / 8;
+        assert!(
+            ((left + right) / 2).abs_diff(cx) <= tolerance,
+            "{left}..{right}"
+        );
+        assert!(
+            ((top + bottom) / 2).abs_diff(cy) <= tolerance,
+            "{top}..{bottom}"
+        );
+        assert!(right - left < slot.w * 3 / 4, "{left}..{right}");
+        assert!(bottom - top < slot.h * 3 / 4, "{top}..{bottom}");
+    }
+
+    #[test]
+    fn art_slot_stays_plain_when_no_font_has_the_score() {
+        let Some(mut fonts) = test_fonts() else {
+            return;
+        };
+        let (layout, frame) = render_with(&mut fonts, &settings(), &track(None, false));
+        assert_eq!(ink(&frame, some(layout.art)), Vec::new());
+    }
+
+    #[test]
+    fn a_cover_hides_the_score() {
+        let Some(mut fonts) = emoji_fonts() else {
+            return;
+        };
+        let content = with_art(track(None, false), cover());
+        let (layout, frame) = render_with(&mut fonts, &settings(), &content);
+        let (x, y) = center(some(layout.art));
+        assert_eq!(at(&frame, x, y), [255, 0, 0, 255]);
     }
 
     #[test]
