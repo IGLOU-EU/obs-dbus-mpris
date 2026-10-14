@@ -13,10 +13,10 @@ Les validations se font dans OBS Flatpak. Le build natif est produit à chaque p
 | 0 | Cadrage | fait |
 | 1 | Squelette marchant, natif et Flatpak | fait, essai dans OBS en attente |
 | 2 | Cœur MPRIS, hors OBS | fait, lecteur local (Strawberry ou Elisa) à vérifier à l'occasion |
-| 3 | Rendu et disposition | fait, essai dans OBS en attente |
-| 4 | Source complète | à faire |
+| 3 | Rendu et disposition | fait, validé dans OBS |
+| 4 | Source complète | fait, validé dans OBS |
 | 5 | Pochette en ligne, en option | à faire |
-| 6 | Organisation visuelle | à faire |
+| 6 | Réglages visuels | en cours, avancée avant la phase 5 |
 | 7 | Distribution, version 1.0 | à faire |
 
 ## Phase 0. Cadrage
@@ -97,11 +97,16 @@ Récupérer une pochette que le bac à sable Flatpak empêche de lire.
 
 Besoins couverts : B-18, B-48.
 
-## Phase 6. Organisation visuelle
+## Phase 6. Réglages visuels
 
-Retouches de la disposition livrée en phase 3, une fois vue sur une vraie scène : proportions des marges, défilement des textes longs si les points de suspension gênent.
+Demandés le 2026-10-14 après l'essai de la phase 3 dans OBS, et traités avant la phase 5.
 
-**Fini quand** la disposition est validée à l'œil sur une vraie scène.
+- Écart réglable entre l'image et le panneau (B-39).
+- Image ronde, indépendante du rayon du panneau (B-38).
+- Défilement des textes trop longs, synchronisé entre titre et sous-titre, avec pause et vitesse réglables (B-36). Le texte qui défile est dessiné une fois dans sa propre texture, que le rendu décale à chaque image : l'animation ne redessine rien sur le processeur.
+- Temps restant à la place de la durée (B-19).
+
+**Fini quand** ces réglages se comportent dans OBS comme décrit, et que le défilement reste fluide sans ralentir le rendu.
 
 ## Phase 7. Distribution
 

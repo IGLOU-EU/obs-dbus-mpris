@@ -52,6 +52,8 @@ Artiste et album forment le **sous-titre**, sur une ligne, dans la forme que fix
 
 **B-16 Durée.** La durée totale de la piste.
 
+**B-19 Temps restant.** Une case remplace, à droite sous la barre, la durée par le temps restant, écrit `-m:ss` (durée moins position). Elle n'a d'effet que si la durée s'affiche, donc si elle est cochée et connue.
+
 Format des temps : `m:ss`, et `h:mm:ss` à partir d'une heure. Quand la durée est inconnue (flux, `mpris:length` absent ou nul), la durée et la barre ne s'affichent pas, la position reste affichable.
 
 **B-17 Exactitude de la position.** MPRIS ne signale pas les changements de `Position`. La position affichée est donc extrapolée à partir de la dernière valeur connue, du temps écoulé et de `Rate` (1.0 par défaut), et recalée sur le signal `Seeked`, sur chaque changement de piste ou d'état, et par une relecture périodique. Affichage à la seconde, écart toléré d'une seconde.
@@ -85,7 +87,7 @@ Le service se choisit par un essai sur des pistes réelles, japonaises comprises
 
 **B-33 Taille de la source.** La largeur se règle en pixels, puisqu'OBS n'offre ni positionnement relatif ni mise en page adaptative. La hauteur se calcule d'après les tailles de police et les éléments cochés, jamais d'après la piste en cours : la source garde ainsi la même taille quoi qu'il joue, et ne fait pas sauter la scène. La miniature est carrée, de côté égal à cette hauteur, et compte dans la largeur.
 
-**B-37 Disposition.** Quatre blocs visuels : titre, sous-titre, progression (barre puis temps), image. Le panneau de texte et l'image sont deux blocs collés, chacun avec ses coins arrondis, sans fond derrière l'image. Une miniature non carrée est recadrée au centre. Le sous-titre s'écrit « Album - Artiste », ou l'un des deux seul s'il manque l'autre. Sous la barre, la position est alignée à gauche et la durée à droite. Les marges et les écarts sont proportionnels aux tailles de police, sans réglage dédié. Maquette de référence, des éléments les plus réduits à la disposition complète, miniature à gauche puis à droite :
+**B-37 Disposition.** Quatre blocs visuels : titre, sous-titre, progression (barre puis temps), image. Le panneau de texte et l'image sont deux blocs distincts, séparés par l'écart de B-39, chacun avec ses coins arrondis, sans fond derrière l'image. Une miniature non carrée est recadrée au centre. Le sous-titre s'écrit « Album - Artiste », ou l'un des deux seul s'il manque l'autre. Sous la barre, la position est alignée à gauche et la durée à droite. Les marges et les écarts sont proportionnels aux tailles de police, sans réglage dédié. Maquette de référence, des éléments les plus réduits à la disposition complète, miniature à gauche puis à droite :
 
 ```
 ╭───────────────────────────────────────────────────╮
@@ -128,13 +130,15 @@ Le service se choisit par un essai sur des pistes réelles, japonaises comprises
 ╰───────────────────────────────────────────────────╯╰──────────────────╯
 ```
 
-**B-38 Coins arrondis.** Un rayon en pixels, appliqué au panneau et à l'image. 0 donne des coins carrés.
+**B-38 Coins arrondis.** Un rayon en pixels, appliqué au panneau et à l'image. 0 donne des coins carrés. Une case « Image ronde » dessine l'image en disque, quel que soit ce rayon, qui reste celui du panneau. L'emplacement de l'image par défaut prend la même forme.
+
+**B-39 Écart image-panneau.** Un écart en pixels entre l'image et le panneau de texte, 0 pour les coller. Il compte dans la largeur totale (B-33).
 
 **B-34 Tailles de police.** Trois tailles en pixels : titre, sous-titre, temps.
 
 **B-35 Police.** Police sans empattement par défaut de `cosmic-text` : Open Sans, à défaut Noto Sans, puis DejaVu Sans, puis FreeSans, selon ce qui est installé (D-04). Aucun choix de police dans les propriétés. Un caractère absent de cette police est pris dans une police installée qui l'a, ce qui couvre les écritures non latines : le cas est réel, mpv expose aujourd'hui un album au titre japonais.
 
-**B-36 Débordement.** Aucun élément ne déborde du cadre de la source, quelle que soit la longueur des textes. Un texte trop long est tronqué par des points de suspension. Le défilement reste une option pour plus tard.
+**B-36 Débordement.** Aucun élément ne déborde du cadre de la source, quelle que soit la longueur des textes. Un texte trop long (titre, sous-titre, message de repli) défile de droite à gauche dans sa ligne, toujours dans le même sens et sans saut : il est suivi d'un écart fixe, proportionnel à sa taille de police, puis de sa propre copie, si bien que la boucle reprend sans discontinuité. Chaque fois que le texte revient à sa position de départ, il marque une pause, dont la durée se règle, puis repart. Il commence aussi par cette pause. La vitesse se règle en pixels par seconde. À vitesse nulle, le texte trop long est tronqué par des points de suspension. Quand le titre et le sous-titre défilent tous deux, ils sont synchronisés : ils partent ensemble à la même vitesse, celui qui revient au début le premier attend l'autre, puis la pause s'applique aux deux. Un texte qui tient dans sa ligne ne bouge pas. Le cycle repart du début à chaque changement de texte.
 
 ## 5. Propriétés de la source
 
@@ -152,7 +156,10 @@ Récapitulatif des réglages d'une source. Les valeurs par défaut des couleurs 
 | `show_progress` | case | oui | B-14 |
 | `show_position` | case | oui | B-15 |
 | `show_duration` | case | oui | B-16 |
+| `show_remaining` | case | non | B-19 |
 | `art_right` | case | non | B-30 |
+| `art_round` | case | non | B-38 |
+| `art_gap` | entier (px) | 0 | B-39 |
 | `color_background` | couleur RGBA | `#000000`, alpha 60 % | B-31 |
 | `color_text` | couleur RGBA | `#FFFFFF`, alpha 100 % | B-31, B-32 |
 | `color_bar_fill` | couleur RGBA | `#FFFFFF`, alpha 100 % | B-31 |
@@ -162,6 +169,8 @@ Récapitulatif des réglages d'une source. Les valeurs par défaut des couleurs 
 | `font_size_subtitle` | entier (px) | 24 | B-34 |
 | `font_size_time` | entier (px) | 20 | B-34 |
 | `corner_radius` | entier (px) | 12 | B-38 |
+| `scroll_speed` | entier (px/s) | 40 | B-36 |
+| `scroll_pause` | entier (ms) | 2000 | B-36 |
 | `fallback_text` | texte | traduit | B-23 |
 
 ## 6. Exigences non fonctionnelles
@@ -208,7 +217,7 @@ La version 1.0 est acceptée quand ces scénarios passent dans OBS Flatpak. Le b
 
 À trancher au moment où elles deviennent utiles, pas avant.
 
-- **Organisation visuelle** : la disposition est fixée par B-37. Restent à régler sur une vraie scène les proportions des marges et des écarts, et le défilement des textes trop longs si les points de suspension gênent. Phase dédiée dans la feuille de route.
+- **Organisation visuelle** : la disposition est fixée par B-37. Validée dans OBS le 2026-10-14. Les réglages visuels demandés ensuite (écart, image ronde, défilement, temps restant) sont spécifiés en B-19, B-36, B-38 et B-39.
 - **Service de pochettes en ligne** : choisi par essai au moment d'implémenter B-18.
 - **Forge de publication** (GitLab ou GitHub) : reportée à la phase de distribution.
 - **Validation dans un OBS natif** : reportée. Aucun OBS natif n'est installé sur le poste de développement, le build natif est produit sans y être testé.
