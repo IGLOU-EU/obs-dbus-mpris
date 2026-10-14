@@ -13,6 +13,7 @@ use std::collections::HashMap;
 use percent_encoding::{AsciiSet, NON_ALPHANUMERIC, utf8_percent_encode};
 
 use crate::art::ArtError;
+use crate::content::artist;
 use crate::model::{Art, ArtImage, PlaybackStatus, Player, Service, Settings, Track};
 use cleanup::Query;
 
@@ -30,7 +31,7 @@ pub enum Request {
 /// nothing to look up: no artist to search, no video page.
 pub fn request(service: Service, track: &Track) -> Option<Request> {
     let search = || {
-        let artist = names(&track.artists).or_else(|| names(&track.album_artists));
+        let artist = artist(track);
         cleanup::query(
             track.title.as_deref().unwrap_or_default(),
             artist.as_deref().unwrap_or_default(),
@@ -42,11 +43,6 @@ pub fn request(service: Service, track: &Track) -> Option<Request> {
         Service::Wikipedia => search().map(Request::Wikipedia),
         Service::YouTube => youtube::video_id(track.url.as_deref()?).map(Request::YouTube),
     }
-}
-
-/// The artists as the source shows them (B-12).
-fn names(list: &[String]) -> Option<String> {
-    (!list.is_empty()).then(|| list.join(", "))
 }
 
 /// The bytes of the cover `request` finds, `None` when there is none.
@@ -110,7 +106,7 @@ pub fn decode(request: &Request, bytes: &[u8]) -> Result<ArtImage, ArtError> {
 }
 
 /// What a source asks the core for: a cover from `service` for the player
-/// it shows, when that player has none of its own (B-18).
+/// it shows, should that player have none of its own (B-18).
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Wish {
     pub bus_name: String,

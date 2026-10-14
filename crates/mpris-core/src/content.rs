@@ -3,7 +3,7 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use crate::model::{Art, ArtImage, PlaybackStatus, Player, Service, Settings};
+use crate::model::{Art, ArtImage, PlaybackStatus, Player, Service, Settings, Track};
 use crate::position::display_position;
 use crate::time::format_time;
 
@@ -99,10 +99,7 @@ fn track_content(player: &Player, settings: &Settings, now: Instant) -> TrackCon
     TrackContent {
         paused: player.status == PlaybackStatus::Paused,
         title: settings.show_title.then(|| track.title.clone()).flatten(),
-        artist: settings
-            .show_artist
-            .then(|| names(&track.artists).or_else(|| names(&track.album_artists)))
-            .flatten(),
+        artist: settings.show_artist.then(|| artist(track)).flatten(),
         album: settings.show_album.then(|| track.album.clone()).flatten(),
         position: settings.show_position.then_some(shown_position),
         right_time: settings
@@ -137,6 +134,12 @@ fn found_online(player: &Player, service: Service) -> Option<Arc<ArtImage>> {
         .iter()
         .find(|(found_by, _)| *found_by == service)
         .map(|(_, image)| Arc::clone(image))
+}
+
+/// The artists of `track` as a source shows them, which online searches
+/// ask for too (B-12).
+pub fn artist(track: &Track) -> Option<String> {
+    names(&track.artists).or_else(|| names(&track.album_artists))
 }
 
 /// An empty list gives `None`, so the album artist fallback applies (B-12).
