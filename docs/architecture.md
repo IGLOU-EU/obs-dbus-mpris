@@ -222,7 +222,8 @@ Le build Flatpak se fait hors ligne : les dépendances Cargo sont fournies au ma
 | Build Rust hors ligne en Flatpak | reporté en phase 7 avec le manifeste, le développement passant par le dossier de plugins utilisateur |
 | Rendu du texte et repli CJK | résolu par l'essai de la phase 3 (D-04) : le bac à sable voit les polices de l'hôte sous `/run/host/fonts`, mais le runtime seul n'a aucune police CJK. La documentation d'installation demandera donc une police CJK sur l'hôte |
 | Miniatures hors du bac à sable d'OBS Flatpak (Chrome en Flatpak) | option de pochette en ligne (B-18) |
-| Pochette en ligne fausse ou introuvable (titres de vidéos non normalisés) | accepté : l'option est décochée par défaut, un échec laisse l'emplacement vide |
+| Pochette en ligne fausse ou introuvable (titres de vidéos non normalisés) | accepté : l'option est sur « Aucune » par défaut, le score minimal écarte les candidats douteux, un échec laisse l'image par défaut |
+| Croissance de la mémoire sur une longue session avec pochette en ligne | le cache garde les pochettes telles que téléchargées (50 à 100 Ko), décodées seulement pour les pistes affichées |
 | Build natif jamais chargé dans un OBS natif | accepté pour l'instant, validation reportée |
 | Écarts d'ABI de libobs entre versions mineures | bindings générés depuis OBS 32, testés sur 32.x uniquement |
 | Lecteurs qui omettent `Seeked` ou renvoient une position fausse | relecture périodique (D-05) |
