@@ -8,3 +8,4 @@ exclude = ["tools/gen-libobs-bindings"]
 edition = "2024"
 rust-version = "1.87"
 license = "GPL-2.0-or-later"
+repository = "https://gitlab.com/iglou.eu/obs-dbus-mpris"

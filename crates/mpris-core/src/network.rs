@@ -23,10 +23,8 @@ use crate::art::MAX_FILE_BYTES;
 use crate::online::{self, Request};
 
 /// Where the plugin can be reached, which MusicBrainz asks every client
-/// to give in its User-Agent. A placeholder until the forge is chosen
-/// (phase 7 of the roadmap): replace it with the address of the
-/// repository.
-const REPOSITORY: &str = "https://forge.invalid/obs-dbus-mpris";
+/// to give in its User-Agent.
+const REPOSITORY: &str = "https://gitlab.com/iglou.eu/obs-dbus-mpris";
 
 /// A request slower than this counts as failed, so that one lookup never
 /// holds the next ones for long. The slowest request of the study took
@@ -302,13 +300,11 @@ mod tests {
     /// MusicBrainz asks for an application, its version and a contact.
     #[test]
     fn the_user_agent_names_the_plugin_its_version_and_where_to_reach_it() {
-        let agent = user_agent();
         let version = env!("CARGO_PKG_VERSION");
-        assert!(
-            agent.starts_with(&format!("obs-dbus-mpris/{version} ( https://")),
-            "{agent}"
+        assert_eq!(
+            user_agent(),
+            format!("obs-dbus-mpris/{version} ( https://gitlab.com/iglou.eu/obs-dbus-mpris )")
         );
-        assert!(agent.ends_with(" )"), "{agent}");
     }
 
     #[test]
