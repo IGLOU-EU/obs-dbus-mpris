@@ -157,6 +157,9 @@ pub struct Settings {
     pub font_size_time: u32,
     /// Corners of the panel and the thumbnail, 0 for square ones (B-38).
     pub corner_radius: u32,
+    /// Thickness of the progress bar, which the source height follows
+    /// (B-50).
+    pub bar_height: u32,
     /// Whether a text too long for its line scrolls, rather than ends with
     /// an ellipsis (B-36).
     pub scroll_enabled: bool,

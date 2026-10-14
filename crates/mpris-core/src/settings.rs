@@ -87,6 +87,8 @@ pub const MAX_FONT_SIZE: u32 = 512;
 pub const MAX_CORNER_RADIUS: u32 = 256;
 /// Wider than any real overlay needs.
 pub const MAX_ART_GAP: u32 = 512;
+/// Thicker than any real progress bar.
+pub const MAX_BAR_HEIGHT: u32 = 64;
 /// Faster than anyone can read.
 pub const MAX_SCROLL_SPEED: u32 = 1000;
 /// In milliseconds, a minute: longer than any real pause.
@@ -125,6 +127,7 @@ const FONT_SIZE_SUBTITLE: Field = size("font_size_subtitle", 24, MAX_FONT_SIZE);
 const FONT_SIZE_TIME: Field = size("font_size_time", 20, MAX_FONT_SIZE);
 /// Down to 0, which gives square corners (B-38).
 const CORNER_RADIUS: Field = int("corner_radius", 12, 0, MAX_CORNER_RADIUS, Unit::Pixel);
+const BAR_HEIGHT: Field = int("bar_height", 6, 1, MAX_BAR_HEIGHT, Unit::Pixel);
 /// Off, a long text ends with an ellipsis instead (B-36).
 const SCROLL_ENABLED: Field = flag("scroll_enabled", true);
 /// From 1, so that the switch above is the one way to stop the scrolling.
@@ -170,6 +173,7 @@ pub const FIELDS: &[Field] = &[
     FONT_SIZE_SUBTITLE,
     FONT_SIZE_TIME,
     CORNER_RADIUS,
+    BAR_HEIGHT,
     SCROLL_ENABLED,
     SCROLL_SPEED,
     SCROLL_PAUSE,
@@ -238,6 +242,7 @@ impl Settings {
             font_size_subtitle: read_int(&get, &FONT_SIZE_SUBTITLE),
             font_size_time: read_int(&get, &FONT_SIZE_TIME),
             corner_radius: read_int(&get, &CORNER_RADIUS),
+            bar_height: read_int(&get, &BAR_HEIGHT),
             scroll_enabled: read_bool(&get, &SCROLL_ENABLED),
             scroll_speed: read_int(&get, &SCROLL_SPEED),
             scroll_pause: Duration::from_millis(read_int(&get, &SCROLL_PAUSE).into()),
@@ -314,7 +319,7 @@ mod tests {
 
     use super::*;
 
-    const EXPECTED_KEYS: [&str; 27] = [
+    const EXPECTED_KEYS: [&str; 28] = [
         "player",
         "auto_select",
         "show_art",
@@ -338,6 +343,7 @@ mod tests {
         "font_size_subtitle",
         "font_size_time",
         "corner_radius",
+        "bar_height",
         "scroll_enabled",
         "scroll_speed",
         "scroll_pause",
@@ -402,6 +408,7 @@ mod tests {
             font_size_subtitle: 24,
             font_size_time: 20,
             corner_radius: 12,
+            bar_height: 6,
             scroll_enabled: true,
             scroll_speed: 40,
             scroll_pause: Duration::from_millis(2000),
@@ -431,7 +438,9 @@ mod tests {
                 k if k.starts_with("show_") => "bool",
                 k if k.starts_with("color_") => "color",
                 "width" | "font_size_title" | "font_size_subtitle" | "font_size_time"
-                | "corner_radius" | "art_gap" | "scroll_speed" | "scroll_pause" => "int",
+                | "corner_radius" | "art_gap" | "bar_height" | "scroll_speed" | "scroll_pause" => {
+                    "int"
+                }
                 "fallback_text" => "text",
                 other => panic!("unexpected key {other}"),
             };
@@ -513,7 +522,7 @@ mod tests {
             .iter()
             .filter(|f| matches!(f.kind, Kind::Int { .. }))
             .collect();
-        assert_eq!(ints.len(), 8);
+        assert_eq!(ints.len(), 9);
         for key in [
             "width",
             "font_size_title",
@@ -531,6 +540,19 @@ mod tests {
         assert_eq!(int_bounds("corner_radius"), (0, 256));
         assert_eq!(int_bounds("art_gap"), (0, 512));
         assert_eq!(int_bounds("scroll_pause"), (0, 60_000));
+    }
+
+    #[test]
+    fn bar_height_goes_from_one_to_64_pixels() {
+        assert_eq!(int_bounds("bar_height"), (1, 64));
+        let read = |v: i64| {
+            Settings::from_lookup(|k| (k == "bar_height").then_some(SettingValue::Int(v)))
+                .bar_height
+        };
+        assert_eq!(read(0), 1);
+        assert_eq!(read(1), 1);
+        assert_eq!(read(64), 64);
+        assert_eq!(read(65), 64);
     }
 
     #[test]
@@ -577,6 +599,7 @@ mod tests {
             "font_size_time",
             "corner_radius",
             "art_gap",
+            "bar_height",
         ] {
             assert_eq!(unit(key), Unit::Pixel, "{key}");
         }
@@ -647,6 +670,7 @@ mod tests {
                 "font_size_subtitle" => Int(30),
                 "font_size_time" => Int(10),
                 "corner_radius" => Int(30),
+                "bar_height" => Int(10),
                 "scroll_enabled" => Bool(false),
                 "scroll_speed" => Int(80),
                 "scroll_pause" => Int(500),
@@ -678,6 +702,7 @@ mod tests {
             font_size_subtitle: 30,
             font_size_time: 10,
             corner_radius: 30,
+            bar_height: 10,
             scroll_enabled: false,
             scroll_speed: 80,
             scroll_pause: Duration::from_millis(500),
@@ -724,13 +749,14 @@ mod tests {
     #[test]
     fn integers_are_clamped_to_their_bounds() {
         type Getter = fn(&Settings) -> u32;
-        let sizes: [(&str, Getter); 8] = [
+        let sizes: [(&str, Getter); 9] = [
             ("art_gap", |s| s.art_gap),
             ("width", |s| s.width),
             ("font_size_title", |s| s.font_size_title),
             ("font_size_subtitle", |s| s.font_size_subtitle),
             ("font_size_time", |s| s.font_size_time),
             ("corner_radius", |s| s.corner_radius),
+            ("bar_height", |s| s.bar_height),
             ("scroll_speed", |s| s.scroll_speed),
             ("scroll_pause", |s| {
                 u32::try_from(s.scroll_pause.as_millis()).expect("bounded")

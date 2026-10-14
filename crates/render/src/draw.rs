@@ -1157,7 +1157,7 @@ mod tests {
         let base = key(&s, &playing(10, 0.5));
         assert_ne!(key(&s, &playing(11, 0.5)), base, "position");
         assert_ne!(key(&s, &texts("Title", false)), base, "no progress");
-        let changes: [fn(&mut Settings); 9] = [
+        let changes: [fn(&mut Settings); 10] = [
             |s| s.color_background.a = 1,
             |s| s.color_text.r = 1,
             |s| s.color_bar_fill.g = 1,
@@ -1167,6 +1167,7 @@ mod tests {
             |s| s.art_right = true,
             |s| s.art_round = true,
             |s| s.art_gap = 10,
+            |s| s.bar_height = 10,
         ];
         for (i, change) in changes.iter().enumerate() {
             assert_ne!(key(&with(change), &playing(10, 0.5)), base, "change {i}");

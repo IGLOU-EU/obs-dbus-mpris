@@ -3,7 +3,9 @@
 //! whatever plays.
 
 use mpris_core::model::Settings;
-use mpris_core::settings::{MAX_ART_GAP, MAX_CORNER_RADIUS, MAX_FONT_SIZE, MAX_SIDE};
+use mpris_core::settings::{
+    MAX_ART_GAP, MAX_BAR_HEIGHT, MAX_CORNER_RADIUS, MAX_FONT_SIZE, MAX_SIDE,
+};
 
 /// A pixel rectangle of the source, origin at its top left corner.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -92,8 +94,6 @@ const MARGIN: f32 = 0.6;
 /// Space between the text rows and the progress rows, relative to the
 /// title size.
 const BLOCK_GAP: f32 = 0.4;
-/// Bar thickness, relative to the time size.
-const BAR: f32 = 0.3;
 /// Space between the bar and the times, relative to the time size.
 const BAR_GAP: f32 = 0.2;
 /// Narrowest text column, relative to the title size: an ellipsis and a
@@ -126,7 +126,7 @@ pub fn layout(settings: &Settings) -> Layout {
         .then(|| scale(sizes.subtitle, LINE_HEIGHT).max(1));
     let bar_h = settings
         .show_progress
-        .then(|| scale(sizes.time, BAR).max(1));
+        .then(|| settings.bar_height.clamp(1, MAX_BAR_HEIGHT));
     let times_h = (settings.show_position || settings.show_duration)
         .then(|| scale(sizes.time, LINE_HEIGHT).max(1));
     let has_text = title_h.is_some() || subtitle_h.is_some();
@@ -591,10 +591,12 @@ mod tests {
     #[test]
     fn margins_scale_with_the_font_sizes() {
         let base = layout(&settings());
+        // The bar has a thickness of its own (B-50), doubled with the rest.
         let double = layout(&with(|s| {
             s.font_size_title *= 2;
             s.font_size_subtitle *= 2;
             s.font_size_time *= 2;
+            s.bar_height *= 2;
         }));
         // Each row and gap rounds on its own, hence the slack.
         assert!(
@@ -657,11 +659,58 @@ mod tests {
         assert_eq!(left, top);
     }
 
+    // Bar thickness (B-50)
+
     #[test]
-    fn the_bar_is_thinner_than_the_time_row() {
-        let l = layout(&settings());
-        let bar = some(l.bar, "bar");
-        assert!(bar.h >= 1 && bar.h < some(l.times, "times").h);
+    fn the_bar_has_the_thickness_of_the_settings() {
+        for thickness in [1, 6, 20, 64] {
+            let l = layout(&with(|s| s.bar_height = thickness));
+            assert_sane(&l);
+            assert_eq!(some(l.bar, "bar").h, thickness);
+        }
+    }
+
+    #[test]
+    fn the_bar_thickness_ignores_the_font_sizes() {
+        let l = layout(&with(|s| {
+            s.font_size_title = 100;
+            s.font_size_time = 100;
+        }));
+        assert_eq!(some(l.bar, "bar").h, 6);
+    }
+
+    #[test]
+    fn the_source_height_follows_the_bar() {
+        let thin = layout(&settings());
+        let thick = layout(&with(|s| s.bar_height = 16));
+        assert_sane(&thick);
+        assert_eq!(thick.height, thin.height + 10);
+        assert_eq!(some(thick.bar, "bar").y, some(thin.bar, "bar").y);
+        let times = some(thick.times, "times");
+        assert_eq!(times.y, some(thin.times, "times").y + 10);
+        assert_eq!(
+            some(thick.art, "art").w,
+            thick.height,
+            "the art stays square"
+        );
+    }
+
+    #[test]
+    fn a_hidden_bar_ignores_its_thickness() {
+        let hidden = |thickness| {
+            layout(&with(|s| {
+                s.show_progress = false;
+                s.bar_height = thickness;
+            }))
+        };
+        assert_eq!(hidden(1), hidden(64));
+    }
+
+    #[test]
+    fn the_bar_thickness_is_kept_within_the_schema_bounds() {
+        let bar = |thickness| some(layout(&with(|s| s.bar_height = thickness)).bar, "bar").h;
+        assert_eq!(bar(0), 1);
+        assert_eq!(bar(u32::MAX), 64);
     }
 
     #[test]
@@ -839,6 +888,7 @@ mod tests {
             s.font_size_title = u32::MAX;
             s.font_size_subtitle = u32::MAX;
             s.font_size_time = u32::MAX;
+            s.bar_height = u32::MAX;
         }));
         assert_sane(&l);
         assert_eq!(
