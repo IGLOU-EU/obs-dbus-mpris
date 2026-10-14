@@ -12,23 +12,25 @@ Chaque exigence porte un identifiant B-xx, repris par la feuille de route et par
 
 **B-04 Clé de lecteur.** La clé d'un lecteur est le premier segment qui suit `org.mpris.MediaPlayer2.` dans son nom de bus. La spécification MPRIS réserve les segments suivants aux instances multiples, et ils changent à chaque lancement : `org.mpris.MediaPlayer2.mpv.instance-mWyyJbmA` a pour clé `mpv`. La clé se déduit du nom de bus mémorisé, elle n'est jamais stockée, et sert à retrouver le lecteur quand l'instance mémorisée a disparu (B-06).
 
-**B-05 Règle de sélection.** Le lecteur effectif est réévalué en continu, dans cet ordre :
+**B-05 Règle de sélection.** La sélection automatique sert au démarrage, quand rien n'est encore choisi ou que le lecteur choisi n'est pas encore lancé. Une fois qu'un lecteur est affiché, la source n'en change plus d'elle-même : un autre lecteur qui se met à jouer ne le remplace jamais. Pour cela, chaque source retient en mémoire le lecteur qu'elle suit (B-08). Le lecteur affiché est réévalué en continu, dans cet ordre :
 
 1. l'instance mémorisée, si elle est présente, quel que soit son état,
-2. sinon une instance du même lecteur (même clé), celle qui est en lecture de préférence, sinon la première,
-3. sinon le premier lecteur en lecture (`PlaybackStatus` = `Playing`),
-4. sinon le premier lecteur disponible,
+2. sinon une instance du lecteur mémorisé (même clé), celle qui est en lecture de préférence, sinon la première,
+3. sinon le lecteur suivi, s'il est présent, ou une instance de même clé (relance),
+4. sinon, si la source ne suit encore aucun lecteur, le premier lecteur en lecture (`PlaybackStatus` = `Playing`), qui devient le lecteur suivi,
 5. sinon aucun, et la source affiche le message de repli (B-23).
 
-« Premier » s'entend dans l'ordre alphabétique des clés (B-04), puis des noms de bus, sans tenir compte de la casse, pour un résultat stable tant que les lecteurs tournent.
+« Premier » s'entend dans l'ordre alphabétique des clés (B-04), puis des noms de bus, sans tenir compte de la casse.
 
-La case « Sélection automatique », cochée par défaut, commande les étapes 2 à 4. Décochée, seule l'étape 1 s'applique : sans l'instance mémorisée exacte, même après une relance du même lecteur, la source affiche le message de repli jusqu'à un nouveau choix. Une source dédiée à un lecteur ne bascule ainsi jamais sur un autre.
+La case « Sélection automatique », cochée par défaut, commande les étapes 2 à 4. Décochée, seule l'étape 1 s'applique : sans l'instance mémorisée exacte, même après une relance du même lecteur, la source affiche le message de repli jusqu'à un nouveau choix.
 
-Conséquence voulue de l'étape 1 : si l'instance mémorisée est présente mais arrêtée pendant qu'un autre lecteur joue, la source affiche le message de repli. Le choix explicite prime sur l'activité des autres lecteurs.
+Conséquences voulues : si l'instance mémorisée est présente mais arrêtée pendant qu'un autre lecteur joue, la source l'affiche quand même (message de repli si elle est arrêtée). Si le lecteur affiché disparaît, la source affiche le message de repli et attend son retour, elle ne bascule pas sur un autre lecteur qui joue. Un lecteur seulement en pause ou arrêté n'est jamais retenu par l'étape 4.
 
-**B-06 Retour automatique.** Le repli ne modifie jamais le choix mémorisé. Quand l'instance mémorisée a disparu et qu'un lecteur de même clé apparaît (relance de mpv avec un nouveau suffixe d'instance, par exemple), la source le suit d'elle-même (étape 2), si la sélection automatique est cochée.
+**B-06 Retour automatique.** Le repli ne modifie jamais le choix mémorisé. Quand l'instance mémorisée réapparaît, ou qu'un lecteur de même clé apparaît (relance de mpv avec un nouveau suffixe d'instance, par exemple), la source y revient d'elle-même (étapes 1 et 2), si la sélection automatique est cochée.
 
 **B-07 Nouvelle source.** Une source sans choix mémorisé applique la règle B-05 à partir de l'étape 3, ou affiche le message de repli si la sélection automatique est décochée.
+
+**B-08 Lecteur suivi.** Le lecteur que la source affiche devient son lecteur suivi, retenu en mémoire seulement : il n'est pas enregistré dans les réglages et repart de zéro au redémarrage d'OBS, ou quand le lecteur mémorisé ou la case de sélection automatique changent dans les propriétés.
 
 ## 2. Contenu affiché
 
@@ -132,46 +134,52 @@ Le service se choisit par un essai sur des pistes réelles, japonaises comprises
 
 **B-38 Coins arrondis.** Un rayon en pixels, appliqué au panneau et à l'image. 0 donne des coins carrés. Une case « Image ronde » dessine l'image en disque, quel que soit ce rayon, qui reste celui du panneau. L'emplacement de l'image par défaut prend la même forme.
 
+**B-50 Épaisseur de la barre.** L'épaisseur de la barre de progression se règle en pixels. La hauteur de la source la suit (B-33).
+
 **B-39 Écart image-panneau.** Un écart en pixels entre l'image et le panneau de texte, 0 pour les coller. Il compte dans la largeur totale (B-33).
 
 **B-34 Tailles de police.** Trois tailles en pixels : titre, sous-titre, temps.
 
 **B-35 Police.** Police sans empattement par défaut de `cosmic-text` : Open Sans, à défaut Noto Sans, puis DejaVu Sans, puis FreeSans, selon ce qui est installé (D-04). Aucun choix de police dans les propriétés. Un caractère absent de cette police est pris dans une police installée qui l'a, ce qui couvre les écritures non latines : le cas est réel, mpv expose aujourd'hui un album au titre japonais.
 
-**B-36 Débordement.** Aucun élément ne déborde du cadre de la source, quelle que soit la longueur des textes. Un texte trop long (titre, sous-titre, message de repli) défile de droite à gauche dans sa ligne, toujours dans le même sens et sans saut : il est suivi d'un écart fixe de deux fois sa taille de police, puis de sa propre copie, si bien que la boucle reprend sans discontinuité. Chaque fois que le texte revient à sa position de départ, il marque une pause, dont la durée se règle, puis repart. Il commence aussi par cette pause. La vitesse se règle en pixels par seconde. À vitesse nulle, le texte trop long est tronqué par des points de suspension. Quand le titre et le sous-titre défilent tous deux, ils sont synchronisés : ils partent ensemble à la même vitesse, celui qui revient au début le premier attend l'autre, puis la pause s'applique aux deux. Un texte qui tient dans sa ligne ne bouge pas. Le cycle repart du début à chaque changement de texte, de largeur de ligne (apparition du pictogramme pause) ou de réglage du défilement. Le défilement continue pendant la pause du lecteur.
+**B-36 Débordement.** Aucun élément ne déborde du cadre de la source, quelle que soit la longueur des textes. Un texte trop long (titre, sous-titre, message de repli) défile de droite à gauche dans sa ligne, toujours dans le même sens et sans saut : il est suivi d'un écart fixe de deux fois sa taille de police, puis de sa propre copie, si bien que la boucle reprend sans discontinuité. Chaque fois que le texte revient à sa position de départ, il marque une pause, dont la durée se règle, puis repart. Il commence aussi par cette pause. La vitesse se règle en pixels par seconde. Quand le titre et le sous-titre défilent tous deux, ils sont synchronisés : ils partent ensemble à la même vitesse, celui qui revient au début le premier attend l'autre, puis la pause s'applique aux deux. Un texte qui tient dans sa ligne ne bouge pas. Le cycle repart du début à chaque changement de texte, de largeur de ligne (apparition du pictogramme pause) ou de réglage du défilement. Le défilement continue pendant la pause du lecteur. Une case « Défilement », cochée par défaut, permet de le désactiver : le texte trop long est alors tronqué par des points de suspension, et la vitesse se règle à partir de 1 px/s.
 
 ## 5. Propriétés de la source
 
+**B-51 Groupes.** Les propriétés sont rangées en groupes titrés, dans cet ordre : Lecteur (`player`, `auto_select`), Éléments affichés (les cases `show_*`), Disposition (largeur, image, coins, barre), Texte (tailles de police, défilement, message de repli), Couleurs. L'ordre du tableau ci-dessous suit celui des groupes.
+
 Récapitulatif des réglages d'une source. Les valeurs par défaut des couleurs et des tailles sont des propositions à ajuster à l'usage.
 
-| Clé | Type | Défaut proposé | Besoin |
-|-----|------|----------------|--------|
-| `player` | liste (nom de bus de l'instance) | vide (aucun choix mémorisé) | B-02 à B-07 |
-| `auto_select` | case | oui | B-05 à B-07 |
-| `show_art` | case | oui | B-10 |
-| `fetch_art_online` | case | non | B-18 |
-| `show_title` | case | oui | B-11 |
-| `show_artist` | case | oui | B-12 |
-| `show_album` | case | oui | B-13 |
-| `show_progress` | case | oui | B-14 |
-| `show_position` | case | oui | B-15 |
-| `show_duration` | case | oui | B-16 |
-| `show_remaining` | case | non | B-19 |
-| `art_right` | case | non | B-30 |
-| `art_round` | case | non | B-38 |
-| `art_gap` | entier (px) | 0 | B-39 |
-| `color_background` | couleur RGBA | `#000000`, alpha 60 % | B-31 |
-| `color_text` | couleur RGBA | `#FFFFFF`, alpha 100 % | B-31, B-32 |
-| `color_bar_fill` | couleur RGBA | `#FFFFFF`, alpha 100 % | B-31 |
-| `color_bar_track` | couleur RGBA | `#FFFFFF`, alpha 25 % | B-31 |
-| `width` | entier (px) | 600 | B-33 |
-| `font_size_title` | entier (px) | 32 | B-34 |
-| `font_size_subtitle` | entier (px) | 24 | B-34 |
-| `font_size_time` | entier (px) | 20 | B-34 |
-| `corner_radius` | entier (px) | 12 | B-38 |
-| `scroll_speed` | entier (px/s) | 40 | B-36 |
-| `scroll_pause` | entier (ms) | 2000 | B-36 |
-| `fallback_text` | texte | traduit | B-23 |
+| Groupe | Clé | Type | Défaut proposé | Besoin |
+|--------|-----|------|----------------|--------|
+| Lecteur | `player` | liste (nom de bus de l'instance) | vide (aucun choix mémorisé) | B-02 à B-07 |
+| Lecteur | `auto_select` | case | oui | B-05 à B-07 |
+| Éléments affichés | `show_art` | case | oui | B-10 |
+| Éléments affichés | `fetch_art_online` | case | non | B-18 |
+| Éléments affichés | `show_title` | case | oui | B-11 |
+| Éléments affichés | `show_artist` | case | oui | B-12 |
+| Éléments affichés | `show_album` | case | oui | B-13 |
+| Éléments affichés | `show_progress` | case | oui | B-14 |
+| Éléments affichés | `show_position` | case | oui | B-15 |
+| Éléments affichés | `show_duration` | case | oui | B-16 |
+| Éléments affichés | `show_remaining` | case | non | B-19 |
+| Disposition | `width` | entier (px) | 600 | B-33 |
+| Disposition | `art_right` | case | non | B-30 |
+| Disposition | `art_round` | case | non | B-38 |
+| Disposition | `art_gap` | entier (px) | 0 | B-39 |
+| Disposition | `corner_radius` | entier (px) | 12 | B-38 |
+| Disposition | `bar_height` | entier (px) | 6 | B-50 |
+| Texte | `font_size_title` | entier (px) | 32 | B-34 |
+| Texte | `font_size_subtitle` | entier (px) | 24 | B-34 |
+| Texte | `font_size_time` | entier (px) | 20 | B-34 |
+| Texte | `scroll_enabled` | case | oui | B-36 |
+| Texte | `scroll_speed` | entier (px/s) | 40 | B-36 |
+| Texte | `scroll_pause` | entier (ms) | 2000 | B-36 |
+| Texte | `fallback_text` | texte | traduit | B-23 |
+| Couleurs | `color_background` | couleur RGBA | `#000000`, alpha 60 % | B-31 |
+| Couleurs | `color_text` | couleur RGBA | `#FFFFFF`, alpha 100 % | B-31, B-32 |
+| Couleurs | `color_bar_fill` | couleur RGBA | `#FFFFFF`, alpha 100 % | B-31 |
+| Couleurs | `color_bar_track` | couleur RGBA | `#FFFFFF`, alpha 25 % | B-31 |
 
 ## 6. Exigences non fonctionnelles
 
