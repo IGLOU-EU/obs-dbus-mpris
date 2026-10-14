@@ -178,9 +178,9 @@ fn draw_texts(
             let left = Rect { w: half, ..row };
             text(&format_time(position), sizes.time, left, Align::Left);
         }
-        if let Some(duration) = track.duration {
+        if let Some(time) = track.right_time {
             let right = Rect::new(row.x + half, row.y, row.w - half, row.h);
-            text(&format_time(duration), sizes.time, right, Align::Right);
+            text(&time.text(), sizes.time, right, Align::Right);
         }
     }
 }
@@ -190,6 +190,7 @@ mod tests {
     use std::sync::Arc;
     use std::time::Duration;
 
+    use mpris_core::content::RightTime;
     use mpris_core::model::ArtImage;
 
     use super::*;
@@ -226,7 +227,7 @@ mod tests {
             artist: None,
             album: None,
             position: None,
-            duration: None,
+            right_time: None,
             progress,
             art: None,
         })
@@ -252,7 +253,7 @@ mod tests {
             artist: Some("Artist".into()),
             album: Some("Album".into()),
             position: Some(Duration::from_secs(81)),
-            duration: Some(Duration::from_secs(116)),
+            right_time: Some(RightTime::Duration(Duration::from_secs(116))),
             progress: None,
             art: None,
         })
@@ -670,6 +671,37 @@ mod tests {
         assert!(
             ink(&frame, middle).is_empty(),
             "nothing between the two times"
+        );
+    }
+
+    #[test]
+    fn remaining_time_ends_at_the_right_edge_behind_a_minus() {
+        let Some(mut fonts) = test_fonts() else {
+            return;
+        };
+        let with_right = |right_time| match texts("Title", false) {
+            Content::Track(track) => Content::Track(TrackContent {
+                right_time: Some(right_time),
+                ..track
+            }),
+            _ => unreachable!(),
+        };
+        let seconds = Duration::from_secs(35);
+        let mut right_ink = |right_time| {
+            let (layout, frame) = render_with(&mut fonts, &no_bar(), &with_right(right_time));
+            let times = some(layout.times);
+            let half = Rect::new(times.x + times.w / 2, times.y, times.w / 2, times.h);
+            span(&ink(&frame, half))
+        };
+        let (duration_left, duration_right, ..) = right_ink(RightTime::Duration(seconds));
+        let (remaining_left, remaining_right, ..) = right_ink(RightTime::Remaining(seconds));
+        assert_eq!(
+            remaining_right, duration_right,
+            "both end at the right edge"
+        );
+        assert!(
+            remaining_left + 3 < duration_left,
+            "a minus before the time: {remaining_left} {duration_left}"
         );
     }
 

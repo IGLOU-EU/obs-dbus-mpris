@@ -5,6 +5,7 @@ use std::time::{Duration, Instant};
 
 use crate::model::{Art, ArtImage, PlaybackStatus, Player, Settings};
 use crate::position::display_position;
+use crate::time::format_time;
 
 /// Everything a source draws, so the OBS glue can compare it with the
 /// previous frame and regenerate only what changed (B-43).
@@ -34,11 +35,31 @@ pub struct TrackContent {
     /// Whole seconds, so it changes once per second (B-43).
     pub position: Option<Duration>,
     /// Whole seconds, like `position`.
-    pub duration: Option<Duration>,
+    pub right_time: Option<RightTime>,
     /// Exact position over length, in `[0, 1]`.
     pub progress: Option<f32>,
     /// What to draw in the thumbnail slot, never whether the slot exists.
     pub art: Option<Arc<ArtImage>>,
+}
+
+/// The time at the right end of the time row (B-16, B-19).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RightTime {
+    Duration(Duration),
+    /// The duration minus the position, both as shown, so that it counts
+    /// down at the moment the position counts up and the source draws once
+    /// per second (B-43).
+    Remaining(Duration),
+}
+
+impl RightTime {
+    /// `m:ss` for the duration, `-m:ss` for the remaining time (B-19).
+    pub fn text(self) -> String {
+        match self {
+            RightTime::Duration(duration) => format_time(duration),
+            RightTime::Remaining(left) => format!("-{}", format_time(left)),
+        }
+    }
 }
 
 /// What to draw at `now` for `player`, the one picked by
@@ -65,6 +86,15 @@ fn fallback(text: &str) -> Content {
 fn track_content(player: &Player, settings: &Settings, now: Instant) -> TrackContent {
     let track = &player.track;
     let position = display_position(player, now);
+    let shown_position = whole_seconds(position);
+    let right_time = |length| {
+        let duration = whole_seconds(length);
+        if settings.show_remaining {
+            RightTime::Remaining(duration.saturating_sub(shown_position))
+        } else {
+            RightTime::Duration(duration)
+        }
+    };
     TrackContent {
         paused: player.status == PlaybackStatus::Paused,
         title: settings.show_title.then(|| track.title.clone()).flatten(),
@@ -73,10 +103,10 @@ fn track_content(player: &Player, settings: &Settings, now: Instant) -> TrackCon
             .then(|| names(&track.artists).or_else(|| names(&track.album_artists)))
             .flatten(),
         album: settings.show_album.then(|| track.album.clone()).flatten(),
-        position: settings.show_position.then(|| whole_seconds(position)),
-        duration: settings
+        position: settings.show_position.then_some(shown_position),
+        right_time: settings
             .show_duration
-            .then(|| track.length.map(whole_seconds))
+            .then(|| track.length.map(right_time))
             .flatten(),
         progress: settings
             .show_progress
@@ -174,7 +204,7 @@ mod tests {
             track.artist.is_some(),
             track.album.is_some(),
             track.position.is_some(),
-            track.duration.is_some(),
+            track.right_time.is_some(),
             track.progress.is_some(),
             track.art.is_some(),
         ]
@@ -245,7 +275,7 @@ mod tests {
                 artist: Some("Artist".into()),
                 album: Some("Album".into()),
                 position: Some(secs(45)),
-                duration: Some(secs(180)),
+                right_time: Some(RightTime::Duration(secs(180))),
                 progress: Some(0.25),
                 art: Some(image),
             })
@@ -354,7 +384,7 @@ mod tests {
                 artist: None,
                 album: None,
                 position: Some(secs(12)),
-                duration: None,
+                right_time: None,
                 progress: None,
                 art: None,
             }
@@ -439,7 +469,7 @@ mod tests {
         let mut p = player(Playing, t0);
         p.track.length = Some(millis(180_999));
         let track = track_of(content(Some(&p), &Settings::default(), t0));
-        assert_eq!(track.duration, Some(secs(180)));
+        assert_eq!(track.right_time, Some(RightTime::Duration(secs(180))));
     }
 
     #[test]
@@ -478,8 +508,120 @@ mod tests {
         p.track.length = None;
         let track = track_of(content(Some(&p), &Settings::default(), t0 + secs(3600)));
         assert_eq!(track.position, Some(secs(3645)));
-        assert_eq!(track.duration, None);
+        assert_eq!(track.right_time, None);
         assert_eq!(track.progress, None);
+    }
+
+    // Remaining time (B-19)
+
+    fn remaining() -> Settings {
+        Settings {
+            show_remaining: true,
+            ..Settings::default()
+        }
+    }
+
+    #[test]
+    fn remaining_time_replaces_the_duration() {
+        let t0 = Instant::now();
+        let track = track_of(content(Some(&player(Playing, t0)), &remaining(), t0));
+        assert_eq!(track.right_time, Some(RightTime::Remaining(secs(135))));
+        assert_eq!(track.position, Some(secs(45)));
+    }
+
+    #[test]
+    fn remaining_time_counts_down_as_the_position_plays() {
+        let t0 = Instant::now();
+        let p = player(Playing, t0);
+        let track = track_of(content(Some(&p), &remaining(), t0 + secs(60)));
+        assert_eq!(track.right_time, Some(RightTime::Remaining(secs(75))));
+    }
+
+    #[test]
+    fn remaining_time_ticks_with_the_position_shown() {
+        // A length with a fraction of a second, so that an exact difference
+        // would tick at another moment than the position.
+        let t0 = Instant::now();
+        let mut p = player(Playing, t0);
+        p.track.length = Some(millis(180_900));
+        p.anchor.position = millis(45_500);
+        let at = |offset| {
+            let track = track_of(content(Some(&p), &remaining(), t0 + offset));
+            (track.position, track.right_time)
+        };
+        let shown = |position, left| (Some(secs(position)), Some(RightTime::Remaining(secs(left))));
+        assert_eq!(at(Duration::ZERO), shown(45, 135));
+        assert_eq!(at(millis(450)), shown(45, 135));
+        assert_eq!(at(millis(550)), shown(46, 134));
+    }
+
+    #[test]
+    fn remaining_time_is_zero_at_the_end() {
+        let t0 = Instant::now();
+        let mut p = player(Playing, t0);
+        p.anchor.position = secs(180);
+        let track = track_of(content(Some(&p), &remaining(), t0));
+        assert_eq!(track.right_time, Some(RightTime::Remaining(Duration::ZERO)));
+    }
+
+    #[test]
+    fn remaining_time_stays_zero_past_the_length() {
+        let t0 = Instant::now();
+        let mut p = player(Playing, t0);
+        p.anchor.position = secs(500);
+        for later in [Duration::ZERO, secs(3600)] {
+            let track = track_of(content(Some(&p), &remaining(), t0 + later));
+            assert_eq!(track.right_time, Some(RightTime::Remaining(Duration::ZERO)));
+        }
+    }
+
+    #[test]
+    fn remaining_time_stays_frozen_while_paused() {
+        let t0 = Instant::now();
+        let p = player(Paused, t0);
+        let track = track_of(content(Some(&p), &remaining(), t0 + secs(60)));
+        assert_eq!(track.right_time, Some(RightTime::Remaining(secs(135))));
+    }
+
+    #[test]
+    fn remaining_time_needs_the_duration_shown() {
+        let t0 = Instant::now();
+        let s = Settings {
+            show_duration: false,
+            ..remaining()
+        };
+        let track = track_of(content(Some(&player(Playing, t0)), &s, t0));
+        assert_eq!(track.right_time, None);
+    }
+
+    #[test]
+    fn remaining_time_needs_a_known_length() {
+        let t0 = Instant::now();
+        let mut p = player(Playing, t0);
+        p.track.length = None;
+        let track = track_of(content(Some(&p), &remaining(), t0));
+        assert_eq!(track.right_time, None);
+        assert_eq!(track.position, Some(secs(45)));
+    }
+
+    #[test]
+    fn remaining_time_does_not_need_the_position_shown() {
+        let t0 = Instant::now();
+        let s = Settings {
+            show_position: false,
+            ..remaining()
+        };
+        let track = track_of(content(Some(&player(Playing, t0)), &s, t0));
+        assert_eq!(track.position, None);
+        assert_eq!(track.right_time, Some(RightTime::Remaining(secs(135))));
+    }
+
+    #[test]
+    fn right_time_text_marks_the_remaining_time_with_a_minus() {
+        assert_eq!(RightTime::Duration(secs(116)).text(), "1:56");
+        assert_eq!(RightTime::Remaining(secs(35)).text(), "-0:35");
+        assert_eq!(RightTime::Remaining(Duration::ZERO).text(), "-0:00");
+        assert_eq!(RightTime::Remaining(secs(3600)).text(), "-1:00:00");
     }
 
     // Art (B-10)

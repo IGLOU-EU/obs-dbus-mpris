@@ -102,8 +102,8 @@ fn print_content(content: &Content) {
             line("album", &track.album);
             let position = track.position.map(format_time).unwrap_or_default();
             let duration = track
-                .duration
-                .map(|d| format!(" / {}", format_time(d)))
+                .right_time
+                .map(|time| format!(" / {}", time.text()))
                 .unwrap_or_default();
             let progress = track
                 .progress
