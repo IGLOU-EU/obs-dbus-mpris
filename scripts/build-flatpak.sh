@@ -17,7 +17,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/plugin.sh"
 
 (($# <= 1)) || fail "too many arguments. Usage: scripts/build-flatpak.sh [work-dir]"
 work=${1:-$root/target/flatpak}
-id=com.obsproject.Studio.Plugin.DbusMpris
+id=$extension
 manifest="$root/packaging/flatpak/$id.yml"
 version=$(workspace_version)
 [[ -n $version ]] || fail "no version in the [workspace.package] table of $root/Cargo.toml"

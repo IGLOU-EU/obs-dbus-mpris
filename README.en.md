@@ -86,7 +86,7 @@ scripts/package-native.sh      # native release archive, in target/dist
 scripts/build-flatpak.sh       # offline Flatpak extension and its bundle
 ```
 
-`install-dev.sh` refuses to install a library OBS could not load (glibc too recent, missing libobs symbol). Never keep the development copy and the installed Flatpak extension at the same time, the module would be loaded twice. `scripts/build-flatpak.sh` needs OBS Flatpak (stable branch), `org.freedesktop.Sdk//25.08` and its `rust-stable` extension.
+`install-dev.sh` refuses to install a library OBS could not load (glibc too recent, missing libobs symbol). It also refuses to install while the Flatpak extension of the plugin is installed: OBS loads the extension first and skips the user folder copy, with nothing but a "Skipping legacy plugin" line in its log. Uninstall the extension while developing (`flatpak uninstall com.obsproject.Studio.Plugin.DbusMpris`). `scripts/build-flatpak.sh` needs OBS Flatpak (stable branch), `org.freedesktop.Sdk//25.08` and its `rust-stable` extension.
 
 The `cargo run --example watch` example prints in the terminal what a source would show, from your real players, without OBS.
 

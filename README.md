@@ -86,7 +86,7 @@ scripts/package-native.sh      # archive native de release, dans target/dist
 scripts/build-flatpak.sh       # extension Flatpak hors ligne et son bundle
 ```
 
-`install-dev.sh` refuse d'installer une bibliothèque qu'OBS ne pourrait pas charger (glibc trop récente, symbole libobs absent). Ne gardez jamais en même temps la copie de développement et l'extension Flatpak installée, le module serait chargé deux fois. `scripts/build-flatpak.sh` demande OBS Flatpak (branche stable), `org.freedesktop.Sdk//25.08` et son extension `rust-stable`.
+`install-dev.sh` refuse d'installer une bibliothèque qu'OBS ne pourrait pas charger (glibc trop récente, symbole libobs absent). Il refuse aussi d'installer tant que l'extension Flatpak du plugin est installée : OBS la charge en premier et ignore la copie du dossier utilisateur, sans autre trace qu'une ligne « Skipping legacy plugin » dans son journal. Désinstallez l'extension le temps du développement (`flatpak uninstall com.obsproject.Studio.Plugin.DbusMpris`). `scripts/build-flatpak.sh` demande OBS Flatpak (branche stable), `org.freedesktop.Sdk//25.08` et son extension `rust-stable`.
 
 L'exemple `cargo run --example watch` affiche dans le terminal ce que montrerait une source, sur vos vrais lecteurs, sans OBS.
 

@@ -10,6 +10,9 @@
 
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 module=obs-dbus-mpris
+# The Flatpak extension that ships the same module (build-flatpak.sh), which
+# OBS Flatpak loads before any copy in its user plugin folder.
+extension=com.obsproject.Studio.Plugin.DbusMpris
 built="${CARGO_TARGET_DIR:-$root/target}/release/libobs_mpris.so"
 locales="$root/crates/obs-mpris/data/locale"
 # The exports OBS refuses to load a module without.

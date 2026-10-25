@@ -5,7 +5,9 @@
 # Usage: scripts/install-dev.sh [--native]
 #
 # By default the target is OBS Flatpak (com.obsproject.Studio), which loads
-# the native library from its user plugin folder (architecture.md, Builds).
+# the native library from its user plugin folder (architecture.md, Builds),
+# unless the Flatpak extension of the plugin is installed: OBS then loads
+# the extension and skips the copy, so the script refuses to install one.
 # With --native, the target is an OBS installed on the host.
 set -euo pipefail
 
@@ -22,6 +24,11 @@ if [[ $target == flatpak ]]; then
     libobs=$(flatpak_libobs)
     [[ -n $libobs ]] ||
         fail "OBS Flatpak (com.obsproject.Studio) is not installed. Use --native for an OBS installed on the host."
+    # OBS loads the extension first, then skips a user folder copy of the
+    # same module with nothing but a "Skipping legacy plugin" line in its
+    # log: installing here would change nothing.
+    ! flatpak info "$extension" >/dev/null 2>&1 ||
+        fail "the extension $extension is installed, and OBS would load it instead of this copy. Remove it while developing: flatpak uninstall $extension"
     glibc_max=$flatpak_glibc
     plugins="$HOME/.var/app/com.obsproject.Studio/config/obs-studio/plugins"
     description="OBS Flatpak (runtime glibc $glibc_max)"
