@@ -52,7 +52,7 @@ Ajoutez une source « Lecture en cours (MPRIS) » à une scène. Ses propriété
 
 - **Lecteur** : le lecteur suivi, une entrée par instance en cours, libellée par le nom du lecteur et ce qu'il joue (« mpv - Mamona »), et la sélection automatique.
 - **Éléments affichés** : chaque élément à afficher ou non, le temps restant à la place de la durée, et la pochette en ligne.
-- **Disposition** : largeur totale (la hauteur suit les polices), miniature à droite, miniature ronde, écart entre la miniature et le panneau, rayon des coins, épaisseur de la barre.
+- **Disposition** : largeur totale, hauteur (0 pour qu'elle suive les polices, sinon les tailles s'y adaptent dans leurs proportions), miniature à droite, miniature ronde, écart entre la miniature et le panneau, rayon des coins, épaisseur de la barre.
 - **Texte** : les trois tailles de police, la vitesse et la pause du défilement (0 le désactive, les textes trop longs se terminent alors par « … »), et le message affiché quand rien ne joue.
 - **Couleurs** : fond, texte, remplissage et piste de la barre, toutes avec transparence.
 

@@ -18,6 +18,7 @@ Les validations se font dans OBS Flatpak. Le build natif est produit à chaque p
 | 5 | Pochette en ligne, en option | fait, validé dans OBS |
 | 6 | Réglages visuels | fait, validé dans OBS |
 | 7 | Distribution, version 1.0 | fait, v1.0.0 publiée le 2026-10-15, essai à partir des fichiers de la release en attente |
+| 8 | Hauteur fixe | fait, à valider dans OBS |
 
 ## Phase 0. Cadrage
 
@@ -133,6 +134,20 @@ Pipeline du tag vert, release `v1.0.0` créée avec ses notes et ses deux fichie
 Reste à faire : installer le bundle de la release à la place de la copie de développement, et jouer les scénarios d'acceptation avec lui.
 
 **Fini quand** la version 1.0 est publiée et que tous les scénarios d'acceptation passent dans OBS Flatpak à partir des artefacts de la release.
+
+## Phase 8. Hauteur fixe
+
+Demandée le 2026-10-25, après la 1.0.0 : la hauteur de la source était calculée d'après les tailles, 156 px avec les défauts, un nombre que personne n'a choisi, et toucher une taille déplaçait la source dans la scène.
+
+- Réglage `height` dans le groupe Disposition, 0 par défaut, qui laisse la hauteur suivre les tailles comme avant : aucune source existante ne change d'aspect, aucune migration.
+- Au-dessus de 0, la source fait exactement largeur × hauteur, et les tailles deviennent des proportions, mises à l'échelle avec leurs marges et leurs écarts pour remplir la hauteur, les éléments décochés laissant leur place aux autres (B-33).
+- Texte d'aide du réglage, dans les deux langues (B-52).
+
+Fait le 2026-10-25. Disposition testée hors d'OBS : hauteur 0 identique au pixel près, hauteur égale à l'automatique sans effet, hauteur fixe respectée par la source, le panneau et l'image, proportions conservées à l'arrondi près, contenu centré, hauteurs dégénérées (1 px, maximum) sans débordement. Rendus vérifiés par `render_png` à 600 × 100, 600 × 300 et avec des éléments décochés. Reste à valider dans OBS Flatpak.
+
+**Fini quand** le scénario d'acceptation 15 passe dans OBS Flatpak.
+
+Besoins couverts : B-33, B-34, B-50, B-52.
 
 ## Plus tard, seulement si une friction réelle apparaît
 

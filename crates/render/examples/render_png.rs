@@ -1,5 +1,6 @@
-//! Renders the source in each variant of the mockup (besoins.md, B-37) to
-//! PNG files, to check the drawing by eye, and times the drawing.
+//! Renders the source in each variant of the mockup (besoins.md, B-37), and
+//! at fixed heights (B-33), to PNG files, to check the drawing by eye, and
+//! times the drawing.
 //!
 //! Each PNG shows the source as OBS shows it at the start of the scroll
 //! cycle, strips laid over the frame. A variant with scrolling texts also
@@ -410,6 +411,41 @@ fn variants(now: Instant) -> Vec<Variant> {
             settings: Settings {
                 fallback_text: "Aucune lecture en cours sur aucun des lecteurs du bus de session"
                     .into(),
+                ..Settings::default()
+            },
+            player: None,
+        },
+        Variant {
+            name: "24-fixed-height-100",
+            settings: Settings {
+                height: 100,
+                ..Settings::default()
+            },
+            player: playing(),
+        },
+        Variant {
+            name: "25-fixed-height-300",
+            settings: Settings {
+                height: 300,
+                ..Settings::default()
+            },
+            player: playing(),
+        },
+        Variant {
+            name: "26-fixed-height-200-title-subtitle",
+            settings: Settings {
+                height: 200,
+                show_progress: false,
+                show_position: false,
+                show_duration: false,
+                ..Settings::default()
+            },
+            player: playing(),
+        },
+        Variant {
+            name: "27-fixed-height-100-fallback",
+            settings: Settings {
+                height: 100,
                 ..Settings::default()
             },
             player: None,

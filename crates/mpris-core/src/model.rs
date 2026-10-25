@@ -169,9 +169,13 @@ pub struct Settings {
     pub color_text: Rgba,
     pub color_bar_fill: Rgba,
     pub color_bar_track: Rgba,
-    /// Total width of the source, thumbnail included. The height follows
-    /// from the font sizes and the shown elements (B-33).
+    /// Total width of the source, thumbnail included (B-33).
     pub width: u32,
+    /// Height of the source. 0 leaves it to the font sizes, the bar
+    /// thickness and the shown elements, which are then pixels. Above 0 the
+    /// source takes this height and those sizes become proportions, scaled
+    /// to fill it (B-33).
+    pub height: u32,
     pub font_size_title: u32,
     pub font_size_subtitle: u32,
     pub font_size_time: u32,

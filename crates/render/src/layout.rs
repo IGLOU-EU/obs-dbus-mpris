@@ -59,6 +59,7 @@ pub struct Pause {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Layout {
     pub width: u32,
+    /// The height the sizes give, or the one the settings fix (B-33).
     pub height: u32,
     /// The thumbnail slot, a square as tall as the source, apart from the
     /// panel by the gap of the settings (B-39).
@@ -110,46 +111,30 @@ const PAUSE_BAR_GAP: f32 = 0.25;
 const PAUSE_MARGIN: f32 = 0.3;
 
 /// Places every element for `settings`. Sizes beyond the schema bounds are
-/// brought back within them, and a width too small for any text widens to
-/// a minimal panel, so that any input gives a drawable layout.
+/// brought back within them, a width too small for any text widens to a
+/// minimal panel, and a height too small for a pixel per row grows to hold
+/// them, so that any input gives a drawable layout.
 pub fn layout(settings: &Settings) -> Layout {
-    let sizes = FontSizes {
-        title: settings.font_size_title.clamp(1, MAX_FONT_SIZE),
-        subtitle: settings.font_size_subtitle.clamp(1, MAX_FONT_SIZE),
-        time: settings.font_size_time.clamp(1, MAX_FONT_SIZE),
+    let stack = Stack::new(settings, Sizes::of(settings));
+    // The height the sizes give, or the one asked for (B-33). To fill the
+    // latter, the sizes become proportions: each is scaled by the ratio of
+    // the asked height to the one they give in pixels, and the same stack
+    // is built from the result, so that the margins and gaps, which derive
+    // from the sizes, scale with the text rather than vanish.
+    let (stack, height) = match settings.height.min(MAX_SIDE) {
+        0 => {
+            let height = stack.height();
+            (stack, height)
+        }
+        asked => {
+            let factor = asked as f32 / stack.height() as f32;
+            let stack = Stack::new(settings, stack.sizes.scaled(factor));
+            let height = asked.max(stack.inner());
+            (stack, height)
+        }
     };
-    let title_line = scale(sizes.title, LINE_HEIGHT).max(1);
-    let margin = scale(sizes.title, MARGIN).max(1);
-
-    let title_h = settings.show_title.then_some(title_line);
-    let subtitle_h = (settings.show_artist || settings.show_album)
-        .then(|| scale(sizes.subtitle, LINE_HEIGHT).max(1));
-    let bar_h = settings
-        .show_progress
-        .then(|| settings.bar_height.clamp(1, MAX_BAR_HEIGHT));
-    let times_h = (settings.show_position || settings.show_duration)
-        .then(|| scale(sizes.time, LINE_HEIGHT).max(1));
-    let has_text = title_h.is_some() || subtitle_h.is_some();
-    let has_progress = bar_h.is_some() || times_h.is_some();
-    let block_gap = if has_text && has_progress {
-        scale(sizes.title, BLOCK_GAP)
-    } else {
-        0
-    };
-    let bar_gap = if bar_h.is_some() && times_h.is_some() {
-        scale(sizes.time, BAR_GAP)
-    } else {
-        0
-    };
-    let content = [title_h, subtitle_h, bar_h, times_h]
-        .into_iter()
-        .flatten()
-        .sum::<u32>()
-        + block_gap
-        + bar_gap;
-    // At least one title line, for the fallback message (B-23).
-    let inner = content.max(title_line);
-    let height = 2 * margin + inner;
+    let sizes = stack.sizes.fonts;
+    let margin = stack.margin;
 
     let icon = PauseIcon::new(sizes.title);
     let min_text = scale(sizes.title, MIN_TEXT).max(icon.width + icon.margin + 1);
@@ -170,17 +155,19 @@ pub fn layout(settings: &Settings) -> Layout {
     };
     let corner_radius = settings.corner_radius.min(MAX_CORNER_RADIUS);
 
+    // The content centered in the height, which puts it at the margin when
+    // the height is the one the sizes give.
     let mut column = Column {
         x: panel_x + margin,
         w: panel_w - 2 * margin,
-        y: margin + (inner - content) / 2,
+        y: (height - stack.content()) / 2,
     };
-    let title = column.row(title_h);
-    let subtitle = column.row(subtitle_h);
-    column.y += block_gap;
-    let bar = column.row(bar_h);
-    column.y += bar_gap;
-    let times = column.row(times_h);
+    let title = column.row(stack.title);
+    let subtitle = column.row(stack.subtitle);
+    column.y += stack.block_gap;
+    let bar = column.row(stack.bar);
+    column.y += stack.bar_gap;
+    let times = column.row(stack.times);
 
     Layout {
         width,
@@ -194,7 +181,12 @@ pub fn layout(settings: &Settings) -> Layout {
         bar,
         times,
         pause: title.map(|title| icon.place(title)),
-        message: Rect::new(column.x, (height - title_line) / 2, column.w, title_line),
+        message: Rect::new(
+            column.x,
+            (height - stack.title_line) / 2,
+            column.w,
+            stack.title_line,
+        ),
         sizes,
         corner_radius,
         art_radius: if settings.art_round {
@@ -208,6 +200,117 @@ pub fn layout(settings: &Settings) -> Layout {
 /// `size * factor`, to the nearest pixel.
 fn scale(size: u32, factor: f32) -> u32 {
     (size as f32 * factor).round() as u32
+}
+
+/// The sizes the panel stacks, within the schema bounds: pixels when the
+/// height follows them, proportions when the height is fixed (B-33).
+#[derive(Debug, Clone, Copy)]
+struct Sizes {
+    fonts: FontSizes,
+    /// Thickness of the bar (B-50).
+    bar: u32,
+}
+
+impl Sizes {
+    fn of(settings: &Settings) -> Sizes {
+        Sizes {
+            fonts: FontSizes {
+                title: settings.font_size_title.clamp(1, MAX_FONT_SIZE),
+                subtitle: settings.font_size_subtitle.clamp(1, MAX_FONT_SIZE),
+                time: settings.font_size_time.clamp(1, MAX_FONT_SIZE),
+            },
+            bar: settings.bar_height.clamp(1, MAX_BAR_HEIGHT),
+        }
+    }
+
+    /// Each size times `factor`, to the nearest pixel and within the same
+    /// bounds, so that a fixed height neither loses a row nor asks for a
+    /// glyph larger than any that is rasterized.
+    fn scaled(self, factor: f32) -> Sizes {
+        let font = |size| scale(size, factor).clamp(1, MAX_FONT_SIZE);
+        Sizes {
+            fonts: FontSizes {
+                title: font(self.fonts.title),
+                subtitle: font(self.fonts.subtitle),
+                time: font(self.fonts.time),
+            },
+            bar: scale(self.bar, factor).clamp(1, MAX_BAR_HEIGHT),
+        }
+    }
+}
+
+/// The vertical stack of the panel for one set of sizes: the shown rows,
+/// the gaps between them and the margin around them (B-37). A hidden row
+/// takes no room.
+struct Stack {
+    sizes: Sizes,
+    /// Height of a title row, which the fallback message takes even when
+    /// the title is hidden (B-23).
+    title_line: u32,
+    margin: u32,
+    title: Option<u32>,
+    subtitle: Option<u32>,
+    bar: Option<u32>,
+    times: Option<u32>,
+    /// Between the text rows and the progress rows, when both show.
+    block_gap: u32,
+    /// Between the bar and the times, when both show.
+    bar_gap: u32,
+}
+
+impl Stack {
+    fn new(settings: &Settings, sizes: Sizes) -> Stack {
+        let fonts = sizes.fonts;
+        let title_line = scale(fonts.title, LINE_HEIGHT).max(1);
+        let title = settings.show_title.then_some(title_line);
+        let subtitle = (settings.show_artist || settings.show_album)
+            .then(|| scale(fonts.subtitle, LINE_HEIGHT).max(1));
+        let bar = settings.show_progress.then_some(sizes.bar);
+        let times = (settings.show_position || settings.show_duration)
+            .then(|| scale(fonts.time, LINE_HEIGHT).max(1));
+        let has_text = title.is_some() || subtitle.is_some();
+        let has_progress = bar.is_some() || times.is_some();
+        Stack {
+            sizes,
+            title_line,
+            margin: scale(fonts.title, MARGIN).max(1),
+            title,
+            subtitle,
+            bar,
+            times,
+            block_gap: if has_text && has_progress {
+                scale(fonts.title, BLOCK_GAP)
+            } else {
+                0
+            },
+            bar_gap: if bar.is_some() && times.is_some() {
+                scale(fonts.time, BAR_GAP)
+            } else {
+                0
+            },
+        }
+    }
+
+    /// The rows and the gaps between them.
+    fn content(&self) -> u32 {
+        [self.title, self.subtitle, self.bar, self.times]
+            .into_iter()
+            .flatten()
+            .sum::<u32>()
+            + self.block_gap
+            + self.bar_gap
+    }
+
+    /// The content, or at least one title line, for the fallback message
+    /// (B-23).
+    fn inner(&self) -> u32 {
+        self.content().max(self.title_line)
+    }
+
+    /// The height the sizes give: the inner block between two margins.
+    fn height(&self) -> u32 {
+        2 * self.margin + self.inner()
+    }
 }
 
 /// The text column, filled from the top.
@@ -935,5 +1038,331 @@ mod tests {
             s.font_size_time = 512;
         }));
         assert_sane(&l);
+    }
+
+    // Fixed height (B-33)
+
+    fn fixed(height: u32) -> Settings {
+        with(|s| s.height = height)
+    }
+
+    /// The rows of the panel and the message line, top to bottom.
+    fn rows(l: &Layout) -> Vec<(&'static str, Rect)> {
+        [
+            ("title", l.title),
+            ("subtitle", l.subtitle),
+            ("bar", l.bar),
+            ("times", l.times),
+            ("message", Some(l.message)),
+        ]
+        .into_iter()
+        .filter_map(|(n, r)| Some((n, r?)))
+        .collect()
+    }
+
+    /// The height is 0 by default, and the defaults then give these
+    /// pixels: what every source made before the height setting shows,
+    /// which the setting must leave alone.
+    #[test]
+    fn height_zero_keeps_the_layout_of_the_defaults_to_the_pixel() {
+        assert_eq!(settings().height, 0);
+        let l = layout(&settings());
+        assert_eq!((l.width, l.height), (600, 156));
+        assert_eq!(l.art, Some(Rect::new(0, 0, 156, 156)));
+        assert_eq!(l.panel, Rect::new(156, 0, 444, 156));
+        assert_eq!(l.title, Some(Rect::new(175, 19, 406, 40)));
+        assert_eq!(l.subtitle, Some(Rect::new(175, 59, 406, 30)));
+        assert_eq!(l.bar, Some(Rect::new(175, 102, 406, 6)));
+        assert_eq!(l.times, Some(Rect::new(175, 112, 406, 25)));
+        assert_eq!(l.message, Rect::new(175, 58, 406, 40));
+        assert_eq!(
+            l.sizes,
+            FontSizes {
+                title: 32,
+                subtitle: 24,
+                time: 20
+            }
+        );
+    }
+
+    /// The height the sizes give, asked for in so many pixels, changes
+    /// nothing: the factor is then one.
+    #[test]
+    fn a_fixed_height_equal_to_the_automatic_one_changes_nothing() {
+        for s in [
+            settings(),
+            with(|s| s.show_art = false),
+            with(|s| s.show_progress = false),
+            with(every_text_off),
+            with(|s| {
+                s.font_size_title = 48;
+                s.font_size_subtitle = 36;
+                s.font_size_time = 30;
+                s.bar_height = 10;
+            }),
+        ] {
+            let automatic = layout(&s);
+            let fixed = layout(&Settings {
+                height: automatic.height,
+                ..s
+            });
+            assert_eq!(fixed, automatic);
+        }
+    }
+
+    #[test]
+    fn a_fixed_height_is_that_of_the_source_the_panel_and_the_art() {
+        for height in [40, 100, 156, 300, 1000] {
+            for show_art in [false, true] {
+                let l = layout(&with(|s| {
+                    s.height = height;
+                    s.show_art = show_art;
+                }));
+                assert_sane(&l);
+                assert_eq!(l.height, height, "{height} {show_art}");
+                assert_eq!(l.panel.h, height);
+                if show_art {
+                    assert_eq!(l.art, Some(Rect::new(0, 0, height, height)));
+                }
+                // The width keeps its rule: the one asked for, unless the
+                // scaled text and margins, or the art square as tall as the
+                // source, need a wider minimal panel, as large fonts do.
+                if height <= 300 {
+                    assert_eq!(l.width, 600, "{height} {show_art}");
+                } else {
+                    assert!(l.width > 600, "{l:?}");
+                }
+            }
+        }
+    }
+
+    /// Twice the automatic height doubles every size, so every row, margin
+    /// and gap: the layout is the automatic one at twice the scale.
+    #[test]
+    fn twice_the_automatic_height_doubles_every_row_margin_and_gap() {
+        let base = layout(&settings());
+        let double = layout(&fixed(2 * base.height));
+        assert_sane(&double);
+        assert_eq!(double.height, 312);
+        assert_eq!(
+            double.sizes,
+            FontSizes {
+                title: 64,
+                subtitle: 48,
+                time: 40
+            }
+        );
+        assert_eq!(some(double.bar, "bar").h, 12);
+        for ((name, a), (_, b)) in rows(&base).into_iter().zip(rows(&double)) {
+            assert_eq!((b.y, b.h), (2 * a.y, 2 * a.h), "{name}");
+            assert_eq!(b.x - double.panel.x, 2 * (a.x - base.panel.x), "{name}");
+        }
+    }
+
+    /// Between two sizes, the ratio of the settings holds to the rounding
+    /// of each, at every height below the one where a size meets its
+    /// schema bound.
+    #[test]
+    fn a_fixed_height_keeps_the_proportions_of_the_sizes() {
+        let raw = [32u32, 24, 20, 6];
+        for height in [30, 78, 100, 200, 300, 777, 1500] {
+            let l = layout(&fixed(height));
+            assert_sane(&l);
+            let scaled = [
+                l.sizes.title,
+                l.sizes.subtitle,
+                l.sizes.time,
+                some(l.bar, "bar").h,
+            ];
+            for (a, sa) in raw.into_iter().zip(scaled) {
+                for (b, sb) in raw.into_iter().zip(scaled) {
+                    // Each scaled size is within half a pixel of its exact
+                    // value, so the cross products differ by (a + b) / 2 at
+                    // most.
+                    assert!(
+                        2 * (sa * b).abs_diff(sb * a) <= a + b,
+                        "{height}: {scaled:?}"
+                    );
+                }
+            }
+        }
+        let half = layout(&fixed(78));
+        assert_eq!(
+            half.sizes,
+            FontSizes {
+                title: 16,
+                subtitle: 12,
+                time: 10
+            }
+        );
+        assert_eq!(some(half.bar, "bar").h, 3);
+    }
+
+    /// A hidden row leaves its room to the shown ones, which grow to fill
+    /// the height in their proportions.
+    #[test]
+    fn hidden_rows_leave_their_room_to_the_shown_ones() {
+        let full = layout(&fixed(156));
+        let no_progress = layout(&with(|s| {
+            s.height = 156;
+            s.show_progress = false;
+            s.show_position = false;
+            s.show_duration = false;
+        }));
+        assert_sane(&no_progress);
+        assert_eq!(no_progress.height, 156);
+        assert_eq!((no_progress.bar, no_progress.times), (None, None));
+        assert!(no_progress.sizes.title > full.sizes.title);
+        assert!(no_progress.sizes.subtitle > full.sizes.subtitle);
+        let shown = |l: &Layout| some(l.title, "title").h + some(l.subtitle, "subtitle").h;
+        assert!(shown(&no_progress) > shown(&full));
+
+        // The title alone asks for half the full height, so it doubles.
+        let title_only = layout(&with(|s| {
+            every_text_off(s);
+            s.show_title = true;
+            s.height = 156;
+        }));
+        assert_sane(&title_only);
+        assert_eq!(title_only.sizes.title, 64);
+        assert_eq!(
+            title_only.title,
+            Some(Rect::new(
+                title_only.panel.x + 38,
+                38,
+                title_only.panel.w - 76,
+                80
+            ))
+        );
+    }
+
+    #[test]
+    fn a_fixed_height_centers_the_content() {
+        type Case = (u32, fn(&mut Settings));
+        let cases: [Case; 6] = [
+            (100, |_| {}),
+            (300, |_| {}),
+            (156, |s| s.show_title = false),
+            (200, |s| {
+                s.show_progress = false;
+                s.show_position = false;
+                s.show_duration = false;
+            }),
+            (120, every_text_off),
+            (90, |s| {
+                s.show_artist = false;
+                s.show_album = false;
+                s.show_progress = false;
+            }),
+        ];
+        for (height, edit) in cases {
+            let l = layout(&with(|s| {
+                s.height = height;
+                edit(s);
+            }));
+            assert_sane(&l);
+            assert!(
+                l.message.y.abs_diff(height - l.message.bottom()) <= 1,
+                "{height}: message {l:?}"
+            );
+            let shown: Vec<Rect> = [l.title, l.subtitle, l.bar, l.times]
+                .into_iter()
+                .flatten()
+                .collect();
+            let (Some(first), Some(last)) = (shown.first(), shown.last()) else {
+                continue;
+            };
+            let (above, below) = (first.y, height - last.bottom());
+            assert!(
+                above.abs_diff(below) <= 1,
+                "{height}: {above} above, {below} below {l:?}"
+            );
+        }
+    }
+
+    /// The pause icon and the message line follow the scaled title, as
+    /// they follow the raw one in automatic mode.
+    #[test]
+    fn the_pause_icon_and_the_message_follow_the_scaled_title() {
+        let base = layout(&settings());
+        let double = layout(&fixed(312));
+        let (pause, doubled) = (base.pause.expect("pause"), double.pause.expect("pause"));
+        assert_eq!(doubled.bars[0].h, 2 * pause.bars[0].h);
+        assert_eq!(double.message.h, 2 * base.message.h);
+        assert_eq!(double.message.h, some(double.title, "title").h);
+    }
+
+    #[test]
+    fn a_fixed_height_in_a_tiny_width_keeps_a_minimal_panel() {
+        let l = layout(&with(|s| {
+            s.width = 1;
+            s.height = 300;
+        }));
+        assert_sane(&l);
+        assert_eq!(l.height, 300);
+        assert!(l.width > 300);
+        assert!(some(l.title, "title").w >= l.sizes.title, "{l:?}");
+    }
+
+    #[test]
+    fn degenerate_fixed_heights_do_not_panic() {
+        for height in [1, 2, 3, 4, 5, 7, 10, 16, 8191, 8192, u32::MAX] {
+            for show_art in [false, true] {
+                let l = layout(&with(|s| {
+                    s.height = height;
+                    s.show_art = show_art;
+                }));
+                assert_sane(&l);
+                assert!(l.height >= height.min(MAX_SIDE), "{height}: {l:?}");
+                for (name, r) in rows(&l) {
+                    assert!(r.h > 0 && r.w > 0, "{name} at {height}: {l:?}");
+                }
+            }
+        }
+    }
+
+    /// A height too small for a pixel per row grows to hold them, as a
+    /// width too small widens: the frame still holds every rectangle.
+    #[test]
+    fn a_height_too_small_for_its_rows_grows_to_hold_them() {
+        let l = layout(&fixed(1));
+        assert_sane(&l);
+        assert_eq!(
+            l.sizes,
+            FontSizes {
+                title: 1,
+                subtitle: 1,
+                time: 1
+            }
+        );
+        assert_eq!(some(l.bar, "bar").h, 1);
+        assert_eq!(l.height, 4);
+        assert_eq!(l.art.map(|a| a.w), Some(4));
+
+        // A single title line does fit in one pixel.
+        let title_only = layout(&with(|s| {
+            every_text_off(s);
+            s.show_title = true;
+            s.height = 1;
+        }));
+        assert_sane(&title_only);
+        assert_eq!(title_only.height, 1);
+    }
+
+    #[test]
+    fn the_largest_height_caps_the_sizes_at_the_schema_bounds() {
+        let l = layout(&fixed(u32::MAX));
+        assert_sane(&l);
+        assert_eq!(l.height, 8192);
+        assert_eq!(
+            l.sizes,
+            FontSizes {
+                title: 512,
+                subtitle: 512,
+                time: 512
+            }
+        );
+        assert_eq!(some(l.bar, "bar").h, 64);
+        assert_eq!(l.art.map(|a| a.h), Some(8192));
     }
 }

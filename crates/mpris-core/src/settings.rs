@@ -194,6 +194,14 @@ const ART_ONLINE_CHOICES: [Choice; 4] = [
     service(Service::YouTube, "ArtOnlineYouTube"),
 ];
 const WIDTH: Field = size(Group::Layout, "width", 600, MAX_SIDE);
+/// Down to 0, the default, which leaves the height to the sizes, in pixels
+/// as before. Above 0 the source takes this height and the sizes become
+/// proportions (B-33). Its help text says so, since the "px" suffix of
+/// the sizes would not.
+const HEIGHT: Field = Field {
+    help: true,
+    ..int(Group::Layout, "height", 0, 0, MAX_SIDE, Unit::Pixel)
+};
 const ART_RIGHT: Field = flag(Group::Layout, "art_right", false);
 const ART_ROUND: Field = flag(Group::Layout, "art_round", false);
 /// Down to 0, which glues the thumbnail to the panel (B-39).
@@ -262,6 +270,7 @@ pub const FIELDS: &[Field] = &[
     SHOW_REMAINING,
     ART_ONLINE,
     WIDTH,
+    HEIGHT,
     ART_RIGHT,
     ART_ROUND,
     ART_GAP,
@@ -368,6 +377,7 @@ impl Settings {
             color_bar_fill: read_color(&get, &COLOR_BAR_FILL),
             color_bar_track: read_color(&get, &COLOR_BAR_TRACK),
             width: read_int(&get, &WIDTH),
+            height: read_int(&get, &HEIGHT),
             font_size_title: read_int(&get, &FONT_SIZE_TITLE),
             font_size_subtitle: read_int(&get, &FONT_SIZE_SUBTITLE),
             font_size_time: read_int(&get, &FONT_SIZE_TIME),
@@ -458,7 +468,7 @@ mod tests {
     use super::*;
 
     /// In the order of the table of besoins.md, section 5.
-    const EXPECTED_KEYS: [&str; 27] = [
+    const EXPECTED_KEYS: [&str; 28] = [
         "player",
         "auto_select",
         "show_art",
@@ -471,6 +481,7 @@ mod tests {
         "show_remaining",
         "art_online",
         "width",
+        "height",
         "art_right",
         "art_round",
         "art_gap",
@@ -545,6 +556,7 @@ mod tests {
             color_bar_fill: Rgba::new(0xFF, 0xFF, 0xFF, 255),
             color_bar_track: Rgba::new(0xFF, 0xFF, 0xFF, 64),
             width: 600,
+            height: 0,
             font_size_title: 32,
             font_size_subtitle: 24,
             font_size_time: 20,
@@ -599,7 +611,7 @@ mod tests {
                 "player" | "auto_select" => Group::Player,
                 "art_online" => Group::Elements,
                 k if k.starts_with("show_") => Group::Elements,
-                "width" | "art_right" | "art_round" | "art_gap" | "corner_radius"
+                "width" | "height" | "art_right" | "art_round" | "art_gap" | "corner_radius"
                 | "bar_height" => Group::Layout,
                 "fallback_text" => Group::Text,
                 k if k.starts_with("font_size_") || k.starts_with("scroll_") => Group::Text,
@@ -642,10 +654,9 @@ mod tests {
                 "art_online" => "choice",
                 k if k.starts_with("show_") => "bool",
                 k if k.starts_with("color_") => "color",
-                "width" | "font_size_title" | "font_size_subtitle" | "font_size_time"
-                | "corner_radius" | "art_gap" | "bar_height" | "scroll_speed" | "scroll_pause" => {
-                    "int"
-                }
+                "width" | "height" | "font_size_title" | "font_size_subtitle"
+                | "font_size_time" | "corner_radius" | "art_gap" | "bar_height"
+                | "scroll_speed" | "scroll_pause" => "int",
                 "fallback_text" => "text",
                 other => panic!("unexpected key {other}"),
             };
@@ -755,11 +766,12 @@ mod tests {
         assert_eq!(flag.art_online, None);
     }
 
-    /// B-52: what a speed of 0 does, and what each online service is sent.
+    /// B-52: what each online service is sent, what a height of 0 does, and
+    /// what a speed of 0 does.
     #[test]
-    fn only_the_scroll_speed_and_the_online_cover_have_a_help_text() {
+    fn only_the_online_cover_the_height_and_the_scroll_speed_have_a_help_text() {
         let helped: Vec<&str> = FIELDS.iter().filter(|f| f.help).map(|f| f.key).collect();
-        assert_eq!(helped, ["art_online", "scroll_speed"]);
+        assert_eq!(helped, ["art_online", "height", "scroll_speed"]);
     }
 
     #[test]
@@ -770,6 +782,7 @@ mod tests {
             Some("scroll_speed.Help")
         );
         assert_eq!(help_key("art_online").as_deref(), Some("art_online.Help"));
+        assert_eq!(help_key("height").as_deref(), Some("height.Help"));
         assert_eq!(help_key("width"), None);
         assert_eq!(help_key("scroll_pause"), None);
     }
@@ -812,7 +825,7 @@ mod tests {
             .iter()
             .filter(|f| matches!(f.kind, Kind::Int { .. }))
             .collect();
-        assert_eq!(ints.len(), 9);
+        assert_eq!(ints.len(), 10);
         for key in [
             "width",
             "font_size_title",
@@ -827,9 +840,27 @@ mod tests {
 
     #[test]
     fn amounts_that_may_be_zero_have_their_documented_bounds() {
+        assert_eq!(int_bounds("height"), (0, 8192));
         assert_eq!(int_bounds("corner_radius"), (0, 256));
         assert_eq!(int_bounds("art_gap"), (0, 512));
         assert_eq!(int_bounds("scroll_pause"), (0, 60_000));
+    }
+
+    /// 0, the default, leaves the height to the sizes (B-33).
+    #[test]
+    fn height_goes_from_zero_to_the_largest_side() {
+        let read = |v: i64| {
+            Settings::from_lookup(|k| (k == "height").then_some(SettingValue::Int(v))).height
+        };
+        assert_eq!(Settings::default().height, 0);
+        assert_eq!(read(i64::MIN), 0);
+        assert_eq!(read(-1), 0);
+        assert_eq!(read(0), 0);
+        assert_eq!(read(1), 1);
+        assert_eq!(read(300), 300);
+        assert_eq!(read(8192), 8192);
+        assert_eq!(read(8193), 8192);
+        assert_eq!(read(i64::MAX), 8192);
     }
 
     #[test]
@@ -865,6 +896,7 @@ mod tests {
     fn every_integer_names_its_unit() {
         for key in [
             "width",
+            "height",
             "font_size_title",
             "font_size_subtitle",
             "font_size_time",
@@ -937,6 +969,7 @@ mod tests {
                 "color_bar_fill" => Color(Rgba::new(9, 10, 11, 12)),
                 "color_bar_track" => Color(Rgba::new(13, 14, 15, 16)),
                 "width" => Int(800),
+                "height" => Int(300),
                 "font_size_title" => Int(40),
                 "font_size_subtitle" => Int(30),
                 "font_size_time" => Int(10),
@@ -968,6 +1001,7 @@ mod tests {
             color_bar_fill: Rgba::new(9, 10, 11, 12),
             color_bar_track: Rgba::new(13, 14, 15, 16),
             width: 800,
+            height: 300,
             font_size_title: 40,
             font_size_subtitle: 30,
             font_size_time: 10,

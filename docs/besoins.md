@@ -100,7 +100,7 @@ Le choix des services vient d'une étude sur les pistes réelles (D-09, `~/Sourc
 
 **B-32 Une couleur de texte** commune au titre, au sous-titre et aux temps.
 
-**B-33 Taille de la source.** La largeur se règle en pixels, puisqu'OBS n'offre ni positionnement relatif ni mise en page adaptative. La hauteur se calcule d'après les tailles de police et les éléments cochés, jamais d'après la piste en cours : la source garde ainsi la même taille quoi qu'il joue, et ne fait pas sauter la scène. La miniature est carrée, de côté égal à cette hauteur, et compte dans la largeur.
+**B-33 Taille de la source.** La largeur et la hauteur se règlent en pixels, puisqu'OBS n'offre ni positionnement relatif ni mise en page adaptative. Ni l'une ni l'autre ne dépend de la piste en cours : la source garde la même taille quoi qu'il joue, et ne fait pas sauter la scène. La hauteur a deux modes. À 0, sa valeur par défaut, elle se calcule d'après les tailles (B-34, B-50) et les éléments cochés, les tailles étant alors des pixels : c'est le comportement d'origine, aucune source existante ne change d'aspect. Au-dessus de 0, la source fait exactement la largeur par la hauteur réglées, et les tailles deviennent des proportions. La disposition calcule la hauteur que les tailles donneraient en pixels, éléments décochés exclus, puis multiplie chaque taille par le rapport entre la hauteur réglée et celle-là, arrondie au pixel et bornée comme en mode automatique. Les marges et les écarts, qui dérivent des tailles (B-37), suivent la même échelle, et le contenu est centré dans la hauteur. Décocher un élément laisse sa place aux autres, qui grandissent dans leurs proportions. Avec les tailles par défaut, 32 + 24 + 6 + 20 vaut 100 % : une hauteur de 156 donne le même rendu que la hauteur automatique. Une hauteur trop petite pour un pixel par élément est ramenée au minimum dessinable, comme la largeur. La miniature est carrée, de côté égal à la hauteur, et compte dans la largeur.
 
 **B-37 Disposition.** Quatre blocs visuels : titre, sous-titre, progression (barre puis temps), image. Le panneau de texte et l'image sont deux blocs distincts, séparés par l'écart de B-39, chacun avec ses coins arrondis, sans fond derrière l'image. Une miniature non carrée est recadrée au centre. Le sous-titre s'écrit « Album - Artiste », ou l'un des deux seul s'il manque l'autre. Sous la barre, la position est alignée à gauche et la durée à droite. Les marges et les écarts sont proportionnels aux tailles de police, sans réglage dédié. Maquette de référence, des éléments les plus réduits à la disposition complète, miniature à gauche puis à droite :
 
@@ -147,11 +147,11 @@ Le choix des services vient d'une étude sur les pistes réelles (D-09, `~/Sourc
 
 **B-38 Coins arrondis.** Un rayon en pixels, appliqué au panneau et à l'image. 0 donne des coins carrés. Une case « Image ronde » dessine l'image en disque, quel que soit ce rayon, qui reste celui du panneau. L'emplacement de l'image par défaut prend la même forme.
 
-**B-50 Épaisseur de la barre.** L'épaisseur de la barre de progression se règle en pixels. La hauteur de la source la suit (B-33).
+**B-50 Épaisseur de la barre.** L'épaisseur de la barre de progression se règle comme une taille de police (B-34) : en pixels quand la hauteur de la source la suit, en proportion quand la hauteur est fixée (B-33).
 
 **B-39 Écart image-panneau.** Un écart en pixels entre l'image et le panneau de texte, 0 pour les coller. Il compte dans la largeur totale (B-33).
 
-**B-34 Tailles de police.** Trois tailles en pixels : titre, sous-titre, temps.
+**B-34 Tailles de police.** Trois tailles : titre, sous-titre, temps. En pixels quand la hauteur de la source les suit, en proportions quand elle est fixée (B-33).
 
 **B-35 Police.** Police sans empattement par défaut de `cosmic-text` : Open Sans, à défaut Noto Sans, puis DejaVu Sans, puis FreeSans, selon ce qui est installé (D-04). Aucun choix de police dans les propriétés. Un caractère absent de cette police est pris dans une police installée qui l'a, ce qui couvre les écritures non latines : le cas est réel, mpv expose aujourd'hui un album au titre japonais.
 
@@ -159,9 +159,9 @@ Le choix des services vient d'une étude sur les pistes réelles (D-09, `~/Sourc
 
 ## 5. Propriétés de la source
 
-**B-51 Groupes.** Les propriétés sont rangées en groupes titrés, dans cet ordre : Lecteur (`player`, `auto_select`), Éléments affichés (les cases `show_*`, puis la liste « Pochette en ligne »), Disposition (largeur, image, coins, barre), Texte (tailles de police, défilement, message de repli), Couleurs. L'ordre du tableau ci-dessous suit celui des groupes.
+**B-51 Groupes.** Les propriétés sont rangées en groupes titrés, dans cet ordre : Lecteur (`player`, `auto_select`), Éléments affichés (les cases `show_*`, puis la liste « Pochette en ligne »), Disposition (largeur, hauteur, image, coins, barre), Texte (tailles de police, défilement, message de repli), Couleurs. L'ordre du tableau ci-dessous suit celui des groupes.
 
-**B-52 Textes d'aide.** Deux réglages portent un texte d'aide, affiché par OBS en infobulle : la vitesse de défilement (ce qu'elle règle, et que 0 désactive le défilement), et la pochette en ligne (quand la recherche a lieu, ce que fait chaque service, ce qui lui est envoyé, et qu'Aucune n'envoie rien).
+**B-52 Textes d'aide.** Trois réglages portent un texte d'aide, affiché par OBS en infobulle : la hauteur (0 la laisse suivre les tailles, alors en pixels, sinon la source prend cette hauteur et les tailles sont des proportions), la vitesse de défilement (ce qu'elle règle, et que 0 désactive le défilement), et la pochette en ligne (quand la recherche a lieu, ce que fait chaque service, ce qui lui est envoyé, et qu'Aucune n'envoie rien).
 
 Récapitulatif des réglages d'une source. Les valeurs par défaut des couleurs et des tailles sont des propositions à ajuster à l'usage.
 
@@ -179,6 +179,7 @@ Récapitulatif des réglages d'une source. Les valeurs par défaut des couleurs 
 | Éléments affichés | `show_remaining` | case | non | B-19 |
 | Éléments affichés | `art_online` | liste (Aucune, MusicBrainz, Wikipédia, YouTube) | Aucune | B-18, B-52 |
 | Disposition | `width` | entier (px) | 600 | B-33 |
+| Disposition | `height` | entier (px, 0 = suit les tailles) | 0 | B-33, B-52 |
 | Disposition | `art_right` | case | non | B-30 |
 | Disposition | `art_round` | case | non | B-38 |
 | Disposition | `art_gap` | entier (px) | 0 | B-39 |
@@ -228,14 +229,15 @@ La version 1.0 est acceptée quand ces scénarios passent dans OBS Flatpak. Le b
 3. Avance rapide dans mpv : la position affichée suit en moins d'une seconde.
 4. Fermeture de mpv : message de repli. Relance de mpv (nouveau suffixe d'instance) : la source revient sur mpv sans intervention.
 5. À l'ajout de la source, lecteur mémorisé absent, deux autres lecteurs présents dont un en lecture : la source affiche celui qui joue.
-6. Chaque case masque son élément. Le flip déplace la miniature. Des couleurs à alpha nul rendent les zones concernées transparentes. La largeur totale, miniature comprise, et les tailles de police sont respectées. La hauteur suit les tailles de police et les éléments cochés (B-33).
+6. Chaque case masque son élément. Le flip déplace la miniature. Des couleurs à alpha nul rendent les zones concernées transparentes. La largeur totale, miniature comprise, et les tailles de police sont respectées. À hauteur 0, la hauteur suit les tailles de police et les éléments cochés (B-33).
 7. Un titre très long, ou en japonais, s'affiche lisiblement et ne déborde pas du cadre.
 8. Deux sources réglées sur deux lecteurs différents vivent côte à côte sans interférer.
 10. Trois instances de mpv jouent : le sélecteur propose trois entrées, chacune libellée « mpv - » suivi de son titre, et la source affiche exactement l'instance choisie.
 11. Sélection automatique décochée, instance mémorisée fermée alors que d'autres lecteurs jouent : message de repli. Relance du même lecteur : toujours le message de repli, jusqu'à un nouveau choix dans le sélecteur.
 12. Titre et sous-titre trop longs : pause, départ ensemble à la vitesse réglée, le plus court attend au début, pause commune, sans saut. Vitesse de défilement à 0 : points de suspension. Écart image-panneau, image ronde avec et sans pochette, temps restant qui décompte au rythme de la position.
 13. mpv mémorisé, OBS lancé alors que seul Chrome joue : Chrome s'affiche. mpv lancé dans les 5 minutes : la source passe sur mpv. Variante : mpv lancé après 5 minutes, la source reste sur Chrome. Hors délai, une vidéo démarrée dans un autre lecteur ne change rien. Lecteur suivi fermé puis relancé : la source le suit. Fermé pour de bon : message de repli, sans basculer sur un autre lecteur qui joue. Lecteur choisi à la main dans les propriétés pendant le délai : il s'affiche aussitôt, et un autre lecteur qui démarre ensuite, même l'habituel, ne le remplace pas.
-14. Les propriétés s'affichent en cinq groupes titrés (B-51). L'épaisseur de la barre change la barre et la hauteur de la source, l'image restant carrée (B-50).
+14. Les propriétés s'affichent en cinq groupes titrés (B-51). À hauteur 0, l'épaisseur de la barre change la barre et la hauteur de la source, l'image restant carrée (B-50).
+15. Hauteur réglée à 300 : la source fait 600 × 300, l'image carrée de 300, textes, barre, marges et écarts agrandis dans leurs proportions, rien ne déborde. Hauteur à 156 avec les tailles par défaut : rendu identique à la hauteur 0. Barre et temps décochés : titre et sous-titre grandissent pour remplir la hauteur. Hauteur à 100 : tout rapetisse. Retour à 0 : la hauteur d'avant (B-33).
 9. Une piste dont la miniature locale est illisible : pochette en ligne sur Aucune, image par défaut et aucune requête réseau. Sur MusicBrainz, une pochette trouvée s'affiche (Supertramp, Crime Of The Century), une piste sans correspondance garde l'image par défaut, et changer de piste puis revenir ne relance pas de requête. Sur YouTube, une vidéo ouverte dans LibreWolf affiche sa miniature.
 
 ## 8. Questions ouvertes

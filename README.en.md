@@ -52,7 +52,7 @@ Add a "Now Playing (MPRIS)" source to a scene. Its properties come in five group
 
 - **Player**: the followed player, one entry per running instance, labeled by the player name and what it plays ("mpv - Mamona"), and automatic selection.
 - **Displayed elements**: whether to show each element, remaining time in place of the duration, and the online cover.
-- **Layout**: total width (the height follows the fonts), cover on the right, round cover, gap between the cover and the panel, corner radius, progress bar thickness.
+- **Layout**: total width, height (0 lets it follow the fonts, otherwise the sizes scale to fill it in their proportions), cover on the right, round cover, gap between the cover and the panel, corner radius, progress bar thickness.
 - **Text**: the three font sizes, the scrolling speed and pause (0 turns scrolling off, texts too long then end with "…"), and the message shown when nothing plays.
 - **Colors**: background, text, progress bar fill and track, all with transparency.
 
