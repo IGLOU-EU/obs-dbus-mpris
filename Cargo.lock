@@ -617,7 +617,7 @@ checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
 
 [[package]]
 name = "libobs-sys"
-version = "1.0.0"
+version = "1.1.0"
 
 [[package]]
 name = "linebender_resource_handle"
@@ -693,7 +693,7 @@ dependencies = [
 
 [[package]]
 name = "mpris-core"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "async-channel",
  "async-io",
@@ -723,7 +723,7 @@ dependencies = [
 
 [[package]]
 name = "obs-mpris"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "libm",
  "libobs-sys",
@@ -908,7 +908,7 @@ checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 
 [[package]]
 name = "render"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "cosmic-text",
  "image",
