@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - A height setting in the Layout group. At 0, the default, the height follows the font sizes, the bar thickness and the shown elements as before. Above 0, the source takes exactly that height, and the sizes become proportions, scaled with their margins and gaps to fill it. Hidden elements leave their room to the shown ones.
 
+### Changed
+
+- The gap between the thumbnail and the panel is 10 px by default instead of 0. A source that never set it shows the gap after the update, and 0 glues them again.
+
 ## [1.0.0] - 2026-10-15
 
 First release: an OBS Studio 32 source that shows what an MPRIS media player is playing, read from the D-Bus session bus.

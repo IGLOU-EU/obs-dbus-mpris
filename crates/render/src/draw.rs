@@ -656,10 +656,9 @@ mod tests {
     #[test]
     fn zero_radius_gives_square_corners() {
         let (layout, frame) = render(&with(|s| s.corner_radius = 0), &track(None, false));
-        let art = some(layout.art);
         for (x, y) in [
             (0, 0),
-            (art.right(), 0),
+            (layout.panel.x, 0),
             (layout.width - 1, layout.height - 1),
         ] {
             assert_eq!(at(&frame, x, y), rgba(BACKGROUND), "({x}, {y})");
@@ -1184,7 +1183,7 @@ mod tests {
             |s| s.corner_radius += 1,
             |s| s.art_right = true,
             |s| s.art_round = true,
-            |s| s.art_gap = 10,
+            |s| s.art_gap += 1,
             |s| s.bar_height = 10,
         ];
         for (i, change) in changes.iter().enumerate() {

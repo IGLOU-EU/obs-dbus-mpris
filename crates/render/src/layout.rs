@@ -469,7 +469,7 @@ mod tests {
         let l = layout(&settings());
         assert_eq!(l.width, 600);
         assert_sane(&l);
-        assert_eq!(some(l.art, "art").w + l.panel.w, 600);
+        assert_eq!(some(l.art, "art").w + gap(&l) + l.panel.w, 600);
     }
 
     #[test]
@@ -477,7 +477,7 @@ mod tests {
         let l = layout(&settings());
         let art = some(l.art, "art");
         assert_eq!(art, Rect::new(0, 0, l.height, l.height));
-        assert_eq!(l.panel.x, l.height);
+        assert_eq!(l.panel.x, l.height + settings().art_gap);
     }
 
     #[test]
@@ -502,7 +502,10 @@ mod tests {
     #[test]
     fn zero_gap_glues_the_art_to_the_panel() {
         for art_right in [false, true] {
-            let l = layout(&with(|s| s.art_right = art_right));
+            let l = layout(&with(|s| {
+                s.art_right = art_right;
+                s.art_gap = 0;
+            }));
             assert_sane(&l);
             assert_eq!(gap(&l), 0, "{art_right}");
         }
@@ -535,7 +538,7 @@ mod tests {
 
     #[test]
     fn gap_counts_in_the_total_width() {
-        let glued = layout(&settings());
+        let glued = layout(&with(|s| s.art_gap = 0));
         let apart = layout(&with(|s| s.art_gap = 24));
         assert_eq!(apart.width, glued.width);
         assert_eq!(apart.height, glued.height);
@@ -545,7 +548,7 @@ mod tests {
 
     #[test]
     fn gap_moves_the_panel_content_with_the_panel() {
-        let glued = layout(&settings());
+        let glued = layout(&with(|s| s.art_gap = 0));
         let apart = layout(&with(|s| s.art_gap = 24));
         let title = some(apart.title, "title");
         assert_eq!(title.x, some(glued.title, "title").x + 24);
@@ -1061,20 +1064,19 @@ mod tests {
     }
 
     /// The height is 0 by default, and the defaults then give these
-    /// pixels: what every source made before the height setting shows,
-    /// which the setting must leave alone.
+    /// pixels: the layout the height setting must leave alone.
     #[test]
     fn height_zero_keeps_the_layout_of_the_defaults_to_the_pixel() {
         assert_eq!(settings().height, 0);
         let l = layout(&settings());
         assert_eq!((l.width, l.height), (600, 156));
         assert_eq!(l.art, Some(Rect::new(0, 0, 156, 156)));
-        assert_eq!(l.panel, Rect::new(156, 0, 444, 156));
-        assert_eq!(l.title, Some(Rect::new(175, 19, 406, 40)));
-        assert_eq!(l.subtitle, Some(Rect::new(175, 59, 406, 30)));
-        assert_eq!(l.bar, Some(Rect::new(175, 102, 406, 6)));
-        assert_eq!(l.times, Some(Rect::new(175, 112, 406, 25)));
-        assert_eq!(l.message, Rect::new(175, 58, 406, 40));
+        assert_eq!(l.panel, Rect::new(166, 0, 434, 156));
+        assert_eq!(l.title, Some(Rect::new(185, 19, 396, 40)));
+        assert_eq!(l.subtitle, Some(Rect::new(185, 59, 396, 30)));
+        assert_eq!(l.bar, Some(Rect::new(185, 102, 396, 6)));
+        assert_eq!(l.times, Some(Rect::new(185, 112, 396, 25)));
+        assert_eq!(l.message, Rect::new(185, 58, 396, 40));
         assert_eq!(
             l.sizes,
             FontSizes {

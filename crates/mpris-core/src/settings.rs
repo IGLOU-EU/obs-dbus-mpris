@@ -205,7 +205,7 @@ const HEIGHT: Field = Field {
 const ART_RIGHT: Field = flag(Group::Layout, "art_right", false);
 const ART_ROUND: Field = flag(Group::Layout, "art_round", false);
 /// Down to 0, which glues the thumbnail to the panel (B-39).
-const ART_GAP: Field = int(Group::Layout, "art_gap", 0, 0, MAX_ART_GAP, Unit::Pixel);
+const ART_GAP: Field = int(Group::Layout, "art_gap", 10, 0, MAX_ART_GAP, Unit::Pixel);
 /// Down to 0, which gives square corners (B-38).
 const CORNER_RADIUS: Field = int(
     Group::Layout,
@@ -550,7 +550,7 @@ mod tests {
             show_remaining: false,
             art_right: false,
             art_round: false,
-            art_gap: 0,
+            art_gap: 10,
             color_background: Rgba::new(0x00, 0x00, 0x00, 153),
             color_text: Rgba::new(0xFF, 0xFF, 0xFF, 255),
             color_bar_fill: Rgba::new(0xFF, 0xFF, 0xFF, 255),

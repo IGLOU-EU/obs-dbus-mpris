@@ -182,7 +182,7 @@ Récapitulatif des réglages d'une source. Les valeurs par défaut des couleurs 
 | Disposition | `height` | entier (px, 0 = suit les tailles) | 0 | B-33, B-52 |
 | Disposition | `art_right` | case | non | B-30 |
 | Disposition | `art_round` | case | non | B-38 |
-| Disposition | `art_gap` | entier (px) | 0 | B-39 |
+| Disposition | `art_gap` | entier (px) | 10 | B-39 |
 | Disposition | `corner_radius` | entier (px) | 12 | B-38 |
 | Disposition | `bar_height` | entier (px) | 6 | B-50 |
 | Texte | `font_size_title` | entier (px) | 32 | B-34 |
