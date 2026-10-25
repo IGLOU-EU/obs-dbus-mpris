@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-25
+
 ### Added
 
 - A height setting in the Layout group. At 0, the default, the height follows the font sizes, the bar thickness and the shown elements as before. Above 0, the source takes exactly that height, and the sizes become proportions, scaled with their margins and gaps to fill it. Hidden elements leave their room to the shown ones.
@@ -35,5 +37,6 @@ First release: an OBS Studio 32 source that shows what an MPRIS media player is 
 - English and French translations.
 - A native build for the user plugin folder of OBS, and a Flatpak extension, `com.obsproject.Studio.Plugin.DbusMpris`, for the stable branch of OBS Flatpak.
 
-[Unreleased]: https://gitlab.com/iglou.eu/obs-dbus-mpris/-/compare/v1.0.0...main
+[Unreleased]: https://gitlab.com/iglou.eu/obs-dbus-mpris/-/compare/v1.1.0...main
+[1.1.0]: https://gitlab.com/iglou.eu/obs-dbus-mpris/-/releases/v1.1.0
 [1.0.0]: https://gitlab.com/iglou.eu/obs-dbus-mpris/-/releases/v1.0.0

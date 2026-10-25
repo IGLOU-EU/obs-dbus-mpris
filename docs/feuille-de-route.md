@@ -18,7 +18,7 @@ Les validations se font dans OBS Flatpak. Le build natif est produit à chaque p
 | 5 | Pochette en ligne, en option | fait, validé dans OBS |
 | 6 | Réglages visuels | fait, validé dans OBS |
 | 7 | Distribution, version 1.0 | fait, v1.0.0 publiée le 2026-10-15, essai à partir des fichiers de la release en attente |
-| 8 | Hauteur fixe | fait, à valider dans OBS |
+| 8 | Hauteur fixe | fait, validé dans OBS Flatpak le 2026-10-25, v1.1.0 |
 
 ## Phase 0. Cadrage
 
@@ -143,7 +143,7 @@ Demandée le 2026-10-25, après la 1.0.0 : la hauteur de la source était calcul
 - Au-dessus de 0, la source fait exactement largeur × hauteur, et les tailles deviennent des proportions, mises à l'échelle avec leurs marges et leurs écarts pour remplir la hauteur, les éléments décochés laissant leur place aux autres (B-33).
 - Texte d'aide du réglage, dans les deux langues (B-52).
 
-Fait le 2026-10-25. Disposition testée hors d'OBS : hauteur 0 identique au pixel près, hauteur égale à l'automatique sans effet, hauteur fixe respectée par la source, le panneau et l'image, proportions conservées à l'arrondi près, contenu centré, hauteurs dégénérées (1 px, maximum) sans débordement. Rendus vérifiés par `render_png` à 600 × 100, 600 × 300 et avec des éléments décochés. Reste à valider dans OBS Flatpak.
+Fait le 2026-10-25. Disposition testée hors d'OBS : hauteur 0 identique au pixel près, hauteur égale à l'automatique sans effet, hauteur fixe respectée par la source, le panneau et l'image, proportions conservées à l'arrondi près, contenu centré, hauteurs dégénérées (1 px, maximum) sans débordement. Rendus vérifiés par `render_png` à 600 × 100, 600 × 300 et avec des éléments décochés. Validé dans OBS Flatpak 33.0.0 le 2026-10-25 (scénario 15). La copie de développement ne chargeait pas tant que l'extension 1.0.0 restait installée, OBS l'ignore en silence, et `install-dev.sh` refuse désormais ce cas. L'écart image-panneau par défaut passe de 0 à 10 px à cette occasion, les deux blocs collés rendant moins bien. Version 1.1.0.
 
 **Fini quand** le scénario d'acceptation 15 passe dans OBS Flatpak.
 
